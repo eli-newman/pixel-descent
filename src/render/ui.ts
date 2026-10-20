@@ -1,6 +1,6 @@
 import { H, W } from '../config';
 import type { Game } from '../game';
-import { drawText, drawTextCentered, textWidth } from './font';
+import { drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 
 const CX = W / 2;
@@ -38,16 +38,14 @@ export function renderUi(fb: Framebuffer, g: Game, soundOn: boolean): void {
 }
 
 function drawHud(fb: Framebuffer, g: Game, soundOn: boolean): void {
-  drawText(fb, String(g.scoreValue), 4, 4, YELLOW, 2);
-  drawText(fb, `${g.distM}M`, 4, 17);
-  drawText(fb, `BEST ${Math.max(g.best, g.phase === 'over' ? g.scoreValue : 0)}`, 4, 25);
-  if (soundOn) drawText(fb, 'SND', 4, H - 8);
+  drawTextHalo(fb, String(g.scoreValue), 4, 4, YELLOW, 2);
+  drawTextHalo(fb, `${g.distM}M`, 4, 17);
+  drawTextHalo(fb, `BEST ${g.best}`, 4, 25);
+  if (soundOn) drawTextHalo(fb, 'SND', 4, H - 8);
   const toast = g.toasts[0];
   if (toast && g.phase === 'playing') {
-    const w = textWidth(toast.text);
-    const x = Math.round(CX - w / 2);
-    fb.fillRect(x - 3, 47, w + 6, 11, OFF);
-    drawText(fb, toast.text, x, 50, YELLOW);
+    const x = Math.round(CX - textWidth(toast.text) / 2);
+    drawTextHalo(fb, toast.text, x, 50, YELLOW);
   }
 }
 

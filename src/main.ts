@@ -91,5 +91,6 @@ const loop = new Loop((dt) => game.update(dt), render);
 loop.start();
 
 if (import.meta.env.DEV) {
-  (window as unknown as { __game: Game }).__game = game;
+  // Debug handles for end-to-end checks in dev builds only.
+  Object.assign(window, { __game: game, __input: input });
 }

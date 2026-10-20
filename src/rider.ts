@@ -29,7 +29,7 @@ export function createRider(): RiderState {
 
 /** Cruising speed in px/s at a distance in metres. Ramps up gradually towards a cap. */
 export function targetSpeed(distM: number): number {
-  return 75 + 125 * (1 - Math.exp(-distM / 900));
+  return 85 + 150 * (1 - Math.exp(-distM / 1000));
 }
 
 /** Downhill share of the unit heading vector. */
