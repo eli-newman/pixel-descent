@@ -156,6 +156,8 @@ export class Game {
         break;
     }
     if (this.phase !== 'paused') this.stepEffects(dt);
+    const r = this.rider;
+    this.deps.sfx.ride(r.speed, r.hv, r.hx, this.phase === 'playing');
   }
 
   /** Pause when the page loses focus so a run never plays on while hidden. */
