@@ -38,11 +38,9 @@ body {
   image-rendering: pixelated;
 }
 
-#pause-btn {
+.hud-btn {
   position: absolute;
-  top: 2%;
-  right: 3%;
-  width: 11%;
+  width: 13%;
   aspect-ratio: 1;
   display: none;
   align-items: center;
@@ -53,19 +51,62 @@ body {
   border: 2px solid var(--yellow);
   font: inherit;
   font-weight: 700;
-  font-size: 12px;
-  letter-spacing: -2px;
+  font-size: clamp(9px, 3vw, 13px);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-#pause-btn:focus-visible {
+.hud-btn:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
 
+#pause-btn {
+  top: 1.5%;
+  right: 3%;
+  letter-spacing: -2px;
+}
+
+#mute-btn {
+  top: 1.5%;
+  right: 18%;
+}
+
+#mute-btn[aria-pressed='true'] {
+  color: #fff;
+  border-color: #fff;
+  text-decoration: line-through;
+}
+
+#trick-btn {
+  right: 4%;
+  bottom: 5%;
+  width: 17%;
+}
+
+/* On touch screens the buttons appear when they are useful; keyboard and mouse use keys. */
 @media (pointer: coarse) {
-  #pause-btn.active {
+  #stage[data-phase='playing'] #pause-btn,
+  #stage[data-phase='paused'] #pause-btn,
+  #stage[data-phase='crashed'] #pause-btn,
+  #stage[data-phase='playing'] #mute-btn,
+  #stage[data-phase='paused'] #mute-btn,
+  #stage[data-phase='crashed'] #mute-btn,
+  #stage[data-phase='title'] #mute-btn,
+  #stage[data-phase='playing'] #trick-btn {
     display: flex;
+  }
+
+  /* the title screen has its own on-canvas sound button; keep the corner clear for the title plate */
+  #stage[data-phase='title'] #mute-btn {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
   }
 }
 

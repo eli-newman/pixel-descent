@@ -1,104 +1,141 @@
 import type { Sfx } from './audio';
-import { clearance, crossedY, NEAR_MISS_PX, riderCenter, testObstacle } from './collision';
-import { EDGE, H, RIDER_SCREEN_Y, START_Y, W } from './config';
-import type { Input } from './input';
-import { createRider, stepRider, targetSpeed, type RiderState } from './rider';
-import { hashSeed, normalizeSeed, randomSeedString } from './rng';
+import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from './config';
+import { Particles } from './effects';
+import type { Action, Input } from './input';
+import { menuButtons, type ButtonId } from './menu';
 import {
-  addGate,
-  addNearMiss,
-  addStar,
-  createScore,
-  distanceMeters,
-  totalScore,
-  type ScoreState,
-} from './score';
-import { Spawner } from './world/spawner';
-import type { Gate, Obstacle, Pickup } from './world/types';
+  ACHIEVEMENTS,
+  applyRun,
+  BOARDS,
+  boardIndex,
+  cycleGear,
+  RIDERS,
+  riderIndex,
+  type Achievement,
+  type GearDef,
+  type RunSummary,
+} from './progress';
+import { ReplayPlayer, ReplayRecorder } from './replay';
+import { dailySeed, isDailySeed, normalizeSeed, randomSeedString } from './rng';
+import { CRASH_TIME, Sim, type SimEvent, type SimInput } from './sim';
+import type { ResultCardData } from './share';
+import type { Store } from './storage';
 
 export type Phase = 'title' | 'playing' | 'paused' | 'crashed' | 'over';
-
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  max: number;
-}
+export type Screen = 'main' | 'scores' | 'gear' | 'goals';
 
 export interface Toast {
   text: string;
   ttl: number;
   max: number;
+  /** Yellow for good news, white for plain information. */
+  hot: boolean;
 }
 
-/** Seconds of tumbling before the game over panel appears. */
-export const CRASH_TIME = 1.25;
-/** Ignore restart presses for this long after the game over panel appears. */
-const RESTART_GUARD = 0.5;
-const PICKUP_RADIUS = 7;
-const TRAIL_SPACING = 1.5;
-const TRAIL_MAX = 400;
+/** What the game over screen shows about the run that just ended. */
+export interface RunResult {
+  summary: RunSummary;
+  score: number;
+  dist: number;
+  rank: number | null;
+  newSeedBest: boolean;
+  newOverallBest: boolean;
+  achievements: Achievement[];
+  gear: GearDef[];
+}
 
 export interface GameDeps {
-  best: number;
+  store: Store;
   input: Input;
   sfx: Sfx;
   reducedMotion: () => boolean;
-  saveBest: (score: number) => void;
+  /** Vibrate for a number of milliseconds (touch phones only). */
+  haptic?: (ms: number) => void;
   onSeed?: (seed: string) => void;
   announce?: (text: string) => void;
+  /** Render and share the result card. Resolves to a short message to show the player. */
+  share?: (card: ResultCardData) => Promise<string>;
+  now?: () => Date;
+  /** Cosmetic randomness only (particles). Never feeds the sim. */
+  rand?: () => number;
 }
 
-/** All game state plus the rules that advance it. Rendering only reads from it. */
+/** Ignore restart presses for this long after the game over panel appears. */
+const RESTART_GUARD = 0.5;
+/** Seconds the panel takes to slide in. */
+export const PANEL_SLIDE = 0.35;
+/** Seconds the killer obstacle flashes. */
+export const KILLER_FLASH = 1.6;
+
+function dayString(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** The shell around the sim: phases and menus, effects, camera, persistence, audio and the ghost. */
 export class Game {
   phase: Phase = 'title';
+  screen: Screen = 'main';
+  scoreTab: 'seed' | 'daily' = 'seed';
   seed = '';
-  best: number;
-  newBest = false;
+  sim!: Sim;
+  ghost: Sim | null = null;
+  result: RunResult | null = null;
+  /** Keyboard focus in the current button list, and whether to draw it. */
+  focus = 0;
+  focusVisible = false;
 
-  spawner!: Spawner;
-  rider: RiderState = createRider();
-  score: ScoreState = createScore();
-  obstacles: Obstacle[] = [];
-  pickups: Pickup[] = [];
-  gates: Gate[] = [];
-  trail: Array<{ x: number; y: number }> = [];
-  particles: Particle[] = [];
+  readonly particles = new Particles(256);
   toasts: Toast[] = [];
-
+  /** Gate id to seconds left of its "passed" flash. */
+  readonly gateFlash = new Map<number, number>();
   camY = 0;
-  /** Seconds since the page loaded that the world has been animating (stops while paused). */
+  camOff = RIDER_SCREEN_Y;
+  /** Seconds the world has been animating (stops while paused). */
   animT = 0;
-  /** Seconds of actual riding in this run. */
-  runTime = 0;
-  /** Remaining screen shake in seconds. */
   shake = 0;
-  crashT = 0;
-  /** Direction the rider was heading when they crashed. */
-  crashFace: 1 | -1 = -1;
+  /** 0..1 zoom punch that decays quickly. */
+  punch = 0;
+  /** Seconds the simulation stays frozen after an impact. The render keeps running. */
+  hitStop = 0;
   overAt = 0;
-  /** Deepest y reached, so distance never shrinks when the rider recoils from a crash. */
-  maxY = START_Y;
-
-  private crashVx = 0;
-  private crashVy = 0;
+  /** Running count of pickups in a row, for the pitch ladder. */
+  private streak = 0;
+  private lastPickupAt = -10;
+  private trickQueued = false;
+  private recorder = new ReplayRecorder();
+  private ghostPlayer: ReplayPlayer | null = null;
+  private readonly simInput: SimInput = { steer: 0, trick: false };
+  private sharing = false;
 
   constructor(
     private readonly deps: GameDeps,
     initialSeed?: string | null,
   ) {
-    this.best = deps.best;
+    this.deps.sfx.setMuted(this.settings.muted);
+    this.deps.sfx.setMusic(this.settings.music);
     this.newRun(normalizeSeed(initialSeed) ?? randomSeedString());
   }
 
-  get distM(): number {
-    return distanceMeters(this.maxY);
+  get settings(): ReturnType<Store['settings']> {
+    return this.deps.store.settings();
   }
 
-  get scoreValue(): number {
-    return totalScore(this.distM, this.score);
+  get progress(): ReturnType<Store['progress']> {
+    return this.deps.store.progress();
+  }
+
+  get store(): Store {
+    return this.deps.store;
+  }
+
+  get today(): string {
+    return dailySeed(this.deps.now?.() ?? new Date());
+  }
+
+  get reduced(): boolean {
+    return this.deps.reducedMotion();
   }
 
   /** Camera y snapped to a whole pixel, so the scene scrolls in crisp one pixel steps. */
@@ -106,69 +143,117 @@ export class Game {
     return Math.round(this.camY);
   }
 
-  get reduced(): boolean {
-    return this.deps.reducedMotion();
+  get seedBest(): number {
+    return this.deps.store.seedBest(this.seed);
+  }
+
+  get overallBest(): number {
+    return this.deps.store.overallBest();
+  }
+
+  get daily(): boolean {
+    return isDailySeed(this.seed);
+  }
+
+  get touch(): boolean {
+    return this.deps.input.usingTouch;
+  }
+
+  /** Screen y the rider is drawn at, given the current camera. */
+  get riderScreenY(): number {
+    return this.sim.rider.y - this.camYi;
   }
 
   /** Reset the world for a seed and wait on the title screen (or go straight in if `play`). */
   newRun(seed: string, play = false): void {
     this.seed = seed;
     this.deps.onSeed?.(seed);
-    this.spawner = new Spawner(hashSeed(seed));
-    this.rider = createRider();
-    this.score = createScore();
-    this.obstacles = [];
-    this.pickups = [];
-    this.gates = [];
-    this.trail = [];
-    this.particles = [];
+    this.sim = new Sim(seed, { touch: this.touch });
+    this.recorder = new ReplayRecorder();
+    this.setupGhost();
+    this.particles.clear();
     this.toasts = [];
-    this.camY = this.rider.y - RIDER_SCREEN_Y;
-    this.runTime = 0;
+    this.gateFlash.clear();
+    this.camOff = RIDER_SCREEN_Y;
+    this.camY = this.sim.rider.y - this.camOff;
     this.shake = 0;
-    this.crashT = 0;
-    this.maxY = START_Y;
-    this.newBest = false;
+    this.punch = 0;
+    this.hitStop = 0;
+    this.streak = 0;
+    this.trickQueued = false;
+    this.result = null;
     this.phase = 'title';
-    this.spawn();
+    this.screen = 'main';
+    this.resetFocus();
     if (play) this.begin();
+  }
+
+  private setupGhost(): void {
+    const replay = this.deps.store.ghost(this.seed);
+    if (replay) {
+      this.ghost = new Sim(this.seed, { touch: replay.touch });
+      this.ghostPlayer = new ReplayPlayer(replay);
+    } else {
+      this.ghost = null;
+      this.ghostPlayer = null;
+    }
   }
 
   begin(): void {
     if (this.phase !== 'title') return;
     this.phase = 'playing';
-    this.rider.speed = 30;
+    this.sim.begin();
+    this.ghost?.begin();
+    this.deps.input.releaseAll();
     this.deps.sfx.start();
     this.deps.announce?.(`Run started. Seed ${this.seed}.`);
   }
 
   update(dt: number): void {
-    this.handleActions();
+    this.handleInput();
     if (this.phase !== 'paused') this.animT += dt;
-    switch (this.phase) {
-      case 'playing':
-        this.stepPlaying(dt);
-        break;
-      case 'crashed':
-        this.stepCrash(dt);
-        break;
-      default:
-        break;
+    if (this.hitStop > 0) {
+      this.hitStop = Math.max(0, this.hitStop - dt);
+      this.stepEffects(dt, false);
+    } else {
+      switch (this.phase) {
+        case 'playing':
+          this.stepPlaying(dt);
+          break;
+        case 'crashed':
+          this.stepCrashed(dt);
+          break;
+        default:
+          break;
+      }
+      if (this.phase !== 'paused') this.stepEffects(dt, true);
     }
-    if (this.phase !== 'paused') this.stepEffects(dt);
-    const r = this.rider;
-    this.deps.sfx.ride(r.speed, r.hv, r.hx, this.phase === 'playing');
+    this.updateCamera(dt);
+    const sim = this.sim;
+    const r = sim.rider;
+    this.deps.sfx.ride({
+      speed: r.speed,
+      hv: r.hv,
+      hx: r.hx,
+      tuck: sim.tuck,
+      danger: sim.danger,
+      air: r.air,
+      active: this.phase === 'playing' && this.hitStop <= 0,
+      ice: sim.surface.ice,
+      drift: sim.surface.drift,
+    });
   }
 
   /** Pause when the page loses focus so a run never plays on while hidden. */
-  autoPause(): void {
-    if (this.phase === 'playing') this.togglePause();
+  autoPause(force = false): void {
+    if (this.phase === 'playing' && (force || this.settings.autoPause)) this.togglePause();
   }
 
   togglePause(): void {
     if (this.phase === 'playing') {
       this.phase = 'paused';
       this.deps.input.releaseAll();
+      this.resetFocus();
       this.deps.announce?.('Paused.');
     } else if (this.phase === 'paused') {
       this.phase = 'playing';
@@ -176,192 +261,482 @@ export class Game {
     }
   }
 
-  private handleActions(): void {
-    for (const action of this.deps.input.drain()) {
-      switch (action) {
-        case 'mute': {
-          const muted = this.deps.sfx.toggle();
-          this.deps.announce?.(muted ? 'Sound off.' : 'Sound on.');
-          break;
-        }
-        case 'pause':
-          this.togglePause();
-          break;
-        case 'start':
-          if (this.phase === 'title') this.begin();
-          else if (this.phase === 'paused') this.togglePause();
-          else if (this.phase === 'over' && this.animT - this.overAt > RESTART_GUARD) {
-            this.newRun(randomSeedString(), true);
-          }
-          break;
-        case 'retry':
-          if (this.phase !== 'title') this.newRun(this.seed, true);
-          break;
-      }
+  /** The seed's replay of this run, for the share card and tests. */
+  cardData(): ResultCardData | null {
+    const res = this.result;
+    if (!res) return null;
+    return {
+      seed: this.seed,
+      daily: this.daily,
+      score: res.score,
+      dist: res.dist,
+      stars: res.summary.stars,
+      nearMisses: res.summary.nearMisses,
+      tricks: res.summary.tricks,
+      gates: res.summary.gates,
+      cause: res.summary.cause,
+      newBest: res.newSeedBest,
+    };
+  }
+
+  private resetFocus(): void {
+    this.focus = 0;
+    this.focusVisible = false;
+  }
+
+  setMuted(muted: boolean): void {
+    this.deps.store.saveSettings({ muted });
+    this.deps.sfx.setMuted(muted);
+    if (!muted) this.deps.sfx.wake();
+    this.deps.announce?.(muted ? 'Sound off.' : 'Sound on.');
+  }
+
+  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause'): void {
+    const next = !this.settings[key];
+    this.deps.store.saveSettings({ [key]: next });
+    if (key === 'music') this.deps.sfx.setMusic(next);
+    this.deps.announce?.(`${key} ${next ? 'on' : 'off'}.`);
+  }
+
+  private handleInput(): void {
+    const items = this.deps.input.drain();
+    for (const item of items) {
+      if (item.kind === 'tap') this.handleTap(item.x, item.y);
+      else this.handleAction(item.action);
     }
   }
 
-  private spawn(): void {
-    const batch = this.spawner.advance(this.camY + H + 70);
-    if (batch.obstacles.length > 0) {
-      this.obstacles.push(...batch.obstacles);
-      this.obstacles.sort((a, b) => a.y - b.y);
+  private handleTap(x: number, y: number): void {
+    this.focusVisible = false;
+    const buttons = menuButtons(this);
+    for (let i = 0; i < buttons.length; i++) {
+      const bt = buttons[i];
+      if (bt && x >= bt.x && x < bt.x + bt.w && y >= bt.y && y < bt.y + bt.h) {
+        this.focus = i;
+        this.press(bt.id);
+        return;
+      }
     }
-    this.pickups.push(...batch.pickups);
-    this.gates.push(...batch.gates);
+    // A tap on empty space is the default action: start, resume, or go again.
+    switch (this.phase) {
+      case 'title':
+        if (this.screen === 'main') this.begin();
+        else this.screen = 'main';
+        break;
+      case 'paused':
+        this.togglePause();
+        break;
+      case 'over':
+        if (this.animT - this.overAt > RESTART_GUARD) this.newRun(randomSeedString(), true);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private handleAction(action: Action): void {
+    const playing = this.phase === 'playing';
+    switch (action) {
+      case 'mute':
+        this.setMuted(!this.deps.sfx.muted);
+        break;
+      case 'music':
+        this.toggleSetting('music');
+        break;
+      case 'hud':
+        this.toggleSetting('bigHud');
+        break;
+      case 'pause':
+        this.togglePause();
+        break;
+      case 'trick':
+        if (playing) this.trickQueued = true;
+        break;
+      case 'up':
+        if (playing) this.trickQueued = true;
+        else this.moveFocus(-1);
+        break;
+      case 'down':
+        if (!playing) this.moveFocus(1);
+        break;
+      case 'left':
+      case 'right':
+        if (this.phase === 'title' && this.screen === 'gear') {
+          const dir = action === 'left' ? -1 : 1;
+          this.cycleGear(this.focus >= 3 ? 'rider' : 'board', dir);
+        }
+        break;
+      case 'start': {
+        if (playing) {
+          this.trickQueued = true;
+          break;
+        }
+        this.focusVisible = this.focusVisible && this.phase !== 'title';
+        const bt = menuButtons(this)[this.focus] ?? menuButtons(this)[0];
+        if (bt) this.press(bt.id);
+        else if (this.phase === 'over' && this.animT - this.overAt > RESTART_GUARD) {
+          this.newRun(randomSeedString(), true);
+        }
+        break;
+      }
+      case 'back':
+        if (playing) this.togglePause();
+        else if (this.phase === 'paused') this.togglePause();
+        else if (this.phase === 'title' && this.screen !== 'main') this.screen = 'main';
+        break;
+      case 'retry':
+        if (this.phase === 'over' || this.phase === 'paused' || this.phase === 'crashed') {
+          this.newRun(this.seed, true);
+        }
+        break;
+      case 'share':
+        if (this.phase === 'over') this.press('share');
+        break;
+    }
+  }
+
+  private moveFocus(dir: 1 | -1): void {
+    const n = menuButtons(this).length;
+    if (n === 0) return;
+    this.focusVisible = true;
+    this.focus = (this.focus + dir + n) % n;
+  }
+
+  private cycleGear(which: 'board' | 'rider', dir: 1 | -1): void {
+    const p = this.progress;
+    const list = which === 'board' ? BOARDS : RIDERS;
+    p.gear[which] = cycleGear(list, p.gear[which], p, dir);
+    this.deps.store.saveProgress();
+  }
+
+  /** Run the action behind a button. */
+  press(id: ButtonId): void {
+    const overReady = this.animT - this.overAt > RESTART_GUARD;
+    switch (id) {
+      case 'play':
+        this.begin();
+        break;
+      case 'daily':
+        this.newRun(this.today, true);
+        break;
+      case 'newseed':
+        this.newRun(randomSeedString());
+        break;
+      case 'scores':
+        this.scoreTab = 'seed';
+        this.openScreen('scores');
+        break;
+      case 'gear':
+        this.openScreen('gear');
+        break;
+      case 'goals':
+        this.openScreen('goals');
+        break;
+      case 'back':
+        this.openScreen('main');
+        break;
+      case 'tabSeed':
+        this.scoreTab = 'seed';
+        break;
+      case 'tabDaily':
+        this.scoreTab = 'daily';
+        break;
+      case 'sound':
+        this.setMuted(!this.deps.sfx.muted);
+        break;
+      case 'music':
+        this.toggleSetting('music');
+        break;
+      case 'hud':
+        this.toggleSetting('bigHud');
+        break;
+      case 'autopause':
+        this.toggleSetting('autoPause');
+        break;
+      case 'boardPrev':
+        this.cycleGear('board', -1);
+        break;
+      case 'boardNext':
+        this.cycleGear('board', 1);
+        break;
+      case 'riderPrev':
+        this.cycleGear('rider', -1);
+        break;
+      case 'riderNext':
+        this.cycleGear('rider', 1);
+        break;
+      case 'resume':
+        this.togglePause();
+        break;
+      case 'restart':
+        this.newRun(this.seed, true);
+        break;
+      case 'quit':
+      case 'menu':
+        this.newRun(this.seed);
+        break;
+      case 'again':
+        if (overReady) this.newRun(randomSeedString(), true);
+        break;
+      case 'retry':
+        if (overReady) this.newRun(this.seed, true);
+        break;
+      case 'share':
+        void this.share();
+        break;
+    }
+  }
+
+  private openScreen(screen: Screen): void {
+    this.screen = screen;
+    this.resetFocus();
+  }
+
+  /** Render and share the result card; shows the outcome as a toast. */
+  async share(): Promise<void> {
+    const card = this.cardData();
+    if (!card || !this.deps.share || this.sharing) return;
+    this.sharing = true;
+    try {
+      this.showToast(await this.deps.share(card), 2.2, true);
+    } catch {
+      this.showToast('SHARE FAILED', 2, false);
+    } finally {
+      this.sharing = false;
+    }
   }
 
   private stepPlaying(dt: number): void {
-    const r = this.rider;
-    const prev = riderCenter(r);
-    stepRider(r, this.deps.input.steer(), dt, targetSpeed(this.distM));
-    this.maxY = Math.max(this.maxY, r.y);
-    this.camY = Math.max(this.camY, r.y - RIDER_SCREEN_Y);
-    this.runTime += dt;
-    this.spawn();
-    this.recordTrail();
+    void dt;
+    const sim = this.sim;
+    this.simInput.steer = this.deps.input.steer();
+    this.simInput.trick = this.trickQueued;
+    this.trickQueued = false;
+    this.recorder.record(this.simInput);
+    sim.step(this.simInput);
+    this.stepGhost();
+    for (const e of sim.events) this.onEvent(e);
+    if (sim.crashed) this.phase = 'crashed';
+  }
 
-    const c = riderCenter(r);
-    for (const o of this.obstacles) {
-      if (o.y < r.y - 30) continue;
-      if (o.y > r.y + 50) break;
-      const hit = testObstacle(r, o);
-      if (hit === 'crash') {
-        this.startCrash(o);
-        return;
-      }
-      if (hit === 'slow' && !o.touched) {
-        o.touched = true;
-        r.speed = Math.max(28, r.speed * 0.55);
-        this.burst(r.x, r.y + 8, 8, 40, 0.5);
-        this.deps.sfx.bush();
-      }
-      if (!o.judged && crossedY(prev.y, c.y, o.y)) {
-        o.judged = true;
-        const gap = clearance(r, o);
-        if (gap !== null && gap <= NEAR_MISS_PX) this.awardNearMiss();
-      }
+  private stepGhost(): void {
+    const ghost = this.ghost;
+    if (!ghost || !this.ghostPlayer) return;
+    if (ghost.finished) {
+      // Let the ghost lie where it fell for a moment, then drop it.
+      if (ghost.crashT > CRASH_TIME + 3) this.ghost = null;
+      else ghost.step(this.simInput);
+      return;
     }
+    ghost.step(this.ghostPlayer.at(ghost.steps));
+  }
 
-    for (const p of this.pickups) {
-      if (p.taken || Math.abs(p.y - c.y) > PICKUP_RADIUS) continue;
-      if (Math.hypot(p.x - c.x, p.y - c.y) < PICKUP_RADIUS) {
-        p.taken = true;
-        addStar(this.score);
-        this.burst(p.x, p.y, 5, 22, 0.35);
-        this.deps.sfx.pickup();
+  private stepCrashed(dt: number): void {
+    void dt;
+    this.sim.step(this.simInput);
+    this.stepGhost();
+    if (this.sim.finished) this.finish();
+  }
+
+  private onEvent(e: SimEvent): void {
+    const sfx = this.deps.sfx;
+    const sim = this.sim;
+    const r = sim.rider;
+    const reduced = this.reduced;
+    switch (e.type) {
+      case 'star': {
+        this.streak = this.animT - this.lastPickupAt < 1.1 ? this.streak + 1 : 0;
+        this.lastPickupAt = this.animT;
+        this.burst(e.x, e.y, e.lane ? 8 : 5, 22, 0.35);
+        sfx.pickup(this.streak);
+        this.addHitStop(0.025);
+        if (!reduced) this.punch = Math.max(this.punch, e.lane ? 0.3 : 0.15);
+        if (e.lane) this.showToast(`RISK LANE +${e.value}`, 0.9, true);
+        break;
       }
-    }
-
-    for (const g of this.gates) {
-      if (g.passed || !crossedY(prev.y, c.y, g.y)) continue;
-      g.passed = true;
-      if (Math.abs(r.x - g.x) < g.half) {
-        g.success = true;
-        const pts = addGate(this.score);
-        this.toast(`CHECKPOINT +${pts}`, 1.4);
-        this.deps.sfx.gate();
+      case 'near': {
+        this.showToast(e.combo > 1 ? `CLOSE X${e.combo} +${e.pts}` : `CLOSE! +${e.pts}`, 1, true);
+        sfx.nearMiss(e.combo);
+        this.buzz(12);
+        if (!reduced) {
+          this.punch = Math.max(this.punch, 0.35 + 0.12 * e.combo);
+          if (e.combo >= 3) this.shake = Math.max(this.shake, 0.18);
+        }
+        break;
       }
+      case 'gate': {
+        if (e.ok) {
+          this.showToast(`CHECKPOINT +${e.pts}`, 1.4, true);
+          sfx.gate();
+          const g = sim.gates.find((q) => q.passed && q.success && q.x === e.x);
+          if (g) this.gateFlash.set(g.id, 0.7);
+          if (!reduced) this.punch = Math.max(this.punch, 0.3);
+        } else {
+          this.showToast('MISSED THE GATE', 1, false);
+        }
+        break;
+      }
+      case 'bush':
+        this.burst(e.x, e.y, 8, 40, 0.5);
+        sfx.bush();
+        break;
+      case 'launch':
+        sfx.launch();
+        this.burst(r.x, r.y + 8, 6, 36, 0.4);
+        break;
+      case 'trick':
+        this.showToast(e.n > 1 ? `TRICK X${e.n}` : 'TRICK!', 0.9, true);
+        sfx.trick(e.n);
+        break;
+      case 'land':
+        if (e.quality === 'clean') {
+          this.showToast(e.pts > 0 ? `CLEAN LANDING +${e.pts}` : 'CLEAN LANDING', 1.1, true);
+          sfx.land(true);
+          this.burst(r.x, r.y + 8, 10, 46, 0.5);
+          this.buzz(18);
+        } else {
+          this.showToast('SLOPPY LANDING', 1.1, false);
+          sfx.land(false);
+          this.burst(r.x, r.y + 8, 10, 46, 0.5);
+        }
+        if (!reduced) this.punch = Math.max(this.punch, 0.4);
+        break;
+      case 'crash':
+        this.onCrash(e.cause);
+        break;
     }
-
-    this.cull();
   }
 
-  private awardNearMiss(): void {
-    const pts = addNearMiss(this.score, this.runTime);
-    const combo = this.score.combo;
-    this.toast(combo > 1 ? `CLOSE X${combo} +${pts}` : `CLOSE! +${pts}`, 1);
-    this.deps.sfx.nearMiss();
+  private buzz(ms: number): void {
+    if (this.settings.haptics) this.deps.haptic?.(ms);
   }
 
-  private recordTrail(): void {
-    const last = this.trail[this.trail.length - 1];
-    if (!last || Math.hypot(this.rider.x - last.x, this.rider.y - last.y) >= TRAIL_SPACING) {
-      this.trail.push({ x: this.rider.x, y: this.rider.y });
-      if (this.trail.length > TRAIL_MAX) this.trail.shift();
+  private onCrash(cause: 'obstacle' | 'bail' | 'avalanche'): void {
+    const sim = this.sim;
+    this.burst(sim.rider.x, sim.rider.y + 8, 26, 70, 1.1);
+    this.addHitStop(this.reduced ? 0.06 : 0.14);
+    if (!this.reduced) {
+      this.shake = 0.45;
+      this.punch = 1;
     }
+    this.deps.sfx.crash(cause === 'avalanche');
+    this.buzz(60);
+    this.toasts = [];
   }
 
-  private cull(): void {
-    const top = this.camY - 12;
-    let i = 0;
-    while (i < this.obstacles.length && (this.obstacles[i]?.y ?? 0) < top) i++;
-    if (i > 0) this.obstacles.splice(0, i);
-    this.pickups = this.pickups.filter((p) => p.y > top && !p.taken);
-    this.gates = this.gates.filter((g) => g.y > top - 30);
-    while (this.trail.length > 0 && (this.trail[0]?.y ?? 0) < top) this.trail.shift();
-  }
-
-  private startCrash(o: Obstacle): void {
-    const r = this.rider;
-    this.phase = 'crashed';
-    this.crashT = 0;
-    this.crashFace = r.face;
-    const away = r.x < o.x ? -1 : 1;
-    this.crashVx = away * 22 + r.hx * 20;
-    this.crashVy = -48;
-    r.speed = 0;
-    this.burst(r.x, r.y + 8, 26, 70, 1.1);
-    if (!this.reduced) this.shake = 0.45;
-    this.deps.sfx.crash();
-  }
-
-  private stepCrash(dt: number): void {
-    const r = this.rider;
-    this.crashT += dt;
-    r.x = Math.max(EDGE, Math.min(W - EDGE, r.x + this.crashVx * dt));
-    r.y += this.crashVy * dt;
-    const damp = Math.exp(-4.5 * dt);
-    this.crashVx *= damp;
-    this.crashVy *= damp;
-    if (this.crashT >= CRASH_TIME) this.finish();
+  private addHitStop(seconds: number): void {
+    this.hitStop = Math.max(this.hitStop, seconds);
   }
 
   private finish(): void {
+    const sim = this.sim;
+    const store = this.deps.store;
     this.phase = 'over';
     this.overAt = this.animT;
-    const score = this.scoreValue;
-    if (score > this.best) {
-      this.best = score;
-      this.newBest = score > 0;
-      this.deps.saveBest(score);
+    this.resetFocus();
+    const score = sim.scoreValue;
+    const dist = sim.distM;
+    const sc = sim.score;
+    const summary: RunSummary = {
+      seed: this.seed,
+      daily: this.daily,
+      dist,
+      score,
+      stars: sc.stars,
+      laneStars: sc.laneStars,
+      nearMisses: sc.nearMisses,
+      gates: sc.gates,
+      tricks: sc.tricks,
+      landings: sc.landings,
+      maxCombo: sc.maxCombo,
+      sendItTime: sim.sendItTime,
+      topSpeed: sim.topSpeedSeen,
+      minGap: sim.avalanche.minGap,
+      time: sim.runTime,
+      cause: sim.crashCause,
+    };
+    const day = dayString(this.deps.now?.() ?? new Date());
+    const rec = store.recordRun(this.seed, { score, dist, date: day });
+    const out = applyRun(store.progress(), summary, day);
+    store.saveProgress();
+    if (rec.newSeedBest) {
+      store.saveGhost(
+        this.seed,
+        this.recorder.finish(this.seed, sim.opts.touch === true, score, dist),
+      );
     }
+    this.result = {
+      summary,
+      score,
+      dist,
+      rank: rec.rank,
+      newSeedBest: rec.newSeedBest,
+      newOverallBest: rec.newOverallBest,
+      achievements: out.newAchievements,
+      gear: out.newGear,
+    };
     this.deps.announce?.(
-      `Wipeout. ${this.distM} metres, score ${score}${this.newBest ? ', a new best' : ''}.`,
+      `${this.crashWord()}. ${dist} metres, score ${score}${rec.newSeedBest ? ', a new best for this seed' : ''}.`,
     );
+  }
+
+  /** Short headline for the game over screen. */
+  crashWord(): string {
+    switch (this.sim.crashCause) {
+      case 'avalanche':
+        return 'BURIED';
+      case 'bail':
+        return 'BAILED';
+      default:
+        return 'WIPEOUT';
+    }
+  }
+
+  /** Total achievements earned, for the title screen. */
+  get achievementCount(): number {
+    return ACHIEVEMENTS.filter((a) => this.progress.achievements[a.id] !== undefined).length;
+  }
+
+  get boardIdx(): number {
+    return boardIndex(this.progress.gear.board);
+  }
+
+  get riderIdx(): number {
+    return riderIndex(this.progress.gear.rider);
   }
 
   private burst(x: number, y: number, n: number, speed: number, life: number): void {
     if (this.reduced) return;
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = speed * (0.3 + Math.random() * 0.7);
-      this.particles.push({
-        x,
-        y,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s * 0.7 - speed * 0.25,
-        life: life * (0.6 + Math.random() * 0.4),
-        max: life,
-      });
+    this.particles.burst(x, y, n, speed, life, this.deps.rand ?? Math.random);
+  }
+
+  showToast(text: string, ttl: number, hot: boolean): void {
+    this.toasts = [{ text, ttl, max: ttl, hot }];
+  }
+
+  private updateCamera(dt: number): void {
+    const sim = this.sim;
+    if (this.phase === 'title') {
+      this.camOff = RIDER_SCREEN_Y;
+      this.camY = sim.rider.y - this.camOff;
+      return;
     }
+    if (this.phase !== 'playing') return;
+    const target = RIDER_SCREEN_Y + (RIDER_SCREEN_Y_FAST - RIDER_SCREEN_Y) * sim.tuck;
+    this.camOff += (target - this.camOff) * Math.min(1, 2.5 * dt);
+    this.camY = Math.max(START_Y - RIDER_SCREEN_Y, sim.rider.y - this.camOff);
   }
 
-  private toast(text: string, ttl: number): void {
-    this.toasts = [{ text, ttl, max: ttl }];
-  }
-
-  private stepEffects(dt: number): void {
+  private stepEffects(dt: number, simRunning: boolean): void {
     this.shake = Math.max(0, this.shake - dt);
-    for (const p of this.particles) {
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 60 * dt;
-      p.vx *= Math.exp(-2 * dt);
-      p.life -= dt;
-    }
-    this.particles = this.particles.filter((p) => p.life > 0);
+    this.punch *= Math.exp(-9 * dt);
+    if (this.punch < 0.01) this.punch = 0;
+    if (simRunning) this.particles.step(dt);
     for (const t of this.toasts) t.ttl -= dt;
-    this.toasts = this.toasts.filter((t) => t.ttl > 0);
+    if (this.toasts.length > 0 && this.toasts[0].ttl <= 0) this.toasts = [];
+    for (const [id, t] of this.gateFlash) {
+      if (t - dt <= 0) this.gateFlash.delete(id);
+      else this.gateFlash.set(id, t - dt);
+    }
   }
 }

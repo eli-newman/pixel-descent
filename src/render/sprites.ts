@@ -154,11 +154,12 @@ function castShadow(pts: readonly Pt[]): Int16Array {
   return flatten(seen.values());
 }
 
-const cache = new Map<string, Sprite>();
+const cache = new Map<number, Sprite>();
+const KIND_INDEX: Record<ObstacleKind, number> = { tree: 0, bush: 1, dead: 2, rock: 3 };
 
 /** Build (or fetch from cache) the sprite for an obstacle. Rocks vary by `variant`. */
 export function getSprite(kind: ObstacleKind, size: number, variant: number): Sprite {
-  const key = `${kind}:${size}:${kind === 'rock' ? variant : 0}`;
+  const key = (KIND_INDEX[kind] * 1000 + size) * 8 + (kind === 'rock' ? variant & 7 : 0);
   let sprite = cache.get(key);
   if (!sprite) {
     let pts: Pt[];

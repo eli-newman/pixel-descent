@@ -1,4 +1,19 @@
-export type Action = 'start' | 'pause' | 'mute' | 'retry';
+export type Action =
+  | 'start'
+  | 'trick'
+  | 'pause'
+  | 'mute'
+  | 'retry'
+  | 'share'
+  | 'hud'
+  | 'music'
+  | 'up'
+  | 'down'
+  | 'left'
+  | 'right'
+  | 'back';
+
+export type InputItem = { kind: 'action'; action: Action } | { kind: 'tap'; x: number; y: number };
 
 const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
@@ -6,24 +21,36 @@ const ACTION_KEYS: Record<string, Action> = {
   Space: 'start',
   Enter: 'start',
   KeyP: 'pause',
-  Escape: 'pause',
+  Escape: 'back',
   KeyM: 'mute',
   KeyR: 'retry',
+  KeyT: 'trick',
+  ArrowUp: 'up',
+  KeyW: 'up',
+  ArrowDown: 'down',
+  KeyS: 'down',
+  KeyC: 'share',
+  KeyH: 'hud',
+  KeyU: 'music',
 };
 /** A touch that moves farther than this (CSS px) switches from "hold a side" to "drag to steer". */
 const DRAG_START = 10;
 /** CSS px of dragging for full steering lock. */
 const DRAG_RANGE = 56;
 
-/** Keyboard, mouse and touch input collected into a steering value and a queue of actions. */
+/** Keyboard, mouse and touch input collected into a steering value and a queue of actions and taps. */
 export class Input {
   private readonly keys = new Set<string>();
-  private readonly queue: Action[] = [];
+  private queue: InputItem[] = [];
   private pointerId: number | null = null;
   private pointerX0 = 0;
   private pointerSteer = 0;
   private dragging = false;
   private readonly cleanup: Array<() => void> = [];
+  /** True once a touch has been seen: the game eases the avalanche and shows touch buttons. */
+  usingTouch = false;
+  /** Set by the game so taps can be reported in logical (180x320) coordinates. */
+  logical: (clientX: number, clientY: number) => { x: number; y: number } = (x, y) => ({ x, y });
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.on(window, 'keydown', this.onKeyDown);
@@ -45,13 +72,15 @@ export class Input {
     return Math.max(-1, Math.min(1, k + this.pointerSteer));
   }
 
-  /** Take all actions since the last call. */
-  drain(): Action[] {
-    return this.queue.splice(0, this.queue.length);
+  /** Take everything queued since the last call. The returned array is only valid until the next call. */
+  drain(): InputItem[] {
+    const out = this.queue;
+    this.queue = [];
+    return out;
   }
 
   push(action: Action): void {
-    this.queue.push(action);
+    this.queue.push({ kind: 'action', action });
   }
 
   releaseAll(): void {
@@ -78,7 +107,11 @@ export class Input {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const action = ACTION_KEYS[e.code];
     if (action || LEFT.has(e.code) || RIGHT.has(e.code)) e.preventDefault();
-    if (action && !e.repeat) this.queue.push(action);
+    if (!e.repeat) {
+      if (action) this.push(action);
+      if (LEFT.has(e.code)) this.push('left');
+      if (RIGHT.has(e.code)) this.push('right');
+    }
     this.keys.add(e.code);
   };
 
@@ -88,7 +121,9 @@ export class Input {
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.target instanceof Element && e.target.closest('button')) return;
-    this.queue.push('start');
+    if (e.pointerType === 'touch') this.usingTouch = true;
+    const p = this.logical(e.clientX, e.clientY);
+    this.queue.push({ kind: 'tap', x: p.x, y: p.y });
     if (this.pointerId !== null) return;
     this.pointerId = e.pointerId;
     this.pointerX0 = e.clientX;

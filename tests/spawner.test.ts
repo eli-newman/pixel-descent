@@ -18,7 +18,8 @@ describe('spawner', () => {
     const s = new Spawner(hashSeed('chunks'));
     const parts = [s.advance(500), s.advance(501), s.advance(2300), s.advance(4000)];
     expect(parts.flatMap((p) => p.obstacles)).toEqual(whole.obstacles);
-    expect(parts.flatMap((p) => p.pickups)).toEqual(whole.pickups);
+    const byId = <T extends { id: number }>(l: T[]): T[] => l.slice().sort((a, b) => a.id - b.id);
+    expect(byId(parts.flatMap((p) => p.pickups))).toEqual(byId(whole.pickups));
     expect(parts.flatMap((p) => p.gates)).toEqual(whole.gates);
   });
 

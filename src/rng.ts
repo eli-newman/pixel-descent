@@ -70,3 +70,16 @@ export function normalizeSeed(raw: string | null | undefined): string | null {
     .slice(0, 12);
   return cleaned.length > 0 ? cleaned : null;
 }
+
+/** The shared daily challenge seed for a calendar day, for example "d20261020". Uses local time. */
+export function dailySeed(date: Date = new Date()): string {
+  const y = String(date.getFullYear()).padStart(4, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `d${y}${m}${d}`;
+}
+
+/** True for seeds produced by dailySeed. */
+export function isDailySeed(seed: string): boolean {
+  return /^d\d{8}$/.test(seed);
+}
