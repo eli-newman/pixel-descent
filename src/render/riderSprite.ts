@@ -198,7 +198,17 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
   set.line(hip[0], hip[1], kb[0], kb[1], 2);
   set.line(kb[0], kb[1], fb2[0], fb2[1], 2);
   set.line(hip[0], hip[1], sh[0], sh[1], 3); // torso
-  if (tuck > 0.45) {
+  const rear = steep && pose.ang > 74;
+  if (rear) {
+    // Straight downhill the rider is seen almost head on: broad shoulders, arms hanging to the sides.
+    set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
+    set.line(sh[0] - 4, sh[1], hip[0] - 4, hip[1] - 1 + tuck * 3, 1);
+    set.line(sh[0] + 4, sh[1], hip[0] + 4, hip[1] - 1 + tuck * 3, 1);
+    set.line(hip[0] - 2, hip[1], hip[0] + 2, hip[1], 2);
+  }
+  if (rear) {
+    // arms already drawn
+  } else if (tuck > 0.45) {
     // arms folded in against the body, hands near the knees
     set.line(sh[0], sh[1] + 1, kf[0], kf[1] - 1, 1);
     set.line(sh[0], sh[1] + 1, kb[0], kb[1] - 1, 1);
@@ -213,6 +223,12 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
     set.line(sh[0], sh[1] + 1, sh[0] - n[0] * 4 * SC, sh[1] + 4 * SC, 1); // back arm
   }
   for (let j = 0; j < 3; j++) for (let i = -2; i <= 1; i++) set.add(head[0] + i, head[1] - 1 + j); // helmet
+  if (rear) {
+    set.add(head[0] + 2, head[1]);
+    set.add(head[0] + 2, head[1] + 1);
+    set.add(head[0] - 3, head[1]);
+    set.add(head[0] - 3, head[1] + 1);
+  }
   headgear(set, style.rider, head, mv, opts.time ?? 0);
   if (!heel) {
     // goggles: a hollow lens on the front of the helmet

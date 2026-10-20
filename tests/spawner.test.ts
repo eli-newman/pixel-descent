@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { START_X, START_Y } from '../src/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/collision';
 import { hashSeed } from '../src/rng';
-import { SAFE_LANE_END_Y, Spawner, pathHalfWidth } from '../src/world/spawner';
+import { maxFlightPx, topSpeed } from '../src/rider';
+import { Sim } from '../src/sim';
+import { LANE_HALF, SAFE_LANE_END_Y, Spawner, pathHalfWidth } from '../src/world/spawner';
+import { runBot } from './helpers/bot';
 
 describe('spawner', () => {
   it('is deterministic for a seed', () => {
@@ -64,5 +67,123 @@ describe('spawner', () => {
     const batch = s.advance(6000);
     expect(batch.gates.length).toBeGreaterThan(2);
     for (const g of batch.gates) expect(Math.abs(g.x - s.pathCenter(g.y))).toBeLessThan(1);
+  });
+});
+
+describe('spawner invariants for jumps, lanes and terrain', () => {
+  const seeds = Array.from({ length: 12 }, (_, i) => `inv-${i}`);
+
+  it('keeps landing zones free of solid obstacles, sized for top speed', () => {
+    let ramps = 0;
+    for (const seed of seeds) {
+      const s = new Spawner(hashSeed(seed));
+      const batch = s.advance(START_Y + 60000);
+      for (const r of batch.ramps) {
+        ramps++;
+        const distM = (r.y - START_Y) / 8;
+        expect(r.landEnd - r.y).toBeGreaterThanOrEqual(maxFlightPx(topSpeed(distM)) + 69);
+        expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
+        for (const o of batch.obstacles) {
+          if (!obstacleBox(o)) continue;
+          expect(o.y < r.y - 14 || o.y > r.landEnd).toBe(true);
+        }
+      }
+    }
+    expect(ramps).toBeGreaterThan(30);
+  });
+
+  it('keeps risk lanes open: corridor, entry and exit strips, stars', () => {
+    let lanes = 0;
+    for (const seed of seeds) {
+      const s = new Spawner(hashSeed(seed));
+      const batch = s.advance(START_Y + 60000);
+      for (const lane of s.lanes) {
+        if (lane.y1 > START_Y + 59000) continue;
+        lanes++;
+        const stars = batch.pickups.filter((p) => p.lane && p.y >= lane.y0 && p.y <= lane.y1);
+        expect(stars.length).toBeGreaterThan(6);
+        for (const p of stars) {
+          expect(p.value).toBe(30);
+          expect(p.x).toBeGreaterThan(10);
+          expect(p.x).toBeLessThan(170);
+        }
+        for (const o of batch.obstacles) {
+          const box = obstacleBox(o);
+          if (!box || o.y < lane.y0 || o.y > lane.y1) continue;
+          const lx = s.laneX(lane, o.y);
+          const w = (box.x1 - box.x0) / 2;
+          expect(Math.abs(o.x - lx)).toBeGreaterThanOrEqual(LANE_HALF + w + 2);
+          // the strip between the main path and the lane stays open at both ends
+          if (o.y < lane.y0 + 38 || o.y > lane.y1 - 38) {
+            const c = s.pathCenter(o.y);
+            const lo = Math.min(c, lx) - LANE_HALF;
+            const hi = Math.max(c, lx) + LANE_HALF;
+            expect(o.x + w < lo || o.x - w > hi).toBe(true);
+          }
+        }
+        // a rider can stay inside the lane the whole way: it never leaves the slope
+        for (let y = lane.y0; y <= lane.y1; y += 8) {
+          expect(s.laneX(lane, y)).toBeGreaterThan(11);
+          expect(s.laneX(lane, y)).toBeLessThan(169);
+        }
+      }
+    }
+    expect(lanes).toBeGreaterThan(20);
+  });
+
+  it('keeps patches off lanes and stars out of solid obstacles', () => {
+    for (const seed of seeds) {
+      const s = new Spawner(hashSeed(seed));
+      const batch = s.advance(START_Y + 40000);
+      expect(batch.patches.some((p) => p.kind === 'ice')).toBe(true);
+      expect(batch.patches.some((p) => p.kind === 'drift')).toBe(true);
+      for (const p of batch.patches) {
+        expect(s.laneAt(p.y)).toBeNull();
+      }
+      for (const star of batch.pickups) {
+        for (const o of batch.obstacles) {
+          const box = obstacleBox(o);
+          if (!box || o.y < star.y - 30 || o.y > star.y + 30) continue;
+          if (!star.lane) continue;
+          expect(circleHitsBox(star.x, star.y, 2, box)).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('stays winnable at maximum speed and high distance, with jumps, drifts and the avalanche', () => {
+    for (const seed of seeds) {
+      const sim = new Sim(seed, { forceSpeed: true });
+      runBot(sim, 7000);
+      expect(sim.crashed).toBe(false);
+      expect(sim.distM).toBeGreaterThanOrEqual(7000);
+      expect(sim.score.landings).toBeGreaterThan(3);
+    }
+  });
+
+  it('stays winnable for a bot that is slowed by drifts and ice (no forced speed)', () => {
+    for (const seed of seeds.slice(0, 6)) {
+      const sim = new Sim(seed);
+      runBot(sim, 4000);
+      expect(sim.crashed).toBe(false);
+    }
+  });
+
+  it('is deterministic for lanes, ramps and patches regardless of chunking', () => {
+    const whole = new Spawner(hashSeed('feat'));
+    whole.advance(20000);
+    const parts = new Spawner(hashSeed('feat'));
+    for (let y = 500; y <= 20000; y += 777) parts.advance(y);
+    parts.advance(20000);
+    const n = Math.min(whole.ramps.length, parts.ramps.length);
+    expect(n).toBeGreaterThan(5);
+    expect(parts.ramps.slice(0, n)).toEqual(whole.ramps.slice(0, n));
+    expect(parts.lanes.slice(0, 5)).toEqual(whole.lanes.slice(0, 5));
+    expect(parts.patches.slice(0, 10)).toEqual(whole.patches.slice(0, 10));
+  });
+
+  it('keeps the open path wide enough for speed: wider than the old formula at distance', () => {
+    expect(pathHalfWidth(0)).toBeGreaterThanOrEqual(30);
+    expect(pathHalfWidth(4000)).toBeGreaterThanOrEqual(23);
   });
 });

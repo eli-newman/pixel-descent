@@ -23,11 +23,11 @@ export function createAvalanche(riderY: number = START_Y): Avalanche {
 
 /**
  * How fast the wall comes down as a share of cruising speed. Early on it is slower than the rider
- * can easily manage, so it only matters after a mistake. Past a couple of thousand metres it is as
- * quick as cruising speed, which means a rider who only weaves and never tucks slowly loses ground.
+ * can easily manage, so it only matters after a mistake. Around 1000 m it matches a rider who weaves
+ * and never tucks, and past 2000 m it is as quick as cruising speed, so a rider who never tucks loses ground.
  */
 export function avalancheRatio(distM: number): number {
-  return 0.62 + 0.5 * (1 - Math.exp(-distM / 2500));
+  return 0.68 + 0.5 * (1 - Math.exp(-distM / 2000));
 }
 
 /**

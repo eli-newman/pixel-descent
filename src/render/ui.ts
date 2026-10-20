@@ -241,17 +241,17 @@ function drawMain(fb: Framebuffer, g: Game): void {
     fb,
     `TODAY ${daily > 0 ? daily : '-'}   ALL TIME ${g.overallBest}`,
     CX,
-    282,
+    279,
     WHITE,
   );
   const c = nextChallenge(g);
-  if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 287, YELLOW);
-  drawTextCentered(fb, 'A D STEER  SPACE TRICK  P PAUSE', CX, 296);
+  if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
+  drawTextCentered(fb, 'A D STEER  SPACE TRICK  P PAUSE', CX, 297);
   drawTextCentered(
     fb,
     g.ghost ? 'RACE YOUR GHOST ON THIS SEED' : 'M SOUND  H BIG HUD  U MUSIC',
     CX,
-    305,
+    306,
   );
 }
 
@@ -415,7 +415,7 @@ function drawOver(fb: Framebuffer, g: Game): void {
   const rank = res.rank;
   drawTextCentered(
     fb,
-    rank ? `PLACE #${rank} ON THIS SEED` : 'NOT IN THE TOP 10 FOR THIS SEED',
+    rank ? `RANK ${rank} ON THIS SEED` : 'NOT IN THE TOP 10 FOR THIS SEED',
     CX,
     top + 71,
     rank ? WHITE : WHITE,
@@ -427,9 +427,9 @@ function drawOver(fb: Framebuffer, g: Game): void {
   ];
   if (news.length > 0) {
     const n = news[Math.floor(g.animT / 1.4) % news.length] ?? '';
-    drawTextCentered(fb, n, CX, top + 82, YELLOW);
+    drawTextCentered(fb, n, CX, top + 80, YELLOW);
   } else if (res.newOverallBest) {
-    drawTextCentered(fb, 'NEW ALL TIME BEST', CX, top + 82, YELLOW);
+    drawTextCentered(fb, 'NEW ALL TIME BEST', CX, top + 80, YELLOW);
   }
   const buttons = menuButtons(g);
   for (let i = 0; i < buttons.length; i++) {

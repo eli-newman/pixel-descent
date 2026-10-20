@@ -268,7 +268,7 @@ export class Spawner {
       const landEnd = Math.round(y + maxFlightPx(topSpeed(distM)) + 70);
       this.planLanes(landEnd + 60);
       if (this.nearLane(y, 60) || this.nearLane(landEnd, 60)) continue;
-      if (this.nearGate(y, 120) || this.nearGate(landEnd, 120)) continue;
+      if (this.nearGate(y, 50)) continue;
       this.ramps.push({
         id: this.nextRampId++,
         x: Math.round(this.pathCenter(y)),
