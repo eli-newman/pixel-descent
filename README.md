@@ -46,7 +46,7 @@ Going **straight downhill** (heading share under 0.32) accelerates the rider wel
 | Quantity              | Value                                                                                   |
 | --------------------- | --------------------------------------------------------------------------------------- |
 | Cruising speed (base) | `85 + 150 (1 - e^(-d/1000))` px/s, the original difficulty ramp                         |
-| Top speed (straight)  | `min(340, 1.18 x cruise + 100)`: 203 at the start, 306 at 1000 m, 340 from about 1500 m |
+| Top speed (straight)  | `min(340, 1.18 x cruise + 100)`: 200 at the start, 306 at 1000 m, 340 from about 1500 m |
 | Hard cap              | 340 px/s (the old cap was about 235)                                                    |
 | Bush hit / wall       | speed x 0.55 / speed x e^(-2t) while pinned against the edge                            |
 | Snowdrift             | speed crawls to 42% of cruising                                                         |
