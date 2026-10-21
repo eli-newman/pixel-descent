@@ -46,7 +46,7 @@ function peaks(fb: Framebuffer, seed: number): void {
   let x = 0;
   while (x < CARD_W) {
     const w = 10 + Math.floor(rng.next() * 16);
-    const peak = 12 + Math.floor(rng.next() * 22);
+    const peak = 9 + Math.floor(rng.next() * 15);
     for (let i = 0; i < w && x + i < CARD_W; i++) {
       const t = i / w;
       const up = t < 0.5 ? t * 2 : (1 - t) * 2;
@@ -71,7 +71,7 @@ export function renderCard(fb: Framebuffer, card: ResultCardData): void {
   const head = card.cause === 'avalanche' ? 'BURIED' : card.cause === 'bail' ? 'BAILED' : 'WIPEOUT';
   drawText(fb, head, CARD_W - 12 - textWidth(head), 12, WHITE);
   if (card.newBest) drawText(fb, 'NEW BEST', CARD_W - 12 - textWidth('NEW BEST'), 20, YELLOW);
-  drawText(fb, String(card.score), 12, 28, YELLOW, 5);
+  drawText(fb, String(card.score), 12, 24, YELLOW, 5);
   const stats = [
     `${card.dist}M`,
     `STARS ${card.stars}`,
@@ -79,13 +79,12 @@ export function renderCard(fb: Framebuffer, card: ResultCardData): void {
     `TRICKS ${card.tricks}`,
     `FLAGS ${card.gates}`,
   ];
-  stats.forEach((s, i) => drawText(fb, s, 12 + (i % 3) * 58, 58 + Math.floor(i / 3) * 9, WHITE));
-  fb.fillRect(8, 82, CARD_W - 16, 13, OFF);
+  stats.forEach((s, i) => drawText(fb, s, 12 + (i % 3) * 58, 55 + Math.floor(i / 3) * 9, WHITE));
   drawTextCentered(
     fb,
     card.daily ? `DAILY ${card.seed.toUpperCase()}` : `SEED ${card.seed.toUpperCase()}`,
     CARD_W / 2,
-    86,
+    73,
     WHITE,
   );
 }

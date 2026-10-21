@@ -308,10 +308,10 @@ function gearRow(
   const def = list[idx];
   if (!def) return;
   drawTextCentered(fb, title, CX, y, WHITE);
-  drawTextCentered(fb, def.name, CX, y + 20, YELLOW, 1);
+  drawTextCentered(fb, def.name, CX, y + 23, YELLOW, 1);
   const unlocked = def.unlocked(g.progress);
-  drawTextCentered(fb, unlocked ? 'UNLOCKED' : def.need, CX, y + 38, unlocked ? WHITE : YELLOW);
-  drawTextCentered(fb, `${idx + 1}/${list.length}`, CX, y + 46, WHITE);
+  drawTextCentered(fb, unlocked ? 'UNLOCKED' : def.need, CX, y + 36, unlocked ? WHITE : YELLOW);
+  void idx;
 }
 
 function drawGear(fb: Framebuffer, g: Game): void {

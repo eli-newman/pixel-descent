@@ -58,6 +58,7 @@ export class Sfx {
   private noiseBuf: AudioBuffer | null = null;
   private bed: Bed | null = null;
   private lastPowder = 0;
+  private lastRide = 0;
   private nextNote = 0;
   private noteIdx = 0;
 
@@ -180,6 +181,9 @@ export class Sfx {
     const bed = this.bed;
     if (!ctx || !bed) return;
     const now = ctx.currentTime;
+    // The sim steps at 120 Hz; audio parameters only need updating about 30 times a second.
+    if (now - this.lastRide < 0.033) return;
+    this.lastRide = now;
     const sp = s.active ? Math.min(1, s.speed / MAX_SPEED) : 0;
     const tuck = s.active ? s.tuck : 0;
     const carve = Math.min(1, Math.abs(s.hx) * 0.7 + Math.min(1, Math.abs(s.hv) / 3) * 0.6);
