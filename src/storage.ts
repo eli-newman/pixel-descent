@@ -25,6 +25,8 @@ export interface Settings {
   /** Pause when the window loses focus. */
   autoPause: boolean;
   haptics: boolean;
+  /** Manual spin: the arrows turn the rider freely in the air. Off by default (assisted spins). */
+  manualSpin: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -33,6 +35,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bigHud: false,
   autoPause: true,
   haptics: true,
+  manualSpin: false,
 };
 
 interface ScoreBook {
@@ -152,6 +155,7 @@ export class Store {
     if (this.book) this.write('scores', this.book);
   }
 
+  /** Best score over all seeds. */
   overallBest(): number {
     return this.load().best;
   }

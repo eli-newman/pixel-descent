@@ -6,14 +6,24 @@ import {
   type Avalanche,
 } from './avalanche';
 import { clearance, crossedY, NEAR_MISS_PX, riderCenter, testObstacle } from './collision';
-import { EDGE, H, STEP, W, START_Y } from './config';
+import { AVALANCHE_ENABLED, EDGE, H, STEP, W, START_Y } from './config';
 import {
   BAIL_HX,
   CLEAN_HX,
+  FLIP_BAIL,
+  FLIP_CLEAN,
+  SPIN_BAIL,
+  SPIN_CLEAN,
   createRider,
   cruiseSpeed,
+  flipLanding,
   launch,
+  resetFlip,
   speedMultiplier,
+  resetManualSpin,
+  spinLanding,
+  startFlip,
+  startSnap,
   startTrick,
   stepRider,
   topSpeed,
@@ -24,10 +34,12 @@ import {
 import { hashSeed } from './rng';
 import {
   addDistance,
+  addDrop,
+  addFlip,
   addGate,
   addNearMiss,
   addStar,
-  addTrick,
+  addSpin,
   breakCombo,
   comboLeft,
   createScore,
@@ -42,13 +54,33 @@ import type { Gate, Obstacle, Patch, Pickup, Ramp } from './world/types';
 /** One step of player input. `steer` is quantised in the sim, so a replay reproduces a run exactly. */
 export interface SimInput {
   steer: number;
-  /** True only on the step the trick button went down. */
+  /**
+   * True only on the step the trick button went down: spin a full turn (a half turn if that is all
+   * the air allows), in the direction held, else the way the rider faces. In manual spin it snaps
+   * an extra half turn instead. Holding left or right in
+   * the air spins that way on its own, so the steer value doubles as the spin input.
+   */
   trick: boolean;
+  /** Left and right held together: the rider swings the board sideways and plows to a stop. */
+  brake?: boolean;
+  /**
+   * Flip key: 1 is a backflip (up), -1 a frontflip (down), 0 none. A press (the step it goes from 0
+   * to nonzero) starts a full flip in assisted mode, and holding keeps flipping while the air time
+   * allows. In manual spin the held key pitches the rider and releasing holds the angle. Absent
+   * means 0, which is also how older replays play.
+   */
+  flip?: -1 | 0 | 1;
 }
 
 export interface SimOptions {
   /** Touch controls steer less precisely, so the avalanche is a little gentler. */
   touch?: boolean;
+  /**
+   * Manual spin: in the air the arrows turn the rider continuously (left counter-clockwise, right
+   * clockwise) and he keeps whatever angle he is left at; TRICK snaps an extra half turn. Fixed for
+   * the whole run, and carried by replays.
+   */
+  manualSpin?: boolean;
   /** Tests only: hold the rider at the top speed for the current distance. */
   forceSpeed?: boolean;
   /** Tests only: leave the avalanche out. */
@@ -62,9 +94,21 @@ export type SimEvent =
   | { type: 'near'; pts: number; combo: number }
   | { type: 'gate'; ok: boolean; pts: number; x: number }
   | { type: 'bush'; x: number; y: number }
-  | { type: 'launch' }
-  | { type: 'trick'; n: number }
-  | { type: 'land'; quality: 'clean' | 'sloppy'; pts: number; tricks: number }
+  | { type: 'launch'; cliff: boolean }
+  | { type: 'spin'; deg: number }
+  /** A flip came to rest on a full turn in the air: `deg` is signed (positive is a backflip). */
+  | { type: 'flip'; deg: number }
+  | {
+      type: 'land';
+      quality: 'clean' | 'sloppy';
+      pts: number;
+      /** Spins landed (0 or 1) and their degrees; `switch` is true on an odd number of half turns. */
+      tricks: number;
+      spin: number;
+      switch: boolean;
+      /** Net full flips landed, signed (positive backflips, 0 for none). */
+      flips: number;
+    }
   | { type: 'crash'; cause: CrashCause };
 
 /** Seconds of tumbling before a run is over. */
@@ -121,6 +165,8 @@ export class Sim {
   pickups: Pickup[] = [];
   gates: Gate[] = [];
   ramps: Ramp[] = [];
+  /** True while airborne after a cliff drop, so a clean landing pays the drop bonus. */
+  cliffJump = false;
   patches: Patch[] = [];
   /** Events of the latest step. Cleared at the start of each step; read them right after. */
   readonly events: SimEvent[] = [];
@@ -148,6 +194,7 @@ export class Sim {
   private crashVx = 0;
   private crashVy = 0;
   private lastLaneStarAt = -Infinity;
+  private prevFlip = 0;
   private started = false;
 
   constructor(
@@ -176,7 +223,13 @@ export class Sim {
     return speedMultiplier(this.tuck);
   }
 
+  /** The avalanche only runs when the feature is on (and the test hook has not switched it off). */
+  private get avalancheOn(): boolean {
+    return AVALANCHE_ENABLED && !this.opts.noAvalanche;
+  }
+
   get danger(): number {
+    if (!this.avalancheOn) return 0;
     return avalancheDanger(this.avalanche, this.rider.y);
   }
 
@@ -203,15 +256,35 @@ export class Sim {
       this.stepCrash(dt);
       return;
     }
+    this.ride(input, dt);
+  }
+
+  /** One step of riding: input, physics, collisions and pickups. */
+  private ride(input: SimInput, dt: number): void {
     const r = this.rider;
     const dist = this.distM;
     const cruise = cruiseSpeed(dist);
     const top = topSpeed(dist);
     if (this.opts.forceSpeed) r.speed = top;
     this.updateSurface();
-    if (input.trick) startTrick(r);
+    if (input.trick) {
+      const q = quantiseSteer(input.steer);
+      const dir = q >= 0.5 ? 1 : q <= -0.5 ? -1 : r.spinDir !== 0 ? r.spinDir : r.face;
+      if (this.opts.manualSpin) startSnap(r, dir);
+      else startTrick(r, dir);
+    }
+    const flip = input.flip ?? 0;
+    if (flip !== 0 && this.prevFlip === 0 && !this.opts.manualSpin) startFlip(r, flip);
+    this.prevFlip = flip;
     const prev = riderCenter(r);
-    stepRider(r, quantiseSteer(input.steer), dt, { cruise, top, surface: this.surface });
+    stepRider(r, quantiseSteer(input.steer), dt, {
+      cruise,
+      top,
+      surface: this.surface,
+      flip,
+      brake: input.brake === true,
+      manual: this.opts.manualSpin === true,
+    });
     const prevMax = this.maxY;
     this.maxY = Math.max(this.maxY, r.y);
     this.runTime += dt;
@@ -219,14 +292,15 @@ export class Sim {
     this.topSpeedSeen = Math.max(this.topSpeedSeen, r.speed);
     if (this.tuck >= 0.9) this.sendItTime += dt;
 
-    if (r.trickDone) this.events.push({ type: 'trick', n: r.tricks });
+    if (r.spinDone > 0) this.events.push({ type: 'spin', deg: r.spinDone });
+    if (r.flipDone !== 0) this.events.push({ type: 'flip', deg: r.flipDone });
     if (r.landed) this.land(top);
     if (this.crashed) return;
 
     const c = riderCenter(r);
     if (!r.air) this.checkRamps(prev.y, c.y);
 
-    if (!this.opts.noAvalanche) {
+    if (this.avalancheOn) {
       const ease = this.opts.touch ? TOUCH_AVALANCHE_EASE : 1;
       stepAvalanche(this.avalanche, r.y, r.speed, this.distM, dt, ease);
       if (isBuried(this.avalanche, r.y)) {
@@ -277,37 +351,70 @@ export class Sim {
       if (!crossedY(prevY, curY, ramp.y)) continue;
       if (Math.abs(r.x - ramp.x) > ramp.half + 2) continue;
       ramp.used = true;
-      launch(r);
-      this.events.push({ type: 'launch' });
+      // Only the rock drops you; the open slope between and beside the chunks is just a way down.
+      if (ramp.kind === 'cliff' && !ramp.segs.some((c) => r.x >= c.x0 - 1 && r.x <= c.x1 + 1))
+        continue;
+      this.cliffJump = ramp.kind === 'cliff';
+      launch(r, this.cliffJump);
+      this.events.push({ type: 'launch', cliff: this.cliffJump });
       return;
     }
   }
 
-  /** Touch down: a clean landing pays for its tricks and keeps the speed, a sloppy one scrubs it, a bail crashes. */
+  /**
+   * Touch down. A clean landing pays for its spin and keeps the speed (a little less after an odd
+   * number of half turns, which lands backwards), a sloppy one scrubs it, a bail crashes. Rotation
+   * counts too: a landing far from a half turn is a bail, a bit off is sloppy.
+   */
   private land(top: number): void {
     const r = this.rider;
     const a = Math.abs(r.hx);
-    const unfinished = r.trickT > 0;
-    const tricks = r.tricks;
+    const { deg, off } = spinLanding(r);
+    const { turns, off: flipOff } = flipLanding(r);
     r.air = false;
-    r.trickT = 0;
+    r.spin = 0;
+    r.spinDir = 0;
+    r.spinGoal = 0;
+    resetManualSpin(r);
+    resetFlip(r);
     r.airT = 0;
-    if (unfinished || a > BAIL_HX) {
+    const wasCliff = this.cliffJump;
+    this.cliffJump = false;
+    if (off > SPIN_BAIL || flipOff > FLIP_BAIL || a > BAIL_HX) {
       breakCombo(this.score);
       this.startCrash('bail', null);
       return;
     }
-    if (a > CLEAN_HX) {
+    if (off > SPIN_CLEAN || flipOff > FLIP_CLEAN || a > CLEAN_HX) {
       r.speed = Math.max(40, r.speed * 0.6);
       breakCombo(this.score);
-      this.events.push({ type: 'land', quality: 'sloppy', pts: 0, tricks: 0 });
+      this.events.push({
+        type: 'land',
+        quality: 'sloppy',
+        pts: 0,
+        tricks: 0,
+        spin: 0,
+        switch: false,
+        flips: 0,
+      });
       return;
     }
-    let pts = 0;
-    for (let n = 1; n <= tricks; n++) pts += addTrick(this.score, n, this.mult);
+    const backwards = (deg / 180) % 2 === 1;
+    const flips = Math.abs(turns);
+    let pts = deg > 0 ? addSpin(this.score, deg, this.mult) : 0;
+    if (flips > 0) pts += addFlip(this.score, flips, deg, this.mult);
+    if (wasCliff) pts += addDrop(this.score, this.mult);
     this.score.landings += 1;
-    r.speed = Math.min(top, r.speed + (tricks > 0 ? 16 : 6));
-    this.events.push({ type: 'land', quality: 'clean', pts, tricks });
+    r.speed = Math.min(top, r.speed + (deg > 0 ? (backwards ? 10 : 16) : flips > 0 ? 14 : 6));
+    this.events.push({
+      type: 'land',
+      quality: 'clean',
+      pts,
+      tricks: (deg > 0 ? 1 : 0) + flips,
+      spin: deg,
+      switch: backwards,
+      flips: turns,
+    });
   }
 
   private collide(prevY: number, curY: number): boolean {
@@ -372,7 +479,7 @@ export class Sim {
     const lx = this.trail.lastX();
     const ly = this.trail.lastY();
     if (Number.isNaN(lx) || Math.hypot(r.x - lx, r.y - ly) >= TRAIL_SPACING) {
-      this.trail.push(r.x, r.y);
+      this.trail.push(r.x, r.y, r.brake);
     }
   }
 
@@ -413,12 +520,13 @@ export class Sim {
     const damp = Math.exp(-4.5 * dt);
     this.crashVx *= damp;
     this.crashVy *= damp;
-    if (this.opts.noAvalanche !== true) {
+    if (this.avalancheOn) {
       // The wall keeps rolling while the rider lies in the snow.
       this.avalanche.y += this.avalanche.speed * 0.5 * dt;
     }
   }
 
+  /** The run is over for good: the tumble after a crash is done. */
   get finished(): boolean {
     return this.crashed && this.crashT >= CRASH_TIME;
   }

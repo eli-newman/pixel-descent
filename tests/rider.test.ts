@@ -2,14 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { MAX_SPEED, STEP } from '../src/config';
 import {
   BAIL_HX,
-  TRICK_TIME,
+  MAX_SPIN,
+  SPIN_RATE,
+  SPIN_SETTLE,
   airTime,
   createRider,
   cruiseSpeed,
   launch,
+  poseOf,
   maxFlightPx,
   riderZ,
   speedMultiplier,
+  spinCap,
+  spinLanding,
   startTrick,
   stepRider,
   topSpeed,
@@ -156,32 +161,120 @@ describe('air and tricks', () => {
     expect(r.speed).toBe(250);
   });
 
-  it('only starts a trick in the air with time to finish it, and counts it when done', () => {
+  const env = { cruise: 150, top: 300, surface: flat };
+
+  /** Fly a whole jump holding a steer value; returns the rider as it touched down. */
+  function fly(speed: number, cliff: boolean, steer: (r: RiderState) => number): RiderState {
     const r = createRider();
-    r.speed = 250;
-    expect(startTrick(r)).toBe(false);
-    launch(r);
-    expect(startTrick(r)).toBe(true);
-    expect(startTrick(r)).toBe(false);
-    let done = false;
-    for (let i = 0; i < (TRICK_TIME + 0.1) / STEP; i++) {
-      stepRider(r, 0, STEP, { cruise: 150, top: 300, surface: flat });
-      if (r.trickDone) done = true;
-    }
-    expect(done).toBe(true);
-    expect(r.tricks).toBe(1);
-    expect(r.trickT).toBe(0);
+    r.speed = speed;
+    launch(r, cliff);
+    for (let i = 0; i < 4000 && !r.landed; i++) stepRider(r, steer(r), STEP, env);
+    return r;
+  }
+
+  it('caps the spin by the air time: 180 on a hop, 360 on a long kicker, 540 to 720 off a cliff', () => {
+    const cap = (speed: number, cliff: boolean): number => {
+      const r = createRider();
+      r.speed = speed;
+      launch(r, cliff);
+      return spinCap(r);
+    };
+    expect(cap(85, false)).toBe(180);
+    expect(cap(340, false)).toBe(360);
+    expect(cap(85, true)).toBe(540);
+    expect(cap(200, true)).toBe(MAX_SPIN);
+    expect(spinCap(createRider())).toBe(0);
+    // the cap is what actually fits: SPIN_RATE x (air - settle)
+    const r = createRider();
+    r.speed = 200;
+    launch(r, true);
+    expect(MAX_SPIN).toBeLessThanOrEqual((r.airDur - SPIN_SETTLE) * SPIN_RATE);
   });
 
-  it('refuses a trick too late in the jump', () => {
+  it('holding a direction in the air spins that way as far as the air allows, and lands on a half turn', () => {
+    for (const [speed, cliff] of [
+      [85, false],
+      [340, false],
+      [120, true],
+      [300, true],
+    ] as const) {
+      for (const dir of [1, -1]) {
+        const probe = createRider();
+        probe.speed = speed;
+        launch(probe, cliff);
+        const cap = spinCap(probe);
+        const r = fly(speed, cliff, () => dir);
+        expect(r.landed).toBe(true);
+        expect(r.spin).toBe(cap);
+        expect(r.spinDir).toBe(dir);
+        expect(spinLanding(r).off).toBe(0);
+      }
+    }
+  });
+
+  it('finishes the half turn it started when the direction is let go, and announces it once', () => {
     const r = createRider();
-    r.speed = 100;
+    r.speed = 300;
+    launch(r, true);
+    const done: number[] = [];
+    for (let i = 0; i < 4000 && !r.landed; i++) {
+      stepRider(r, i < 20 ? -1 : 0, STEP, env);
+      if (r.spinDone > 0) done.push(r.spinDone);
+    }
+    expect(r.spin).toBe(180);
+    expect(done).toEqual([180]);
+    expect(r.spinDir).toBe(-1);
+  });
+
+  it('does not spin without a direction or a trick, and steering stays a steer', () => {
+    const r = fly(250, false, () => 0.3);
+    expect(r.spin).toBe(0);
+    expect(r.spinGoal).toBe(0);
+  });
+
+  it('a trick asks for a full turn if it fits, a half turn if not, and refuses when nothing fits', () => {
+    const r = createRider();
+    r.speed = 340;
+    expect(startTrick(r, 1)).toBe(false);
     launch(r);
-    r.airT = r.airDur - TRICK_TIME / 2;
-    expect(startTrick(r)).toBe(false);
+    expect(startTrick(r, 1)).toBe(true);
+    expect(r.spinGoal).toBe(360);
+    expect(startTrick(r, 1)).toBe(false);
+    const hop = createRider();
+    hop.speed = 85;
+    launch(hop);
+    expect(startTrick(hop, -1)).toBe(true);
+    expect(hop.spinGoal).toBe(180);
+    expect(hop.spinDir).toBe(-1);
+    const late = createRider();
+    late.speed = 100;
+    launch(late);
+    late.airT = late.airDur - 0.1;
+    expect(startTrick(late, 1)).toBe(false);
+    expect(late.spinDir).toBe(0);
+  });
+
+  it('squares the board up for the landing after a spin even while a direction is held', () => {
+    const r = fly(300, true, () => 1);
+    expect(Math.abs(r.hx)).toBeLessThan(0.05);
   });
 
   it('has sensible thresholds', () => {
     expect(BAIL_HX).toBeGreaterThan(0.5);
+  });
+});
+
+describe('spin direction on screen', () => {
+  it('holding right swings the nose to the right and holding left swings it to the left', () => {
+    const r = createRider();
+    r.speed = 200;
+    launch(r);
+    r.spin = 45;
+    r.spinDir = 1;
+    r.spinAng = 45;
+    expect(poseOf(r, 90, 100, 0).nx).toBeGreaterThan(0.3);
+    r.spinDir = -1;
+    r.spinAng = -45;
+    expect(poseOf(r, 90, 100, 0).nx).toBeLessThan(-0.3);
   });
 });

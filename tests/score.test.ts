@@ -6,7 +6,8 @@ import {
   POINTS,
   addDistance,
   addGate,
-  addTrick,
+  addSpin,
+  spinPoints,
   breakCombo,
   comboLeft,
   addNearMiss,
@@ -55,7 +56,7 @@ describe('score', () => {
     expect(Math.floor(fast.distPoints)).toBe(250);
     expect(totalScore(fast)).toBeGreaterThan(totalScore(slow));
     expect(addNearMiss(createScore(), 1, 2)).toBe(POINTS.nearMiss * 2);
-    expect(addTrick(createScore(), 2, 2)).toBe(POINTS.trick * 4);
+    expect(addSpin(createScore(), 360, 2)).toBe(spinPoints(360) * 2);
   });
 
   it('values risk lane stars at three times a normal star', () => {
@@ -74,5 +75,16 @@ describe('score', () => {
     expect(comboLeft(s, 10 + COMBO_WINDOW + 1)).toBe(0);
     breakCombo(s);
     expect(s.combo).toBe(0);
+  });
+
+  it('scores spins by degrees, and a bigger spin pays more per half turn', () => {
+    expect([180, 360, 540, 720].map(spinPoints)).toEqual([30, 70, 120, 180]);
+    expect(spinPoints(0)).toBe(0);
+    const s = createScore();
+    expect(addSpin(s, 180, 1)).toBe(POINTS.spin);
+    expect(addSpin(s, 360, 2.5)).toBe(175);
+    expect(s.tricks).toBe(2);
+    expect(s.trickPoints).toBe(30 + 175);
+    expect(totalScore(s)).toBe(205);
   });
 });

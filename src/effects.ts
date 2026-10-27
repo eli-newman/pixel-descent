@@ -36,6 +36,31 @@ export class Particles {
     }
   }
 
+  /**
+   * Throw `n` flecks mostly straight up (towards the top of the screen) with a sideways spread,
+   * like a plume of powder. Gravity pulls them back down.
+   */
+  jet(
+    x: number,
+    y: number,
+    n: number,
+    up: number,
+    spread: number,
+    life: number,
+    rand: () => number,
+    carry = 0,
+  ): void {
+    for (let i = 0; i < n && this.count < this.capacity; i++) {
+      const k = this.count++;
+      this.x[k] = x + (rand() - 0.5) * 6;
+      this.y[k] = y + (rand() - 0.5) * 3;
+      this.vx[k] = (rand() - 0.5) * 2 * spread;
+      this.vy[k] = carry - up * (0.55 + rand() * 0.6);
+      this.max[k] = life;
+      this.life[k] = life * (0.6 + rand() * 0.4);
+    }
+  }
+
   step(dt: number): void {
     const drag = Math.exp(-2 * dt);
     let w = 0;

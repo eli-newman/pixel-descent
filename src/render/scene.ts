@@ -1,4 +1,4 @@
-import { H, W } from '../config';
+import { AVALANCHE_ENABLED, H, W } from '../config';
 import type { Game } from '../game';
 import { hash2 } from '../rng';
 import { poseOf } from '../rider';
@@ -6,7 +6,14 @@ import type { Sim } from '../sim';
 import type { Gate, Obstacle, Patch, Ramp } from '../world/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
-import { drawDizzy, drawRider, drawSnowKick, drawWipeout, type RiderStyle } from './riderSprite';
+import {
+  BOARD_LEN,
+  drawDizzy,
+  drawRider,
+  drawSnowKick,
+  drawWipeout,
+  type RiderStyle,
+} from './riderSprite';
 import { getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../progress';
 import { hudRect, type Rect } from './layout';
@@ -14,6 +21,9 @@ import { hudRect, type Rect } from './layout';
 function posMod(a: number, n: number): number {
   return ((a % n) + n) % n;
 }
+
+/** How tall a kicker is for its cast shadow, in pixels at the lip. */
+const RAMP_HEIGHT = 8;
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
@@ -47,10 +57,12 @@ export class SceneRenderer {
 
     this.drawSky(g, cam, ox, oy);
     this.drawBackdrop(cam, ox, oy);
-    this.drawRidges(g, cam);
     this.drawFlecks(cam, ox, oy, hudRect(g.settings.bigHud));
     for (const p of sim.patches) this.drawPatch(p, cam, ox, oy);
-    for (const r of sim.ramps) this.drawRamp(r, cam, ox, oy);
+    for (const r of sim.ramps) {
+      if (r.kind === 'cliff') this.drawCliff(r, cam, ox, oy);
+      else this.drawRamp(r, cam, ox, oy);
+    }
     this.drawTrail(sim, cam, ox, oy, tuck);
     for (const gate of sim.gates) this.drawGate(g, gate, cam, ox, oy);
     this.drawPickups(g, cam, ox, oy);
@@ -85,6 +97,7 @@ export class SceneRenderer {
     }
 
     this.drawParticles(g, cam, ox, oy);
+    this.drawFaceShot(g, cam, ox, oy);
     this.drawAvalanche(g, cam, oy);
     if (!reduced) this.drawWeather(g, cam, tuck, hudRect(g.settings.bigHud));
     return this.zoomPunch(g);
@@ -124,35 +137,6 @@ export class SceneRenderer {
     if (cam > BACKDROP_H) return;
     const b = this.backdrop;
     for (let i = 0; i < b.length; i += 2) this.fb.put((b[i] ?? 0) + ox, (b[i + 1] ?? 0) - cam + oy);
-  }
-
-  /**
-   * Distant mountain ridges along the top of the screen. They slide in once the start peaks have
-   * scrolled away, then drift sideways as the rider carves and descends (parallax: the far ridge
-   * moves less than the near one).
-   */
-  private drawRidges(g: Game, cam: number): void {
-    if (g.phase === 'title') return;
-    const sim = g.sim;
-    const slide = Math.max(0, Math.min(1, (cam - 20) / 110));
-    if (slide <= 0) return;
-    const drift = g.reduced ? 0 : sim.maxY;
-    for (const layer of RIDGE_LAYERS) {
-      const base = Math.round(layer.base - (1 - slide) * 70);
-      const scroll = sim.rider.x * layer.px + drift * layer.py;
-      for (let x = 0; x < W; x++) {
-        const h = ridgeHeight(x + scroll, layer.seed) * layer.amp;
-        const top = base - Math.round(h);
-        // knock out whatever is behind (flecks, stars) under the ridge, down to the base
-        for (let y = top; y < base; y++) this.fb.erase(x, y);
-        if (layer.dotted ? (x + top) % 2 === 0 : true) this.fb.put(x, top);
-        // a little shading on the slopes: dotted hatching just under the ridge line
-        if (!layer.dotted && (x + top) % 3 === 0) {
-          this.fb.put(x, top + 2);
-          this.fb.put(x, top + 4);
-        }
-      }
-    }
   }
 
   /** Little dashes of snow texture, scattered by a stateless hash so they need no storage. */
@@ -204,12 +188,91 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * A cliff seen from above, built from chunks of rock along a wandering line. Each chunk is a blocky
+   * wall: a snow cap on a stepped lip, broken horizontal strata with short joints between them, and
+   * a flat foot with a hard shadow. The ends step down in stairs instead of fading, so it reads as
+   * stone and not as water running down. Between and beside the chunks is open slope you can ride
+   * down. Every cliff is seeded, so no two look alike.
+   */
+  private drawCliff(r: Ramp, cam: number, ox: number, oy: number): void {
+    const ly = Math.round(r.y - cam + oy);
+    if (ly < -40 || ly > H + 12) return;
+    const fb = this.fb;
+    const sd = r.seed * 7;
+    const BLOCK = 10;
+    for (let x = 0; x < W; x++) {
+      const wx = x - ox;
+      const seg = r.segs.find((c) => wx >= c.x0 && wx < c.x1);
+      if (!seg) {
+        // open slope: plain snow like the rest of the hill, so nothing shimmers between the rock
+        for (let y = ly - 4; y <= ly + 34; y++) fb.erase(x, y);
+        continue;
+      }
+      const blk = Math.floor(wx / BLOCK);
+      // stepped lip: every block sits a couple of pixels higher or lower than its neighbour
+      const lip = ly + seg.dy + Math.floor(hash2(blk + sd, 5) * 5) - 2;
+      // the face is a different height in every block, and the ends of a chunk step down in stairs
+      const edge = Math.min(wx - seg.x0, seg.x1 - 1 - wx);
+      const endScale = [0.4, 0.6, 0.8][Math.min(2, Math.floor(edge / 4))] ?? 1;
+      const faceH = Math.max(
+        5,
+        Math.round((16 + Math.floor(hash2(blk + sd, 2) * 4) * 4) * (edge >= 12 ? 1 : endScale)),
+      );
+      const foot = lip + faceH;
+      for (let y = lip - 4; y <= foot + 5; y++) fb.erase(x, y);
+      // snow cap
+      fb.put(x, lip);
+      fb.put(x, lip + 1);
+      if (hash2(Math.floor(wx / 2) + sd, 8) > 0.55) fb.put(x, lip - 1);
+      // side walls of the chunk and of each block step
+      const stepEdge = wx % BLOCK === 0 && hash2(blk + sd, 2) !== hash2(blk - 1 + sd, 2);
+      const wall = edge === 0 || (stepEdge && hash2(blk + sd, 6) > 0.4);
+      for (let y = lip + 2; y < foot; y++) {
+        const d = y - lip;
+        // broken strata: horizontal lines with gaps, the way layered rock shows up
+        const strata = d % 5 === 2 && hash2(Math.floor((wx + d * 3) / 7) + sd, d) > 0.22;
+        // short joints between the strata lines
+        const joint =
+          d % 5 !== 2 &&
+          (wx + Math.floor(d / 5) * 4 + Math.floor(hash2(sd, Math.floor(d / 5)) * 9)) % 13 === 0;
+        if (wall || strata || joint) fb.put(x, y);
+      }
+      // flat foot and a hard shadow under it
+      fb.put(x, foot);
+      fb.put(x, foot + 1);
+      if ((x + foot) % 2 === 0) fb.put(x, foot + 2);
+      if (x % 2 === 0 && hash2(wx + sd, 9) > 0.35) fb.put(x, foot + 3);
+    }
+    // a warning chevron above each chunk of rock
+    for (const c of r.segs) {
+      const cx = Math.round((c.x0 + c.x1) / 2) + ox;
+      for (let k = 0; k < 4; k++) {
+        fb.put(cx - k, ly + c.dy - 10 + k);
+        fb.put(cx + k, ly + c.dy - 10 + k);
+      }
+    }
+  }
+
   /** A kicker seen from behind: a hatched wedge rising to a solid lip, with a shadow below it. */
   private drawRamp(r: Ramp, cam: number, ox: number, oy: number): void {
     const ly = r.y - cam + oy;
     if (ly < -14 || ly > H + 6) return;
     const fb = this.fb;
     const rows = 11;
+    // Cast shadow, the same rule as the tree sprites (castShadow): the jump rises toward the lip, a point at
+    // height h lands 0.85h + 1 to the right and 0.28h + 1 down. Drawn first so the jump sits on top of it.
+    for (let i = 0; i < rows; i++) {
+      const t = i / (rows - 1);
+      const hw = Math.round(r.half * (0.5 + 0.5 * t));
+      const h = 1 + (RAMP_HEIGHT - 1) * t;
+      const wy = r.y - (rows - 1) + i;
+      const sy = Math.round(wy + 1 + h * 0.28);
+      for (let dx = -hw; dx <= hw; dx++) {
+        const sx = Math.round(r.x + dx + h * 0.85 + 1);
+        if ((sx + sy) % 2 === 0) fb.put(sx + ox, sy - cam + oy);
+      }
+    }
     for (let i = 0; i < rows; i++) {
       const t = i / (rows - 1);
       const hw = Math.round(r.half * (0.5 + 0.5 * t));
@@ -245,6 +308,15 @@ export class SceneRenderer {
       const x = Math.round(t.x(i)) + ox;
       const y = Math.round(t.y(i)) - cam + oy;
       if (y < -2 || y > H + 2) continue;
+      const w = t.w(i);
+      if (w > 0.15) {
+        // Sideways board: the whole length scrapes the snow, so the track is as wide as the board.
+        const h = Math.round((BOARD_LEN / 2) * w);
+        for (let dx = -h; dx <= h + 1; dx++) {
+          if ((dx + y) % 2 === 0 || Math.abs(dx) >= h - 1) this.fb.put(x + dx, y);
+        }
+        continue;
+      }
       this.fb.put(x, y);
       this.fb.put(x + 1, y);
       if (i % 2 === 0) {
@@ -400,6 +472,23 @@ export class SceneRenderer {
     }
   }
 
+  /** Powder blown into the rider's face: a ragged dither over his head that thickens at the peak of a skid. */
+  private drawFaceShot(g: Game, cam: number, ox: number, oy: number): void {
+    const k = g.faceShot;
+    if (k < 0.05 || g.reduced || g.sim.crashed) return;
+    const r = g.sim.rider;
+    const sx = Math.round(r.x) + ox;
+    const sy = Math.round(r.y - cam) + oy;
+    const flip = Math.floor(g.animT * 24) % 2;
+    for (let dy = -17; dy <= -2; dy++) {
+      for (let dx = -7; dx <= 7; dx++) {
+        const edge = 1 - (Math.abs(dx) / 8 + Math.abs(dy + 9.5) / 9) / 2;
+        const hash = ((dx * 7 + dy * 13 + flip * 5) & 7) / 8;
+        if (hash < k * edge * 0.9 && (dx + dy + flip) % 2 === 0) this.fb.put(sx + dx, sy + dy);
+      }
+    }
+  }
+
   private drawParticles(g: Game, cam: number, ox: number, oy: number): void {
     const p = g.particles;
     for (let i = 0; i < p.count; i++) {
@@ -415,7 +504,7 @@ export class SceneRenderer {
    * roiling crest. Before it is on screen, a flickering edge and a warning mark tell the rider it is near.
    */
   private drawAvalanche(g: Game, cam: number, oy: number): void {
-    if (g.phase === 'title') return;
+    if (!AVALANCHE_ENABLED || g.phase === 'title') return;
     const sim = g.sim;
     const fb = this.fb;
     const t = g.reduced ? 0 : g.animT;
@@ -523,34 +612,6 @@ const RING: ReadonlyArray<readonly [number, number]> = [
   [-1, 3],
   [1, 3],
 ];
-
-interface RidgeLayer {
-  base: number;
-  amp: number;
-  /** Horizontal scroll per px of rider x, and per px of descent. */
-  px: number;
-  py: number;
-  seed: number;
-  dotted: boolean;
-}
-
-const RIDGE_LAYERS: readonly RidgeLayer[] = [
-  { base: 34, amp: 1, px: 0.1, py: 0.03, seed: 3, dotted: true },
-  { base: 46, amp: 1, px: 0.22, py: 0.07, seed: 11, dotted: false },
-];
-
-/** Smooth value noise in px: a ridge line made of overlapping peaks. */
-function ridgeHeight(x: number, seed: number): number {
-  const f = (s: number, step: number): number => {
-    const i = Math.floor(x / step);
-    const t = x / step - i;
-    const a = hash2(i, seed + s);
-    const b = hash2(i + 1, seed + s);
-    const k = t * t * (3 - 2 * t);
-    return a + (b - a) * k;
-  };
-  return 6 + 16 * f(0, 38) + 8 * f(1, 17) + 3 * f(2, 7);
-}
 
 /** Height above the snow (px) of a sim's rider. */
 function zOf(sim: Sim): number {

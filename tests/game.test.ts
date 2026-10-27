@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GHOST_ENABLED } from '../src/config';
 import { menuButtons } from '../src/menu';
 import { dailySeed } from '../src/rng';
 import { makeGame, stepUntil } from './helpers/fakes';
@@ -124,7 +125,7 @@ describe('game state machine', () => {
     expect((shared[0] as { seed: string }).seed).toBe('shareme');
   });
 
-  it('records a ghost for a new seed best and loads it next time', () => {
+  it.skipIf(!GHOST_ENABLED)('records a ghost for a new seed best and loads it next time', () => {
     const rig = makeGame('ghosty');
     rig.input.push('start');
     stepUntil(rig.game, () => rig.game.phase === 'over');

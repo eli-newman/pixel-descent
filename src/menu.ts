@@ -21,6 +21,7 @@ export type ButtonId =
   | 'music'
   | 'hud'
   | 'autopause'
+  | 'manual'
   | 'again'
   | 'retry'
   | 'share'
@@ -76,6 +77,7 @@ const PAUSE: UiButton[] = [
   b('music', 92, 126, 74, MIN_TOUCH),
   b('hud', 14, 152, 74, MIN_TOUCH),
   b('autopause', 92, 152, 74, MIN_TOUCH),
+  b('manual', 14, 178, 152, MIN_TOUCH),
 ];
 
 /** Top of the game over panel. The camera keeps the crash site above this line. */

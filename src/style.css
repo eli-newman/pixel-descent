@@ -84,6 +84,25 @@ body {
   width: 17%;
 }
 
+/* Flips sit in a row to the left of TRICK, clear of the HUD at the top. */
+#flip-up-btn,
+#flip-down-btn {
+  bottom: 5%;
+  width: 17%;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: center;
+  font-size: clamp(8px, 2.4vw, 11px);
+}
+
+#flip-up-btn {
+  right: 23%;
+}
+
+#flip-down-btn {
+  right: 42%;
+}
+
 /* On touch screens the buttons appear when they are useful; keyboard and mouse use keys. */
 @media (pointer: coarse) {
   #stage[data-phase='playing'] #pause-btn,
@@ -93,7 +112,9 @@ body {
   #stage[data-phase='paused'] #mute-btn,
   #stage[data-phase='crashed'] #mute-btn,
   #stage[data-phase='title'] #mute-btn,
-  #stage[data-phase='playing'] #trick-btn {
+  #stage[data-phase='playing'] #trick-btn,
+  #stage[data-phase='playing'] #flip-up-btn,
+  #stage[data-phase='playing'] #flip-down-btn {
     display: flex;
   }
 

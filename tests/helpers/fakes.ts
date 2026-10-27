@@ -5,10 +5,18 @@ import { Store, type StorageLike } from '../../src/storage';
 
 export class FakeInput {
   steerValue = 0;
+  brakeValue = false;
+  flipValue: -1 | 0 | 1 = 0;
   usingTouch = false;
   private queue: InputItem[] = [];
   steer(): number {
     return this.steerValue;
+  }
+  brake(): boolean {
+    return this.brakeValue;
+  }
+  flip(): -1 | 0 | 1 {
+    return this.flipValue;
   }
   drain(): InputItem[] {
     const q = this.queue;
@@ -23,6 +31,7 @@ export class FakeInput {
   }
   releaseAll(): void {
     this.steerValue = 0;
+    this.brakeValue = false;
   }
 }
 

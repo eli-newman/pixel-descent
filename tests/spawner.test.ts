@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { START_X, START_Y } from '../src/config';
+import { CHECKPOINTS_ENABLED, START_X, START_Y } from '../src/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/collision';
 import { hashSeed } from '../src/rng';
 import { maxFlightPx, topSpeed } from '../src/rider';
@@ -62,7 +62,7 @@ describe('spawner', () => {
     }
   });
 
-  it('places checkpoint gates inside the open path', () => {
+  it.skipIf(!CHECKPOINTS_ENABLED)('places checkpoint gates inside the open path', () => {
     const s = new Spawner(hashSeed('gates'));
     const batch = s.advance(6000);
     expect(batch.gates.length).toBeGreaterThan(2);
@@ -81,8 +81,11 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
       for (const r of batch.ramps) {
         ramps++;
         const distM = (r.y - START_Y) / 8;
-        expect(r.landEnd - r.y).toBeGreaterThanOrEqual(maxFlightPx(topSpeed(distM)) + 69);
-        expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
+        expect(r.landEnd - r.y).toBeGreaterThanOrEqual(
+          maxFlightPx(topSpeed(distM), r.kind === 'cliff') + 109,
+        );
+        if (r.kind === 'kicker') expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
+        else expect(r.half).toBeGreaterThanOrEqual(90);
         for (const o of batch.obstacles) {
           if (!obstacleBox(o)) continue;
           expect(o.y < r.y - 14 || o.y > r.landEnd).toBe(true);
@@ -90,6 +93,30 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
       }
     }
     expect(ramps).toBeGreaterThan(30);
+  });
+
+  it('spawns both kickers and cliffs', () => {
+    const s = new Spawner(hashSeed('mix'));
+    const batch = s.advance(START_Y + 60000);
+    expect(batch.ramps.some((r) => r.kind === 'cliff')).toBe(true);
+    expect(batch.ramps.some((r) => r.kind === 'kicker')).toBe(true);
+  });
+
+  it('gives every cliff its own look, open slope beside the rock, and sometimes just a side cliff', () => {
+    const s = new Spawner(hashSeed('gaps'));
+    const cliffs = s.advance(START_Y + 150000).ramps.filter((r) => r.kind === 'cliff');
+    expect(cliffs.length).toBeGreaterThan(5);
+    for (const c of cliffs) {
+      expect(c.segs.length).toBeGreaterThan(0);
+      const rock = c.segs.reduce((n, g) => n + (g.x1 - g.x0), 0);
+      expect(rock).toBeLessThan(180 - 15);
+      for (const g of c.segs) expect(g.x1 - g.x0).toBeGreaterThanOrEqual(12);
+    }
+    expect(new Set(cliffs.map((c) => c.seed)).size).toBe(cliffs.length);
+    const sideOnly = cliffs.filter((c) => c.segs.length === 1);
+    expect(sideOnly.length).toBeGreaterThan(0);
+    expect(sideOnly.some((c) => c.segs[0].x0 === 0)).toBe(true);
+    expect(sideOnly.some((c) => c.segs[0].x1 === 180)).toBe(true);
   });
 
   it('keeps risk lanes open: corridor, entry and exit strips, stars', () => {
@@ -185,5 +212,17 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
   it('keeps the open path wide enough for speed: wider than the old formula at distance', () => {
     expect(pathHalfWidth(0)).toBeGreaterThanOrEqual(30);
     expect(pathHalfWidth(4000)).toBeGreaterThanOrEqual(23);
+  });
+});
+
+describe('mountain world is stable', () => {
+  it('generates the same world for a seed as it always has', () => {
+    const fp = (seed: string): [number, number, number] => {
+      const b = new Spawner(hashSeed(seed)).advance(20000);
+      // Fingerprints taken when batches still carried an (empty) `props` list, so it is added back here.
+      return [hashSeed(JSON.stringify({ ...b, props: [] })), b.obstacles.length, b.ramps.length];
+    };
+    expect(fp('alpha')).toEqual([4040464968, 1058, 8]);
+    expect(fp('k3m9qa')).toEqual([3537220680, 1081, 8]);
   });
 });

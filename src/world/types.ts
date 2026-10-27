@@ -32,6 +32,8 @@ export interface Pickup {
 /** A kicker. Riding over its lip launches the rider; the ground below it is kept clear to land on. */
 export interface Ramp {
   id: number;
+  /** A kicker is a small optional hop; a cliff spans the whole slope and drops the rider for big air. */
+  kind: 'kicker' | 'cliff';
   x: number;
   /** World y of the lip. */
   y: number;
@@ -40,6 +42,17 @@ export interface Ramp {
   /** Solid obstacles are kept out of the landing zone between y and landEnd. */
   landEnd: number;
   used: boolean;
+  /** Cliffs only: makes each one look different. */
+  seed: number;
+  /** Cliffs only: the chunks of rock along the ledge. Between them (and beside them) is open slope you can ride down. */
+  segs: CliffSeg[];
+}
+
+/** One chunk of a cliff: world x range and how far its lip sits above (negative) or below the cliff line. */
+export interface CliffSeg {
+  x0: number;
+  x1: number;
+  dy: number;
 }
 
 export type PatchKind = 'ice' | 'drift';

@@ -1,12 +1,15 @@
 export type Action =
   | 'start'
   | 'trick'
+  | 'flipUp'
+  | 'flipDown'
   | 'pause'
   | 'mute'
   | 'retry'
   | 'share'
   | 'hud'
   | 'music'
+  | 'manual'
   | 'up'
   | 'down'
   | 'left'
@@ -17,6 +20,8 @@ export type InputItem = { kind: 'action'; action: Action } | { kind: 'tap'; x: n
 
 const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
+const FLIP_UP = new Set(['ArrowUp', 'KeyW']);
+const FLIP_DOWN = new Set(['ArrowDown', 'KeyS']);
 const ACTION_KEYS: Record<string, Action> = {
   Space: 'start',
   Enter: 'start',
@@ -32,6 +37,7 @@ const ACTION_KEYS: Record<string, Action> = {
   KeyC: 'share',
   KeyH: 'hud',
   KeyU: 'music',
+  KeyG: 'manual',
 };
 /** A touch that moves farther than this (CSS px) switches from "hold a side" to "drag to steer". */
 const DRAG_START = 10;
@@ -70,6 +76,28 @@ export class Input {
       if (RIGHT.has(code)) k += 1;
     }
     return Math.max(-1, Math.min(1, k + this.pointerSteer));
+  }
+
+  /** Flip keys held: 1 is a backflip (Down, S), -1 a frontflip (Up, W), 0 when none or both. */
+  flip(): -1 | 0 | 1 {
+    let up = false;
+    let down = false;
+    for (const code of this.keys) {
+      if (FLIP_UP.has(code)) up = true;
+      if (FLIP_DOWN.has(code)) down = true;
+    }
+    return up === down ? 0 : up ? -1 : 1;
+  }
+
+  /** True while a left key and a right key are held together. */
+  brake(): boolean {
+    let l = false;
+    let r = false;
+    for (const code of this.keys) {
+      if (LEFT.has(code)) l = true;
+      if (RIGHT.has(code)) r = true;
+    }
+    return l && r;
   }
 
   /** Take everything queued since the last call. The returned array is only valid until the next call. */

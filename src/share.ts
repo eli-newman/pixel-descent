@@ -1,3 +1,4 @@
+import { CHECKPOINTS_ENABLED } from './config';
 import { drawText, drawTextCentered, textWidth } from './render/font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './render/framebuffer';
 import { Rng } from './rng';
@@ -77,7 +78,7 @@ export function renderCard(fb: Framebuffer, card: ResultCardData): void {
     `STARS ${card.stars}`,
     `CLOSE ${card.nearMisses}`,
     `TRICKS ${card.tricks}`,
-    `FLAGS ${card.gates}`,
+    ...(CHECKPOINTS_ENABLED ? [`FLAGS ${card.gates}`] : []),
   ];
   stats.forEach((s, i) => drawText(fb, s, 12 + (i % 3) * 58, 55 + Math.floor(i / 3) * 9, WHITE));
   drawTextCentered(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { START_Y, STEP } from '../src/config';
+import { AVALANCHE_ENABLED, START_Y, STEP } from '../src/config';
 import {
   AV_START_GAP,
   avalancheDanger,
@@ -97,6 +97,74 @@ describe('sim', () => {
     expect(sim.score.landings).toBe(1);
   });
 
+  it('riding past the rock of a cliff is a slope, not a drop, while the rock itself launches you', () => {
+    const run = (gapOffset: number): boolean => {
+      const sim = new Sim('cliff-gap', { noAvalanche: true });
+      sim.begin();
+      play(sim, 5);
+      const r = sim.rider;
+      sim.ramps.push({
+        id: 999,
+        kind: 'cliff',
+        x: 90,
+        y: r.y + 30,
+        half: 90,
+        landEnd: r.y + 900,
+        used: false,
+        seed: 1,
+        segs: [{ x0: r.x + gapOffset - 20, x1: r.x + gapOffset + 20, dy: 0 }],
+      });
+      let launched = false;
+      for (let i = 0; i < 120; i++) {
+        sim.step({ steer: 0, trick: false });
+        if (sim.events.some((e) => e.type === 'launch')) launched = true;
+      }
+      return launched;
+    };
+    expect(run(0)).toBe(true);
+    expect(run(80)).toBe(false);
+  });
+
+  it('a cliff drop hangs longer than a kicker and pays a drop bonus on a clean landing', () => {
+    const hop = new Sim('cliff-a', { noAvalanche: true });
+    hop.begin();
+    play(hop, 5);
+    hop.rider.speed = 200;
+    launch(hop.rider);
+    const sim = new Sim('cliff-b', { noAvalanche: true });
+    sim.begin();
+    play(sim, 5);
+    sim.rider.speed = 200;
+    launch(sim.rider, true);
+    expect(sim.rider.airDur).toBeGreaterThan(hop.rider.airDur * 1.8);
+    expect(sim.rider.airH).toBeGreaterThan(hop.rider.airH * 1.9);
+    sim.cliffJump = true;
+    sim.rider.airT = sim.rider.airDur - STEP * 2;
+    sim.rider.hx = 0;
+    sim.rider.hv = 0;
+    let pts = 0;
+    for (let i = 0; i < 5; i++) {
+      sim.step({ steer: 0, trick: false });
+      for (const e of sim.events) if (e.type === 'land' && e.quality === 'clean') pts = e.pts;
+    }
+    expect(pts).toBeGreaterThanOrEqual(75);
+    expect(sim.cliffJump).toBe(false);
+  });
+
+  it('braking swings the board sideways and plows down to a crawl, then lets go', () => {
+    const sim = new Sim('brake', { noAvalanche: true });
+    sim.begin();
+    for (let i = 0; i < 400 && !sim.crashed; i++) sim.step(botInput(sim));
+    const fast = sim.rider.speed;
+    for (let i = 0; i < 360 && !sim.crashed; i++) sim.step({ ...botInput(sim), brake: true });
+    expect(sim.crashed).toBe(false);
+    expect(sim.rider.brake).toBeGreaterThan(0.95);
+    expect(Math.abs(sim.rider.hx)).toBeGreaterThan(0.8);
+    expect(sim.rider.speed).toBeLessThan(fast * 0.6);
+    for (let i = 0; i < 240 && !sim.crashed; i++) sim.step(botInput(sim));
+    expect(sim.rider.brake).toBe(0);
+  });
+
   it('bails when landing mid-trick or sideways', () => {
     const sim = new Sim('bail', { noAvalanche: true });
     sim.begin();
@@ -187,7 +255,7 @@ describe('avalanche', () => {
     expect(fast.avalanche.minGap).toBeGreaterThan(100);
   });
 
-  it('eases off for touch riders', () => {
+  it.skipIf(!AVALANCHE_ENABLED)('eases off for touch riders', () => {
     const t = new Sim('ease', { touch: true });
     const k = new Sim('ease', { touch: false });
     t.begin();
@@ -204,5 +272,89 @@ describe('top speed at distance', () => {
     runBot(sim, 1500);
     expect(sim.topSpeedSeen).toBeGreaterThan(topSpeed(0));
     expect(sim.topSpeedSeen).toBeGreaterThan(280);
+  });
+
+  describe('spins', () => {
+    /** A sim with the rider in the air, a few steps before touchdown, having turned `spin` degrees. */
+    function nearLanding(spin: number, dir: 1 | -1 = 1): Sim {
+      const sim = new Sim('spin-land', { noAvalanche: true });
+      sim.begin();
+      play(sim, 5);
+      const r = sim.rider;
+      launch(r);
+      r.speed = 150;
+      r.hx = 0;
+      r.hv = 0;
+      r.spin = spin;
+      r.spinDir = dir;
+      r.spinGoal = Math.ceil(spin / 180) * 180;
+      r.airT = r.airDur - STEP * 2;
+      return sim;
+    }
+    function finish(sim: Sim): { quality: string; pts: number; spin: number; switch: boolean } {
+      let out = { quality: '', pts: 0, spin: 0, switch: false };
+      for (let i = 0; i < 5; i++) {
+        sim.step(none);
+        for (const e of sim.events) {
+          if (e.type === 'land')
+            out = { quality: e.quality, pts: e.pts, spin: e.spin, switch: e.switch };
+        }
+      }
+      return out;
+    }
+
+    it('lands a 180 backwards: fine, scored, a little slower than a full turn', () => {
+      const half = nearLanding(180);
+      const before = half.rider.speed;
+      const h = finish(half);
+      expect(half.crashed).toBe(false);
+      expect(h).toMatchObject({ quality: 'clean', spin: 180, switch: true });
+      expect(h.pts).toBeGreaterThan(0);
+      expect(half.score.tricks).toBe(1);
+      const gainHalf = half.rider.speed - before;
+
+      const full = nearLanding(360);
+      const beforeFull = full.rider.speed;
+      const f = finish(full);
+      expect(f).toMatchObject({ quality: 'clean', spin: 360, switch: false });
+      expect(f.pts).toBeGreaterThan(h.pts);
+      expect(full.rider.speed - beforeFull).toBeGreaterThan(gainHalf);
+      expect(full.score.trickPoints).toBe(f.pts);
+    });
+
+    it('a landing a little off a half turn is sloppy, far off is a bail', () => {
+      const sloppy = nearLanding(180 + 50);
+      const s = finish(sloppy);
+      expect(s.quality).toBe('sloppy');
+      expect(s.pts).toBe(0);
+      expect(sloppy.crashed).toBe(false);
+      expect(sloppy.rider.speed).toBeLessThan(150);
+      expect(sloppy.score.trickPoints).toBe(0);
+
+      const bail = nearLanding(180 + 80);
+      finish(bail);
+      expect(bail.crashed).toBe(true);
+      expect(bail.crashCause).toBe('bail');
+    });
+
+    it('a trick press mid air spins and pays on landing, using only the air that is left', () => {
+      const sim = new Sim('spin-trick', { noAvalanche: true });
+      sim.begin();
+      play(sim, 5);
+      sim.rider.speed = 200;
+      launch(sim.rider, true);
+      const spins: number[] = [];
+      let landed: { pts: number; spin: number } | null = null;
+      for (let i = 0; i < 4000 && !landed; i++) {
+        sim.step({ steer: 0, trick: i === 3 || i === 70 });
+        for (const e of sim.events) {
+          if (e.type === 'spin') spins.push(e.deg);
+          if (e.type === 'land') landed = { pts: e.pts, spin: e.spin };
+        }
+      }
+      expect(spins).toEqual([360, 720]);
+      expect(landed).toMatchObject({ spin: 720 });
+      expect(sim.crashed).toBe(false);
+    });
   });
 });

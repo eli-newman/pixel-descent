@@ -35,6 +35,8 @@ export interface RideState {
   active: boolean;
   ice: boolean;
   drift: boolean;
+  /** 0..1 swing of the board into a plowing stop. */
+  brake: number;
 }
 
 /** Semitone offsets of a major pentatonic scale, for rising pickup and combo pitches. */
@@ -197,7 +199,9 @@ export class Sfx {
     bed.windFilter.Q.setTargetAtTime(0.35 + 0.45 * tuck, now, 0.2);
     const grounded = s.active && !s.air;
     bed.hiss.gain.setTargetAtTime(
-      grounded ? (0.003 + 0.03 * sp * carve) * muffle * (s.ice ? 0.6 : 1) : 0,
+      grounded
+        ? (0.003 + 0.03 * sp * carve + 0.05 * s.brake * (0.3 + sp)) * muffle * (s.ice ? 0.6 : 1)
+        : 0,
       now,
       0.08,
     );

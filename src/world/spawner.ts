@@ -1,8 +1,17 @@
-import { PX_PER_M, START_X, START_Y, W } from '../config';
+import { CHECKPOINTS_ENABLED, PATH_STARS_ENABLED, PX_PER_M, START_X, START_Y, W } from '../config';
 import { obstacleBox } from '../collision';
 import { maxFlightPx, topSpeed } from '../rider';
 import { Rng } from '../rng';
-import type { Gate, Obstacle, ObstacleKind, Patch, Pickup, Ramp, SpawnBatch } from './types';
+import type {
+  CliffSeg,
+  Gate,
+  Obstacle,
+  ObstacleKind,
+  Patch,
+  Pickup,
+  Ramp,
+  SpawnBatch,
+} from './types';
 
 /** Nothing spawns in the rows right below the start gate. */
 export const FIRST_ROW_Y = START_Y + 70;
@@ -24,6 +33,12 @@ const LANE_OFFSET = 20;
 const LANE_END_STRIP = 38;
 const LANE_STAR_STEP = 13;
 const RAMP_HALF = 13;
+/** Roughly two in five of the jumps are cliffs: a rock ledge across the whole slope that you drop off. */
+const CLIFF_CHANCE = 0.4;
+/** Chance per row of a tree or rock hugging the slope edge. */
+const SIDE_FOREST_CHANCE = 0.55;
+/** Extra solid-free ground after the furthest possible landing, so a rider has room to steer back to the path. */
+const LANDING_MARGIN = 110;
 const FIRST_RAMP_Y = START_Y + 900;
 const FIRST_LANE_Y = START_Y + 1500;
 const FIRST_PATCH_Y = START_Y + 800;
@@ -57,6 +72,7 @@ interface SpritePick {
   half: number;
 }
 
+/** The mountain's obstacle mix. Its roll thresholds are part of what makes old seeds reproducible. */
 function pickSprite(rng: Rng, distM: number): SpritePick {
   const r = rng.next();
   if (r < 0.16) return { kind: 'tree', size: rng.int(9, 13), half: 6 };
@@ -184,7 +200,13 @@ export class Spawner {
 
   /** Spawn everything above world y `toY` that has not been spawned yet. */
   advance(toY: number): SpawnBatch {
-    const batch: SpawnBatch = { obstacles: [], pickups: [], gates: [], ramps: [], patches: [] };
+    const batch: SpawnBatch = {
+      obstacles: [],
+      pickups: [],
+      gates: [],
+      ramps: [],
+      patches: [],
+    };
     this.planLanes(toY + 60);
     this.planRamps(toY + 60);
     this.planPatches(toY + 60);
@@ -193,11 +215,11 @@ export class Spawner {
       this.nextY += this.rng.range(9, 15);
     }
     while (this.nextGateY < toY) {
-      batch.gates.push(this.makeGate(this.nextGateY));
+      if (CHECKPOINTS_ENABLED) batch.gates.push(this.makeGate(this.nextGateY));
       this.nextGateY += GATE_EVERY;
     }
     while (this.nextStarY < toY) {
-      this.spawnStars(this.nextStarY, batch);
+      if (PATH_STARS_ENABLED) this.spawnStars(this.nextStarY, batch);
       this.nextStarY += this.starRng.range(110, 190);
     }
     while (this.nextLaneStarLane < this.lanes.length) {
@@ -254,6 +276,7 @@ export class Spawner {
   }
 
   private nearGate(y: number, pad: number): boolean {
+    if (!CHECKPOINTS_ENABLED) return false;
     if (y < FIRST_GATE_Y - pad) return false;
     const k = Math.round((y - FIRST_GATE_Y) / GATE_EVERY);
     return Math.abs(FIRST_GATE_Y + k * GATE_EVERY - y) < pad;
@@ -265,19 +288,48 @@ export class Spawner {
       const y = Math.round(this.nextRampY + this.rampRng.range(0, 150));
       this.nextRampY = y + this.rampRng.range(1200, 1800);
       const distM = (y - START_Y) / PX_PER_M;
-      const landEnd = Math.round(y + maxFlightPx(topSpeed(distM)) + 70);
+      const cliff = this.rampRng.chance(CLIFF_CHANCE);
+      const landEnd = Math.round(y + maxFlightPx(topSpeed(distM), cliff) + LANDING_MARGIN);
       this.planLanes(landEnd + 60);
       if (this.nearLane(y, 60) || this.nearLane(landEnd, 60)) continue;
       if (this.nearGate(y, 50)) continue;
+      const segs = cliff ? this.cliffSegs() : [];
+      const seed = cliff ? this.rampRng.int(1, 100000) : 0;
       this.ramps.push({
         id: this.nextRampId++,
-        x: Math.round(this.pathCenter(y)),
+        kind: cliff ? 'cliff' : 'kicker',
+        x: cliff ? W / 2 : Math.round(this.pathCenter(y)),
         y,
-        half: RAMP_HALF,
+        half: cliff ? W / 2 : RAMP_HALF,
         landEnd,
         used: false,
+        seed,
+        segs,
       });
     }
+  }
+
+  /**
+   * The rock of a cliff. Usually a broken ledge: 2-4 chunks at slightly different heights with open
+   * slope between them. Sometimes just one chunk hugging a side of the screen, leaving the rest open.
+   */
+  private cliffSegs(): CliffSeg[] {
+    const rng = this.rampRng;
+    if (rng.chance(0.35)) {
+      const w = Math.round(rng.range(50, 86));
+      const left = rng.chance(0.5);
+      return [{ x0: left ? 0 : W - w, x1: left ? w : W, dy: Math.round(rng.range(-4, 4)) }];
+    }
+    const segs: CliffSeg[] = [];
+    let x = Math.round(rng.range(-10, 8));
+    while (x < W) {
+      const w = Math.round(rng.range(24, 58));
+      const x0 = Math.max(0, x);
+      const x1 = Math.min(W, x + w);
+      if (x1 - x0 >= 12) segs.push({ x0, x1, dy: Math.round(rng.range(-7, 7)) });
+      x += w + Math.round(rng.range(12, 26));
+    }
+    return segs;
   }
 
   /** Plan ice patches and snowdrifts up to `limit`. */
@@ -324,7 +376,7 @@ export class Spawner {
     const tries = this.rng.chance(density(distM)) ? 1 + (this.rng.chance(0.45) ? 1 : 0) : 0;
     for (let t = 0; t < tries; t++) this.tryObstacle(y, distM, gap, center, batch);
     // A denser forest hugs both sides of the slope.
-    if (this.rng.chance(0.55)) {
+    if (this.rng.chance(SIDE_FOREST_CHANCE)) {
       const side = this.rng.chance(0.5) ? 1 : -1;
       const x = side < 0 ? this.rng.range(8, 24) : this.rng.range(W - 24, W - 8);
       this.tryObstacle(y, distM, gap, center, batch, x);

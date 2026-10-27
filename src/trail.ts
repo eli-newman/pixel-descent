@@ -2,12 +2,14 @@
 export class Trail {
   private readonly xs: Float32Array;
   private readonly ys: Float32Array;
+  private readonly ws: Float32Array;
   private head = 0;
   count = 0;
 
   constructor(readonly capacity: number) {
     this.xs = new Float32Array(capacity);
     this.ys = new Float32Array(capacity);
+    this.ws = new Float32Array(capacity);
   }
 
   clear(): void {
@@ -15,9 +17,11 @@ export class Trail {
     this.count = 0;
   }
 
-  push(x: number, y: number): void {
+  /** `w` is how far the board was turned across the slope (0 to 1): a skid scrapes a wide swath. */
+  push(x: number, y: number, w = 0): void {
     this.xs[this.head] = x;
     this.ys[this.head] = y;
+    this.ws[this.head] = w;
     this.head = (this.head + 1) % this.capacity;
     if (this.count < this.capacity) this.count++;
   }
@@ -29,6 +33,10 @@ export class Trail {
 
   y(i: number): number {
     return this.ys[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
+  }
+
+  w(i: number): number {
+    return this.ws[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
   }
 
   lastX(): number {

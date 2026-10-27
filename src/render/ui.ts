@@ -1,4 +1,4 @@
-import { H, KMH_PER_PXS, W } from '../config';
+import { CHECKPOINTS_ENABLED, H, KMH_PER_PXS, W } from '../config';
 import { PANEL_SLIDE, type Game } from '../game';
 import { menuButtons, OVER_PANEL_TOP, type ButtonId, type UiButton } from '../menu';
 import {
@@ -71,6 +71,8 @@ function labelOf(g: Game, id: ButtonId): string {
       return `BIG HUD ${on(g.settings.bigHud)}`;
     case 'autopause':
       return `AUTO PAUSE ${on(g.settings.autoPause)}`;
+    case 'manual':
+      return `MANUAL SPIN ${on(g.settings.manualSpin)}`;
     case 'again':
       return 'NEW RUN';
     case 'retry':
@@ -246,10 +248,10 @@ function drawMain(fb: Framebuffer, g: Game): void {
   );
   const c = nextChallenge(g);
   if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
-  drawTextCentered(fb, 'A D STEER  SPACE TRICK  P PAUSE', CX, 297);
+  drawTextCentered(fb, 'A D STEER  SPACE TRICK  W S FLIP', CX, 297);
   drawTextCentered(
     fb,
-    g.ghost ? 'RACE YOUR GHOST ON THIS SEED' : 'M SOUND  H BIG HUD  U MUSIC',
+    g.ghost ? 'RACE YOUR GHOST ON THIS SEED' : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
     CX,
     306,
   );
@@ -330,6 +332,7 @@ function drawGear(fb: Framebuffer, g: Game): void {
     ang: 62,
     steep: false,
     tuck: 0,
+    pitch: 0,
   };
   drawRider(fb, pose, { style, time: g.animT });
   drawButtons(fb, g);
@@ -382,11 +385,15 @@ function drawGoals(fb: Framebuffer, g: Game): void {
 }
 
 function drawPause(fb: Framebuffer, g: Game): void {
-  panel(fb, 50, 214);
+  panel(fb, 50, 244);
   drawTextCentered(fb, 'PAUSED', CX, 56, WHITE, 2);
   drawButtons(fb, g);
-  drawTextCentered(fb, `SEED ${g.seed}`, CX, 184, WHITE);
-  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 196, YELLOW);
+  // The spin mode is fixed for a run, so a change made here waits for the next one.
+  if (g.settings.manualSpin !== (g.sim.opts.manualSpin === true)) {
+    drawTextCentered(fb, 'SPIN MODE STARTS NEXT RUN', CX, 206, YELLOW);
+  }
+  drawTextCentered(fb, `SEED ${g.seed}`, CX, 216, WHITE);
+  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 228, YELLOW);
 }
 
 function drawOver(fb: Framebuffer, g: Game): void {
@@ -408,7 +415,7 @@ function drawOver(fb: Framebuffer, g: Game): void {
   drawTextCentered(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
   drawTextCentered(
     fb,
-    `FLAGS ${sm.gates}  TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`,
+    `${CHECKPOINTS_ENABLED ? `FLAGS ${sm.gates}  ` : ''}TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`,
     CX,
     top + 60,
   );
@@ -418,7 +425,7 @@ function drawOver(fb: Framebuffer, g: Game): void {
     rank ? `RANK ${rank} ON THIS SEED` : 'NOT IN THE TOP 10 FOR THIS SEED',
     CX,
     top + 71,
-    rank ? WHITE : WHITE,
+    WHITE,
   );
   // new achievements and gear take turns in one line
   const news: string[] = [

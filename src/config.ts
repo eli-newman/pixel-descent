@@ -29,3 +29,27 @@ export const KMH_PER_PXS = 0.4;
 export const SAVE_PREFIX = 'pixel-descent:v2:';
 /** The single "best score" key of version 1, migrated into the overall best on first load. */
 export const LEGACY_BEST_KEY = 'pixel-descent:best';
+
+/**
+ * Checkpoint gates are archived, not deleted: all the code (spawning, scoring, drawing, audio, tests) is
+ * still here. Flip this to true to bring them back. See the "archive/checkpoints" git tag.
+ */
+export const CHECKPOINTS_ENABLED = false;
+
+/**
+ * The plain stars scattered along the safe path are archived (switched off, code kept). Only the
+ * ringed risk-lane stars spawn. Set to true to bring the plain ones back.
+ */
+export const PATH_STARS_ENABLED = false;
+
+/**
+ * The ghost rider (a faint replay of your best run on a seed) is archived: switched off, code kept.
+ * Set to true to race your ghost again.
+ */
+export const GHOST_ENABLED = false;
+
+/**
+ * The avalanche (a wall of snow chasing the rider down the hill) is archived: switched off, code kept
+ * (sim, drawing, audio, warning gauge, tests). Set to true to be chased again.
+ */
+export const AVALANCHE_ENABLED = false;

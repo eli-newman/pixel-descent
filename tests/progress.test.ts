@@ -52,7 +52,7 @@ describe('progress', () => {
   it('accumulates stats and completes challenges', () => {
     const p = createProgress();
     applyRun(p, run({ nearMisses: 30 }), 'd');
-    applyRun(p, run({ nearMisses: 25, dist: 1500, stars: 0 }), 'd');
+    applyRun(p, run({ nearMisses: 25, dist: 1500, laneStars: 0 }), 'd');
     const near = CHALLENGES.find((c) => c.id === 'near50');
     const nostar = CHALLENGES.find((c) => c.id === 'nostar');
     expect(near && challengeDone(near, p)).toBe(true);

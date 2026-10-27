@@ -107,7 +107,7 @@ export interface Challenge {
 
 export const CHALLENGES: readonly Challenge[] = [
   { id: 'near50', name: '50 CLOSE CALLS', target: 50, value: (p) => p.stats.nearMisses },
-  { id: 'nostar', name: '1000M NO STARS', target: 1000, value: (p) => p.stats.bestNoStarDist },
+  { id: 'nostar', name: '1000M NO LANE STARS', target: 1000, value: (p) => p.stats.bestNoStarDist },
   { id: 'tricks10', name: '10 TRICKS', target: 10, value: (p) => p.stats.tricks },
   { id: 'lane25', name: '25 LANE STARS', target: 25, value: (p) => p.stats.laneStars },
 ];
@@ -136,7 +136,7 @@ export const RIDERS: readonly GearDef[] = [
   {
     id: 'beanie',
     name: 'BEANIE',
-    need: '1000M NO STARS',
+    need: '1000M NO LANE STARS',
     unlocked: (p) => p.stats.bestNoStarDist >= 1000,
   },
   { id: 'scarf', name: 'SCARF', need: '25 LANE STARS', unlocked: (p) => p.stats.laneStars >= 25 },
@@ -167,7 +167,7 @@ function addStats(p: Progress, run: RunSummary): void {
   s.runs += 1;
   s.totalDist += run.dist;
   s.bestDist = Math.max(s.bestDist, run.dist);
-  if (run.stars === 0) s.bestNoStarDist = Math.max(s.bestNoStarDist, run.dist);
+  if (run.laneStars === 0) s.bestNoStarDist = Math.max(s.bestNoStarDist, run.dist);
   s.nearMisses += run.nearMisses;
   s.stars += run.stars;
   s.laneStars += run.laneStars;

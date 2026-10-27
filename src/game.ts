@@ -1,7 +1,9 @@
 import type { Sfx } from './audio';
-import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from './config';
+import { GHOST_ENABLED, RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from './config';
 import { Particles } from './effects';
 import type { Action, Input } from './input';
+import { poseOf } from './rider';
+import { BOARD_LEN } from './render/riderSprite';
 import { menuButtons, type ButtonId } from './menu';
 import {
   ACHIEVEMENTS,
@@ -15,7 +17,8 @@ import {
   type GearDef,
   type RunSummary,
 } from './progress';
-import { ReplayPlayer, ReplayRecorder } from './replay';
+import { ReplayPlayer, ReplayRecorder, replayOptions } from './replay';
+import { flipName } from './score';
 import { dailySeed, isDailySeed, normalizeSeed, randomSeedString } from './rng';
 import { CRASH_TIME, Sim, type SimEvent, type SimInput } from './sim';
 import type { ResultCardData } from './share';
@@ -86,7 +89,7 @@ export class Game {
   focus = 0;
   focusVisible = false;
 
-  readonly particles = new Particles(256);
+  readonly particles = new Particles(512);
   toasts: Toast[] = [];
   /** Gate id to seconds left of its "passed" flash. */
   readonly gateFlash = new Map<number, number>();
@@ -104,9 +107,16 @@ export class Game {
   private streak = 0;
   private lastPickupAt = -10;
   private trickQueued = false;
+  /** A flip pressed since the last step (a fast tap or a touch button): 1 back, -1 front. */
+  private flipQueued: -1 | 0 | 1 = 0;
   private recorder = new ReplayRecorder();
   private ghostPlayer: ReplayPlayer | null = null;
-  private readonly simInput: SimInput = { steer: 0, trick: false };
+  private brakeTick = 0;
+  /** Seconds the current skid has been held; the plume builds with it. */
+  private skid = 0;
+  /** 0..1 white-out over the rider's face at the peak of a fast skid. */
+  faceShot = 0;
+  private readonly simInput: SimInput = { steer: 0, trick: false, brake: false, flip: 0 };
   private sharing = false;
 
   constructor(
@@ -143,10 +153,12 @@ export class Game {
     return Math.round(this.camY);
   }
 
+  /** Best score on this seed. */
   get seedBest(): number {
     return this.deps.store.seedBest(this.seed);
   }
 
+  /** Best score over all seeds. */
   get overallBest(): number {
     return this.deps.store.overallBest();
   }
@@ -168,7 +180,7 @@ export class Game {
   newRun(seed: string, play = false): void {
     this.seed = seed;
     this.deps.onSeed?.(seed);
-    this.sim = new Sim(seed, { touch: this.touch });
+    this.sim = new Sim(seed, { touch: this.touch, manualSpin: this.settings.manualSpin });
     this.recorder = new ReplayRecorder();
     this.setupGhost();
     this.particles.clear();
@@ -178,9 +190,12 @@ export class Game {
     this.camY = this.sim.rider.y - this.camOff;
     this.shake = 0;
     this.punch = 0;
+    this.skid = 0;
+    this.faceShot = 0;
     this.hitStop = 0;
     this.streak = 0;
     this.trickQueued = false;
+    this.flipQueued = 0;
     this.result = null;
     this.phase = 'title';
     this.screen = 'main';
@@ -189,9 +204,9 @@ export class Game {
   }
 
   private setupGhost(): void {
-    const replay = this.deps.store.ghost(this.seed);
+    const replay = GHOST_ENABLED ? this.deps.store.ghost(this.seed) : null;
     if (replay) {
-      this.ghost = new Sim(this.seed, { touch: replay.touch });
+      this.ghost = new Sim(this.seed, replayOptions(replay));
       this.ghostPlayer = new ReplayPlayer(replay);
     } else {
       this.ghost = null;
@@ -241,6 +256,7 @@ export class Game {
       active: this.phase === 'playing' && this.hitStop <= 0,
       ice: sim.surface.ice,
       drift: sim.surface.drift,
+      brake: r.brake,
     });
   }
 
@@ -291,10 +307,12 @@ export class Game {
     this.deps.announce?.(muted ? 'Sound off.' : 'Sound on.');
   }
 
-  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause'): void {
+  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause' | 'manualSpin'): void {
     const next = !this.settings[key];
     this.deps.store.saveSettings({ [key]: next });
     if (key === 'music') this.deps.sfx.setMusic(next);
+    // The spin mode is part of the run's rules: it can change only before the run starts.
+    if (key === 'manualSpin' && this.phase === 'title') this.sim.opts.manualSpin = next;
     this.deps.announce?.(`${key} ${next ? 'on' : 'off'}.`);
   }
 
@@ -346,6 +364,9 @@ export class Game {
       case 'hud':
         this.toggleSetting('bigHud');
         break;
+      case 'manual':
+        this.toggleSetting('manualSpin');
+        break;
       case 'pause':
         this.togglePause();
         break;
@@ -353,11 +374,18 @@ export class Game {
         if (playing) this.trickQueued = true;
         break;
       case 'up':
-        if (playing) this.trickQueued = true;
+        if (playing) this.flipQueued = 1;
         else this.moveFocus(-1);
         break;
       case 'down':
-        if (!playing) this.moveFocus(1);
+        if (playing) this.flipQueued = -1;
+        else this.moveFocus(1);
+        break;
+      case 'flipUp':
+        if (playing) this.flipQueued = 1;
+        break;
+      case 'flipDown':
+        if (playing) this.flipQueued = -1;
         break;
       case 'left':
       case 'right':
@@ -453,6 +481,9 @@ export class Game {
       case 'autopause':
         this.toggleSetting('autoPause');
         break;
+      case 'manual':
+        this.toggleSetting('manualSpin');
+        break;
       case 'boardPrev':
         this.cycleGear('board', -1);
         break;
@@ -510,13 +541,53 @@ export class Game {
     void dt;
     const sim = this.sim;
     this.simInput.steer = this.deps.input.steer();
+    this.simInput.brake = this.deps.input.brake();
     this.simInput.trick = this.trickQueued;
     this.trickQueued = false;
+    this.simInput.flip = this.flipQueued !== 0 ? this.flipQueued : this.deps.input.flip();
+    this.flipQueued = 0;
     this.recorder.record(this.simInput);
     sim.step(this.simInput);
     this.stepGhost();
     for (const e of sim.events) this.onEvent(e);
+    this.sprayWhileBraking(sim.rider);
     if (sim.crashed) this.phase = 'crashed';
+  }
+
+  /**
+   * Plowing sideways skids the board's flat base through the snow. The plume scales with speed and
+   * builds the longer the skid is held; at the peak of a fast skid it blows into the rider's face.
+   */
+  private sprayWhileBraking(r: Sim['rider']): void {
+    const dt = 1 / 120;
+    const skidding = r.brake >= 0.35 && !r.air && r.speed >= 36;
+    this.skid = skidding ? this.skid + dt : Math.max(0, this.skid - 3 * dt);
+    // Even a cruising skid should read clearly, so speed only scales it from 55% up.
+    const f = 0.55 + 0.45 * Math.min(1, Math.max(0, (r.speed - 36) / 150));
+    const build = Math.min(1, 0.4 + this.skid / 0.5);
+    const peak = skidding && this.skid > 0.15;
+    const want = peak && !this.reduced ? 0.85 : 0;
+    this.faceShot += (want - this.faceShot) * Math.min(1, (want > this.faceShot ? 9 : 5) * dt);
+    if (!skidding) return;
+    this.brakeTick++;
+    if (this.brakeTick % 3 !== 0) return;
+    const power = f * build;
+    const rand = this.deps.rand ?? Math.random;
+    // Particles live in world space, so they inherit the rider's downhill speed; otherwise they just fall behind as a trail.
+    const n = Math.round((this.reduced ? 1 : 2) + (this.reduced ? 2 : 8) * power);
+    const carry = r.speed;
+    // The board is plowed sideways, so the powder is shoved up off its leading (nose) edge, not the tail.
+    const pose = poseOf(r, r.x, r.y, 0);
+    const nx = r.x + pose.nx * BOARD_LEN;
+    const ny = r.y + pose.ny * BOARD_LEN;
+    const mx = r.x + pose.nx * BOARD_LEN * 0.5;
+    const my = r.y + pose.ny * BOARD_LEN * 0.5;
+    this.particles.jet(nx, ny - 1, n, 70 + 80 * power, 22 + 8 * power, 0.75, rand, carry);
+    this.particles.jet(mx, my - 1, n >> 1, 60 + 50 * power, 16, 0.6, rand, carry);
+    // Powder thrown ahead of the nose falls back down in front of him.
+    if (!this.reduced && power > 0.3) {
+      this.particles.jet(nx, ny - 3, 2 + Math.round(3 * power), 40, 18, 0.9, rand, carry * 1.25);
+    }
   }
 
   private stepGhost(): void {
@@ -582,15 +653,27 @@ export class Game {
         break;
       case 'launch':
         sfx.launch();
-        this.burst(r.x, r.y + 8, 6, 36, 0.4);
+        this.burst(r.x, r.y + 8, e.cliff ? 14 : 6, e.cliff ? 60 : 36, e.cliff ? 0.7 : 0.4);
+        if (e.cliff) this.showToast('DROP!', 1, true);
         break;
-      case 'trick':
-        this.showToast(e.n > 1 ? `TRICK X${e.n}` : 'TRICK!', 0.9, true);
-        sfx.trick(e.n);
+      case 'spin':
+        this.showToast(`${e.deg}!`, 0.9, true);
+        sfx.trick(e.deg / 180);
+        break;
+      case 'flip':
+        this.showToast(`${flipName(e.deg / 360)}!`, 0.9, true);
+        sfx.trick(1 + 2 * Math.abs(e.deg / 360));
         break;
       case 'land':
         if (e.quality === 'clean') {
-          this.showToast(e.pts > 0 ? `CLEAN LANDING +${e.pts}` : 'CLEAN LANDING', 1.1, true);
+          const name =
+            e.flips !== 0
+              ? `${e.spin > 0 ? `${e.spin} ` : ''}${flipName(e.flips)}`
+              : e.switch
+                ? 'SWITCH LANDING'
+                : 'CLEAN LANDING';
+          if (e.flips !== 0 && e.spin > 0) sfx.trick(6);
+          this.showToast(e.pts > 0 ? `${name} +${e.pts}` : name, 1.1, true);
           sfx.land(true);
           this.burst(r.x, r.y + 8, 10, 46, 0.5);
           this.buzz(18);
@@ -659,10 +742,16 @@ export class Game {
     const rec = store.recordRun(this.seed, { score, dist, date: day });
     const out = applyRun(store.progress(), summary, day);
     store.saveProgress();
-    if (rec.newSeedBest) {
+    if (GHOST_ENABLED && rec.newSeedBest) {
       store.saveGhost(
         this.seed,
-        this.recorder.finish(this.seed, sim.opts.touch === true, score, dist),
+        this.recorder.finish(
+          this.seed,
+          sim.opts.touch === true,
+          score,
+          dist,
+          sim.opts.manualSpin === true,
+        ),
       );
     }
     this.result = {

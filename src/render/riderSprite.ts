@@ -3,6 +3,8 @@ import type { Framebuffer } from './framebuffer';
 
 /** Scale of the rider relative to the original 240x480 art. Larger than the first version so it reads at 180x320. */
 const SC = 0.85;
+/** Board length in px: it runs from the rider's feet along the heading to the nose. */
+export const BOARD_LEN = Math.round(23 * SC);
 
 type Pt = readonly [number, number];
 
@@ -70,6 +72,48 @@ class Mask {
     }
   }
 
+  /**
+   * Squash the set vertically about its own middle by a (possibly negative) factor: the flip's
+   * foreshortening. Every source pixel covers the rows it maps to, so thin results keep their
+   * silhouette instead of dropping rows. Negative factors turn the figure upside down.
+   */
+  squashY(f: number): void {
+    let m = 0;
+    let lo = GRID;
+    let hi = 0;
+    for (let k = 0; k < this.n; k++) {
+      const i = this.touched[k] ?? 0;
+      if (this.bits[i] !== 1) continue;
+      const y = Math.floor(i / GRID);
+      scratch[m++] = i % GRID;
+      scratch[m++] = y;
+      lo = Math.min(lo, y);
+      hi = Math.max(hi, y);
+    }
+    for (let k = 0; k < this.n; k++) this.bits[this.touched[k] ?? 0] = 0;
+    this.n = 0;
+    const py = (lo + hi + 1) / 2;
+    for (let j = 0; j < m; j += 2) {
+      const x = scratch[j] ?? 0;
+      const y = scratch[j + 1] ?? 0;
+      let a = py + (y - py) * f;
+      let b = py + (y + 1 - py) * f;
+      if (a > b) [a, b] = [b, a];
+      const r0 = Math.ceil(a - 0.5);
+      const r1 = Math.ceil(b - 0.5) - 1;
+      if (r1 < r0) this.addLocal(x, Math.floor((a + b) / 2));
+      else for (let r = r0; r <= r1; r++) this.addLocal(x, r);
+    }
+  }
+
+  private addLocal(lx: number, ly: number): void {
+    if (lx < 0 || ly < 0 || lx >= GRID || ly >= GRID) return;
+    const i = ly * GRID + lx;
+    if (this.bits[i] === 1) return;
+    this.bits[i] = 1;
+    this.touched[this.n++] = i;
+  }
+
   /** Draw the set with a one pixel black halo so it reads on top of trees and snow. */
   stamp(fb: Framebuffer, ghost = false): void {
     const n = this.n;
@@ -97,8 +141,31 @@ class Mask {
   }
 }
 
+const scratch = new Int32Array(GRID * GRID * 2);
 const mask = new Mask();
 const fill = new Mask();
+
+/** How much of the depth axis shows in a flip: the head leads forward or back by this share of its height. */
+const FLIP_DEPTH = 0.5;
+/** A flip never squashes thinner than this, so the rider stays a visible sliver edge on. */
+const FLIP_MIN = 0.36;
+
+/**
+ * Vertical scale of the sprite at a flip angle (degrees, positive is a backflip). The body rotates
+ * about the waist: its height shows as cos, and its depth (the head swinging back or forward)
+ * adds a share of sin, so a backflip and a frontflip squash differently. Negative is upside down.
+ */
+export function flipScale(pitch: number): number {
+  const a = (pitch * Math.PI) / 180;
+  const f = Math.cos(a) + FLIP_DEPTH * Math.sin(a);
+  return Math.abs(f) < FLIP_MIN ? (f < 0 ? -FLIP_MIN : FLIP_MIN) : f;
+}
+
+/** 0..1 limb tuck during a flip: knees up and arms folded in, deepest edge on. */
+export function flipTuck(pitch: number): number {
+  const a = (pitch * Math.PI) / 180;
+  return Math.min(1, 1.6 * Math.abs(Math.sin(a)));
+}
 
 export interface DrawOptions {
   style?: RiderStyle;
@@ -116,7 +183,10 @@ export interface DrawOptions {
  */
 export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = {}): void {
   const style = opts.style ?? DEFAULT_STYLE;
-  const { x: rx, y: ry, nx, ny, face: mv, up, ang, steep, tuck } = pose;
+  const { x: rx, y: ry, nx, ny, face: mv, up, ang, steep } = pose;
+  // Mid-flip the rider tucks his limbs in; upright (or a full turn) changes nothing.
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   const n: Pt = [nx, ny];
   mask.reset(rx, ry - 10);
   const set = mask;
@@ -124,10 +194,10 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
   // board: tail on the track head, solid capsule, outlined when it points steeply downhill
   {
     fill.reset(rx, ry - 10);
-    const BLEN = Math.round(23 * SC);
+    const BLEN = BOARD_LEN;
     const hw = steep ? 2.3 : 1.5;
-    const y0 = Math.floor(ry) - 4;
-    const y1 = Math.ceil(ry + n[1] * BLEN) + 4;
+    const y0 = Math.floor(Math.min(ry, ry + n[1] * BLEN)) - 4;
+    const y1 = Math.ceil(Math.max(ry, ry + n[1] * BLEN)) + 4;
     const x0 = Math.floor(Math.min(rx, rx + n[0] * BLEN)) - 4;
     const x1 = Math.ceil(Math.max(rx, rx + n[0] * BLEN)) + 4;
     for (let y = y0; y <= y1; y++) {
@@ -241,6 +311,7 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
     set.delete(head[0], head[1] + 1);
     set.delete(head[0] - 1, head[1] + 1);
   }
+  if (flipping) set.squashY(flipScale(pose.pitch));
   set.stamp(fb, opts.ghost === true);
 }
 
