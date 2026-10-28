@@ -18,6 +18,7 @@ import {
   cruiseSpeed,
   flipLanding,
   launch,
+  poseOf,
   resetFlip,
   speedMultiplier,
   resetManualSpin,
@@ -479,7 +480,12 @@ export class Sim {
     const lx = this.trail.lastX();
     const ly = this.trail.lastY();
     if (Number.isNaN(lx) || Math.hypot(r.x - lx, r.y - ly) >= TRAIL_SPACING) {
-      this.trail.push(r.x, r.y, r.brake);
+      if (r.brake > 0.15) {
+        const n = poseOf(r, r.x, r.y, 0);
+        this.trail.push(r.x, r.y, n.nx * r.brake, n.ny * r.brake);
+      } else {
+        this.trail.push(r.x, r.y);
+      }
     }
   }
 

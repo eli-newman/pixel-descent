@@ -2,14 +2,16 @@
 export class Trail {
   private readonly xs: Float32Array;
   private readonly ys: Float32Array;
-  private readonly ws: Float32Array;
+  private readonly nxs: Float32Array;
+  private readonly nys: Float32Array;
   private head = 0;
   count = 0;
 
   constructor(readonly capacity: number) {
     this.xs = new Float32Array(capacity);
     this.ys = new Float32Array(capacity);
-    this.ws = new Float32Array(capacity);
+    this.nxs = new Float32Array(capacity);
+    this.nys = new Float32Array(capacity);
   }
 
   clear(): void {
@@ -17,11 +19,12 @@ export class Trail {
     this.count = 0;
   }
 
-  /** `w` is how far the board was turned across the slope (0 to 1): a skid scrapes a wide swath. */
-  push(x: number, y: number, w = 0): void {
+  /** (nx, ny) points from the board tail (x, y) toward its nose, scaled by the brake, or is zero when not skidding: a skid scrapes the snow along the whole board. */
+  push(x: number, y: number, nx = 0, ny = 0): void {
     this.xs[this.head] = x;
     this.ys[this.head] = y;
-    this.ws[this.head] = w;
+    this.nxs[this.head] = nx;
+    this.nys[this.head] = ny;
     this.head = (this.head + 1) % this.capacity;
     if (this.count < this.capacity) this.count++;
   }
@@ -35,8 +38,12 @@ export class Trail {
     return this.ys[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
   }
 
-  w(i: number): number {
-    return this.ws[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
+  nx(i: number): number {
+    return this.nxs[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
+  }
+
+  ny(i: number): number {
+    return this.nys[(this.head - this.count + i + this.capacity * 2) % this.capacity] ?? 0;
   }
 
   lastX(): number {

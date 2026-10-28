@@ -308,12 +308,16 @@ export class SceneRenderer {
       const x = Math.round(t.x(i)) + ox;
       const y = Math.round(t.y(i)) - cam + oy;
       if (y < -2 || y > H + 2) continue;
-      const w = t.w(i);
-      if (w > 0.15) {
-        // Sideways board: the whole length scrapes the snow, so the track is as wide as the board.
-        const h = Math.round((BOARD_LEN / 2) * w);
-        for (let dx = -h; dx <= h + 1; dx++) {
-          if ((dx + y) % 2 === 0 || Math.abs(dx) >= h - 1) this.fb.put(x + dx, y);
+      const nx = t.nx(i);
+      const ny = t.ny(i);
+      if (nx !== 0 || ny !== 0) {
+        // Sideways board: it scrapes the snow from its tail (the track head) to its nose, no further.
+        const steps = Math.max(1, Math.round(BOARD_LEN * Math.hypot(nx, ny)));
+        for (let k = 0; k <= steps; k++) {
+          const u = (k / steps) * BOARD_LEN;
+          const px = x + Math.round(nx * u);
+          const py = y + Math.round(ny * u);
+          if ((px + py) % 2 === 0 || k === 0 || k === steps) this.fb.put(px, py);
         }
         continue;
       }
