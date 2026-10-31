@@ -21,7 +21,7 @@ Before calling any change done: `npm run check`, `npm run build` and `npm run te
 
 Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, linked locally through `.vercel/`, which is git-ignored). Live at https://pixel-descent.vercel.app. The code is on GitHub at `eli-newman/pixel-descent`.
 
-Recent production deploys were made from the CLI (`vercel --prod`), not from a git push, so pushing to `main` alone may not update the live site. Check `vercel ls` after pushing. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
+The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
 
 ## Dependencies
 
