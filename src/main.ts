@@ -20,7 +20,7 @@ function required<T extends HTMLElement>(id: string): T {
 const canvas = required<HTMLCanvasElement>('game');
 const stage = required<HTMLElement>('stage');
 const pauseBtn = required<HTMLButtonElement>('pause-btn');
-const muteBtn = required<HTMLButtonElement>('mute-btn');
+const safeProbe = required<HTMLElement>('safe');
 const status = required<HTMLElement>('status');
 canvas.width = W;
 canvas.height = H;
@@ -80,14 +80,28 @@ function render(): void {
   if (!image || image.data !== out.data) image = new ImageData(out.data, W, H);
   ctx?.putImageData(image, 0, 0);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
-  const muted = game.settings.muted;
-  if (muteBtn.getAttribute('aria-pressed') !== String(muted)) {
-    muteBtn.setAttribute('aria-pressed', String(muted));
-  }
 }
 
+/** CSS px of black kept around the picture on touch screens. */
+const TOUCH_MARGIN = 10;
+
 function layout(): void {
-  const fit = fitCanvas(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  const css = getComputedStyle(safeProbe);
+  const safe = {
+    top: parseFloat(css.paddingTop) || 0,
+    right: parseFloat(css.paddingRight) || 0,
+    bottom: parseFloat(css.paddingBottom) || 0,
+    left: parseFloat(css.paddingLeft) || 0,
+  };
+  // On a touch screen keep the picture clear of rounded corners and bezels, so the score is never clipped.
+  const margin = window.matchMedia('(pointer: coarse)').matches ? TOUCH_MARGIN : 0;
+  const fit = fitCanvas(
+    window.innerWidth,
+    window.innerHeight,
+    window.devicePixelRatio || 1,
+    safe,
+    margin,
+  );
   stage.style.width = `${fit.cssW}px`;
   stage.style.height = `${fit.cssH}px`;
   stage.style.left = `${fit.left}px`;
@@ -101,10 +115,6 @@ layout();
 pauseBtn.addEventListener('click', () => {
   input.push('pause');
   pauseBtn.blur();
-});
-muteBtn.addEventListener('click', () => {
-  input.push('mute');
-  muteBtn.blur();
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) game.autoPause();

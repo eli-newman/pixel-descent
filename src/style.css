@@ -38,22 +38,41 @@ body {
   image-rendering: pixelated;
 }
 
+/* Reads the device safe-area insets (notch, home bar) as padding, so the script can fit inside them. */
+#safe {
+  position: fixed;
+  inset: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Pause: two thin bars, no box. The button is a larger invisible hit area around them. */
 .hud-btn {
   position: absolute;
-  width: 13%;
+  top: 1.2%;
+  right: 2%;
+  width: 12%;
   aspect-ratio: 1;
   display: none;
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: #000;
+  background: none;
+  border: 0;
   color: var(--yellow);
-  border: 2px solid var(--yellow);
-  font: inherit;
-  font-weight: 700;
-  font-size: clamp(9px, 3vw, 13px);
   cursor: pointer;
   touch-action: manipulation;
+}
+
+.hud-btn::before {
+  content: '';
+  width: 2px;
+  height: 12px;
+  background: currentColor;
+  box-shadow: 6px 0 currentColor;
+  margin-right: 6px;
 }
 
 .hud-btn:focus-visible {
@@ -61,38 +80,12 @@ body {
   outline-offset: 2px;
 }
 
-#pause-btn {
-  top: 1.5%;
-  right: 3%;
-  letter-spacing: -2px;
-}
-
-#mute-btn {
-  top: 1.5%;
-  right: 18%;
-}
-
-#mute-btn[aria-pressed='true'] {
-  color: #fff;
-  border-color: #fff;
-  text-decoration: line-through;
-}
-
-/* On touch screens the buttons appear when they are useful; keyboard and mouse use keys. */
+/* On touch screens the pause button appears while it is useful; keyboard and mouse use keys. */
 @media (pointer: coarse) {
   #stage[data-phase='playing'] #pause-btn,
   #stage[data-phase='paused'] #pause-btn,
-  #stage[data-phase='crashed'] #pause-btn,
-  #stage[data-phase='playing'] #mute-btn,
-  #stage[data-phase='paused'] #mute-btn,
-  #stage[data-phase='crashed'] #mute-btn,
-  #stage[data-phase='title'] #mute-btn {
+  #stage[data-phase='crashed'] #pause-btn {
     display: flex;
-  }
-
-  /* the title screen has its own on-canvas sound button; keep the corner clear for the title plate */
-  #stage[data-phase='title'] #mute-btn {
-    display: none;
   }
 }
 

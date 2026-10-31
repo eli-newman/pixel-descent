@@ -32,11 +32,9 @@
   <body>
     <div id="stage">
       <canvas id="game" aria-label="Pixel Descent game canvas" role="img"></canvas>
-      <button id="mute-btn" class="hud-btn" type="button" aria-label="Sound" aria-pressed="false">
-        SND
-      </button>
-      <button id="pause-btn" class="hud-btn" type="button" aria-label="Pause">II</button>
+      <button id="pause-btn" class="hud-btn" type="button" aria-label="Pause"></button>
     </div>
+    <div id="safe" aria-hidden="true"></div>
     <div id="status" class="sr-only" role="status" aria-live="polite"></div>
     <noscript>Pixel Descent needs JavaScript.</noscript>
     <script type="module" src="/src/main.ts"></script>

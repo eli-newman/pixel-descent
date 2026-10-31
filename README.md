@@ -23,22 +23,22 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 
 ## Controls
 
-| Action             | Keyboard                       | Touch                                 |
-| ------------------ | ------------------------------ | ------------------------------------- |
-| Steer toe / heel   | Left/Right, A/D                | Hold left or right half, or drag      |
-| Spin (in the air)  | Hold Left/Right or A/D         | Hold left or right half, or drag      |
-| Full-turn trick    | Space, T                       | Swipe left or right (a quick flick)   |
-| Backflip           | Down, S (in the air)           | Swipe down                            |
-| Frontflip          | Up, W (in the air)             | Swipe up                              |
-| Brake (side slip)  | Left + Right together          | Two fingers down at once              |
-| Menus              | Up/Down + Space/Enter          | Tap the buttons                       |
-| Start / new run    | Space, Enter                   | Tap                                   |
-| Pause / resume     | P, Esc, Space                  | II button (top right), tap            |
-| Restart, same seed | R                              | RETRY SEED                            |
-| Share result       | C                              | SHARE (game over)                     |
-| Sound on / off     | M (sound is ON by default)     | SND button, SOUND button on the menus |
-| Big HUD, music     | H, U (music is OFF by default) | Pause menu                            |
-| Manual spin on/off | G (default OFF)                | MANUAL SPIN button, pause menu        |
+| Action             | Keyboard                       | Touch                                     |
+| ------------------ | ------------------------------ | ----------------------------------------- |
+| Steer toe / heel   | Left/Right, A/D                | Hold left or right half, or drag          |
+| Spin (in the air)  | Hold Left/Right or A/D         | Hold left or right half, or drag          |
+| Full-turn trick    | Space, T                       | Swipe left or right (a quick flick)       |
+| Backflip           | Down, S (in the air)           | Swipe down                                |
+| Frontflip          | Up, W (in the air)             | Swipe up                                  |
+| Brake (side slip)  | Left + Right together          | Two fingers down at once                  |
+| Menus              | Up/Down + Space/Enter          | Tap the buttons                           |
+| Start / new run    | Space, Enter                   | Tap                                       |
+| Pause / resume     | P, Esc, Space                  | Two bars (top right), tap                 |
+| Restart, same seed | R                              | RETRY SEED                                |
+| Share result       | C                              | SHARE (game over)                         |
+| Sound on / off     | M (sound is ON by default)     | SOUND button on the title and pause menus |
+| Big HUD, music     | H, U (music is OFF by default) | Pause menu                                |
+| Manual spin on/off | G (default OFF)                | MANUAL SPIN button, pause menu            |
 
 ## Mechanics
 
