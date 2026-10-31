@@ -62,15 +62,13 @@ export async function shareResult(card: ResultCardData, pageUrl: string): Promis
   const url = shareUrl(pageUrl, card.seed);
   const text = shareText(card);
   const blob = await toBlob(cardCanvas(card));
-  const file = blob
-    ? new File([blob], `pixel-descent-${card.seed}.png`, { type: 'image/png' })
-    : null;
+  const file = blob ? new File([blob], `fall-line-${card.score}.png`, { type: 'image/png' }) : null;
   if (typeof navigator.share === 'function') {
     try {
       if (file && navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], text, url, title: 'Pixel Descent' });
+        await navigator.share({ files: [file], text, url, title: 'Fall Line' });
       } else {
-        await navigator.share({ text, url, title: 'Pixel Descent' });
+        await navigator.share({ text, url, title: 'Fall Line' });
       }
       return 'SHARED';
     } catch (e) {
@@ -79,6 +77,6 @@ export async function shareResult(card: ResultCardData, pageUrl: string): Promis
     }
   }
   const copied = await copy(`${text} ${url}`);
-  if (blob) download(blob, `pixel-descent-${card.seed}.png`);
+  if (blob) download(blob, `fall-line-${card.score}.png`);
   return copied ? 'LINK COPIED, IMAGE SAVED' : 'IMAGE SAVED';
 }

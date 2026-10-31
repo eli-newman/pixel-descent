@@ -6,10 +6,13 @@ function pack(r: number, g: number, b: number): number {
     : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;
 }
 
-/** The whole game is white on black, with one yellow accent for UI. */
+/** The game is white on black, with one yellow accent for UI and greys, only for the shadow of the board's track. */
 export const OFF = pack(0, 0, 0);
 export const WHITE = pack(255, 255, 255);
 export const YELLOW = pack(0xf5, 0xd7, 0x42);
+export const GREY = pack(0x6e, 0x6e, 0x6e);
+/** The same shadow on solid white, inside a side slip, where the darker grey would look harsh. */
+export const SOFT_GREY = pack(0xa8, 0xa8, 0xa8);
 
 /** A small RGBA pixel buffer with integer-only drawing. Pure data, so it works without a DOM. */
 export class Framebuffer {

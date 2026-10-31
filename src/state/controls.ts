@@ -30,7 +30,7 @@ export interface ControlsDeps {
 /** Turns taps, keys and buttons into game actions. Owns the menu position and the queued tricks. */
 export class Controls {
   screen: Screen = 'main';
-  scoreTab: 'seed' | 'daily' = 'seed';
+  scoreTab: 'top' | 'daily' = 'top';
   /** Keyboard focus in the current button list, and whether to draw it. */
   focus = 0;
   focusVisible = false;
@@ -185,16 +185,15 @@ export class Controls {
   private readonly onButton: Record<ButtonId, () => void> = {
     play: () => this.host.begin(),
     daily: () => this.host.newRun(this.host.today, true),
-    newseed: () => this.host.newRun(randomSeedString()),
     scores: () => {
-      this.scoreTab = 'seed';
+      this.scoreTab = 'top';
       this.openScreen('scores');
     },
     gear: () => this.openScreen('gear'),
     goals: () => this.openScreen('goals'),
     back: () => this.openScreen('main'),
-    tabSeed: () => {
-      this.scoreTab = 'seed';
+    tabTop: () => {
+      this.scoreTab = 'top';
     },
     tabDaily: () => {
       this.scoreTab = 'daily';
@@ -210,8 +209,8 @@ export class Controls {
     riderNext: () => this.cycleGear('rider', 1),
     resume: () => this.host.togglePause(),
     restart: () => this.host.newRun(this.host.seed, true),
-    quit: () => this.host.newRun(this.host.seed),
-    menu: () => this.host.newRun(this.host.seed),
+    quit: () => this.host.newRun(randomSeedString()),
+    menu: () => this.host.newRun(randomSeedString()),
     again: () => {
       if (this.host.overReady) this.host.newRun(randomSeedString(), true);
     },

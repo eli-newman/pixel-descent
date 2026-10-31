@@ -1,6 +1,6 @@
-# Pixel Descent
+# Fall Line
 
-A one-colour, pixel-art downhill snowboard game. White on black, with a single yellow accent for the UI. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the original "pixel descent" scene.
+A one-colour, pixel-art downhill snowboard game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
 
 Carve down an endless mountain, dodge trees and rocks, graze bushes, grab risk-lane stars, hit kickers. **Go straight to go fast, carve to stay alive.**
 
@@ -19,9 +19,9 @@ npm run check      # typecheck, lint, format check and tests
 npm run format     # prettier
 ```
 
-Share a course by sharing the URL: the seed is kept in `?seed=...` (for example `http://localhost:5173/?seed=k3m9qa`). The same seed always generates the same trees, rocks, stars, kickers, ice, drifts and risk lanes. The **daily** seed (`d20261020` style, from the local date) is the same for everyone on a given day.
+Players never see a seed: every run is just a new course. The game over SHARE link carries one internally (`?seed=...`), so a friend who opens it gets the same course, and the address bar drops it on load. The same seed always generates the same trees, rocks, stars, kickers, ice, drifts and risk lanes. The **daily** course (seed `d20261020` style, from the local date) is the same for everyone on a given day.
 
-The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/descent/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Most crawlers want an absolute `og:image` URL: edit the two `og:image`/`twitter:image` tags in `index.html` once the final address is known.
+The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/fall-line/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Most crawlers want an absolute `og:image` URL: edit the two `og:image`/`twitter:image` tags in `index.html` once the final address is known.
 
 ## Controls
 
@@ -36,7 +36,7 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 | Menus              | Up/Down + Space/Enter          | Tap the buttons                           |
 | Start / new run    | Space, Enter                   | Tap                                       |
 | Pause / resume     | P, Esc, Space                  | Two bars (top right), tap                 |
-| Restart, same seed | R                              | RETRY SEED                                |
+| Retry same course  | R                              | RETRY                                     |
 | Share result       | C                              | SHARE (game over)                         |
 | Sound on / off     | M (sound is ON by default)     | SOUND button on the title and pause menus |
 | Big HUD, music     | H, U (music is OFF by default) | Pause menu                                |
@@ -77,7 +77,7 @@ Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top
 - **Brake**: hold left and right together (A+D or both arrows). The board swings sideways, snow sprays up and you plow down to a crawl (about 30% of cruise speed) while still sliding downhill. Release to carve again. Not available in the air. On touch, put two fingers down at once.
 - **Ice** (bare oval with glints): looser steering and almost no carve scrub. **Snowdrifts** (stippled mound with ripples): heavy snow, you crawl. Neither kills you.
 - **Risk lane**: a narrow side line next to the path with a trail of ringed stars worth 30 each, flanked by trees. The lane, and the strips leading in and out of it, are always clear.
-- Per seed top 10 boards and an overall best are kept in `localStorage`.
+- An all-time top 10, a top 10 for today's daily course and your best score are kept in `localStorage`. Your best counts across every course.
 - Achievements and challenges (50 close calls, 1000 m without lane stars, 10 tricks, 25 lane stars) unlock boards and riders on the GEAR screen: stripe, dots and twin tip boards, beanie, scarf and ears riders.
 - The game has one calm look on every device, so phone and desktop match: no screen shake, zoom punches, snowfall, speed lines, panel slide or blinking. Braking throws up a light spray.
 
@@ -93,7 +93,7 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 - `src/state/progress.ts`, `src/state/storage.ts` - achievements, challenges and gear; localStorage access (every call guarded) for boards, settings and progress.
 - `src/state/game.ts` - the shell around the sim: runs and their phases (title, playing, paused, crashed, over), camera, and what each frame steps. `src/state/controls.ts` turns input into actions and holds the menu position, `src/state/feedback.ts` turns sim events into sound, toasts, haptics and hit-stop, `src/state/runReport.ts` saves a finished run, `src/state/view.ts` is the read-only view render gets, and `src/state/menu.ts` holds the button layout shared by input and drawing.
 - `src/platform/input.ts`, `src/platform/audio.ts`, `src/state/effects.ts` - keyboard, mouse and touch input; procedural WebAudio (quiet wind, carve hiss, pitch ladders, optional music); a fixed particle pool.
-- `src/render/` - `framebuffer.ts` (integer pixel buffer), `sprites.ts`, `riderSprite.ts` (rider, tuck, flip squash and tuck, wipeout, unlockable looks), `backdrop.ts`, `scene.ts` (world), `font.ts` and `ui.ts` (3x5 pixel font, HUD, menus), `layout.ts`.
+- `src/render/` - `framebuffer.ts` (integer pixel buffer), `sprites.ts`, `riderSprite.ts` (rider, tuck, flip squash and tuck, wipeout, unlockable looks), `backdrop.ts`, `track.ts` (the board's track: a clean line that swells gently in turns, with a soft grey shadow and a little powder), `scene.ts` (world), `font.ts` and `ui.ts` (3x5 pixel font, HUD, menus), `layout.ts`.
 - `src/render/share.ts`, `src/platform/shareDom.ts` - the 1200x630 result card (pure drawing, plus canvas export) and the Web Share / clipboard / download flow.
 - `src/platform/loop.ts` - fixed 120 Hz timestep with a requestAnimationFrame render. `src/platform/viewport.ts` - largest whole-number scale of the 180x320 canvas that fits the window.
 - `src/main.ts` - wiring. In dev builds `window.__game`, `window.__input` and `window.__store` are exposed for debugging.

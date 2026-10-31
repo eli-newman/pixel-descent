@@ -4,6 +4,7 @@ import { Rng } from '../core/rng';
 
 /** What the result card shows. */
 export interface ResultCardData {
+  /** Only for the link, so whoever opens it gets the same course. Never drawn or written out. */
   seed: string;
   daily: boolean;
   score: number;
@@ -34,7 +35,7 @@ export function shareUrl(pageUrl: string, seed: string): string {
 }
 
 export function shareText(card: Readonly<ResultCardData>): string {
-  return `I scored ${card.score} in Pixel Descent (${card.dist}m) and wiped out. Beat it on ${card.daily ? "today's daily course" : `seed ${card.seed}`}:`;
+  return `I scored ${card.score} in Fall Line (${card.dist}m) and wiped out. Beat it on ${card.daily ? "today's daily course" : 'this course'}:`;
 }
 
 function peaks(fb: Framebuffer, seed: number): void {
@@ -65,7 +66,7 @@ export function renderCard(fb: Framebuffer, card: Readonly<ResultCardData>): voi
   fb.strokeRect(2, 2, CARD_W - 4, CARD_H - 4, WHITE);
   // clear a plate for the text
   fb.fillRect(8, 8, CARD_W - 16, 70, OFF);
-  drawText(fb, 'PIXEL DESCENT', 12, 12, WHITE, 2);
+  drawText(fb, 'FALL LINE', 12, 12, WHITE, 2);
   const head = card.cause === 'bail' ? 'BAILED' : 'WIPEOUT';
   drawText(fb, head, CARD_W - 12 - textWidth(head), 12, WHITE);
   if (card.newBest) drawText(fb, 'NEW BEST', CARD_W - 12 - textWidth('NEW BEST'), 20, YELLOW);
@@ -77,11 +78,5 @@ export function renderCard(fb: Framebuffer, card: Readonly<ResultCardData>): voi
     `TRICKS ${card.tricks}`,
   ];
   stats.forEach((s, i) => drawText(fb, s, 12 + (i % 3) * 58, 55 + Math.floor(i / 3) * 9, WHITE));
-  drawTextCentered(
-    fb,
-    card.daily ? `DAILY ${card.seed.toUpperCase()}` : `SEED ${card.seed.toUpperCase()}`,
-    CARD_W / 2,
-    73,
-    WHITE,
-  );
+  if (card.daily) drawTextCentered(fb, 'DAILY COURSE', CARD_W / 2, 73, WHITE);
 }

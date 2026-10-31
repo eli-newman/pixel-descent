@@ -25,7 +25,7 @@ export const MAX_SPEED = 340;
 /** Display speed: px/s to km/h. Purely cosmetic. */
 export const KMH_PER_PXS = 0.4;
 
-/** localStorage key prefix. Everything the game stores lives under this. */
+/** localStorage key prefix. Everything the game stores lives under this. Keeps the game's old name on purpose: changing it would wipe every player's scores and gear. */
 export const SAVE_PREFIX = 'pixel-descent:v2:';
 /** The single "best score" key of version 1, migrated into the overall best on first load. */
 export const LEGACY_BEST_KEY = 'pixel-descent:best';

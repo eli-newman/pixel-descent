@@ -1,6 +1,6 @@
-# Pixel Descent
+# Fall Line
 
-One-colour pixel-art downhill snowboard game. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
+Black and white pixel-art downhill snowboard game, with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
 
 ## Commands
 
@@ -73,4 +73,5 @@ A change is not finished until the docs match the code.
 - Match the surrounding code: comment density, naming, idiom. Prettier formats everything.
 - No em dashes in any text, use a plain dash.
 - Removed features live in `archive/*` git tags (checkpoints, path-stars, ghost, avalanche), not behind flags in the code. Do not add dead code behind a flag.
+- Seeds are internal. Never show one to the player or make them think about one: scores are all-time or today's daily, and `GameView` does not expose a seed. Share links carry one, and `main.ts` clears it from the address bar on load.
 - The game has one calm look on every device, so phone and desktop match. Shake, zoom punch and snowfall were deleted, not switched off.

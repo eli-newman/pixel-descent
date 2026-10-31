@@ -2,11 +2,11 @@
 
 Foundation. Imports nothing from the rest of the game. Everything else may import from here.
 
-| File         | Job                                                                                                                                                                                 |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `config.ts`  | Every tuning constant: canvas size (180x320), fixed step (1/120), speeds, rider scale and board length (`RIDER_SCALE`, `BOARD_LEN`, shared by sim, state and render), storage keys. |
-| `rng.ts`     | Seeded PRNG, `normalizeSeed`, the daily seed (`dYYYYMMDD`). Same seed must always give the same course.                                                                             |
-| `detMath.ts` | `detExp`: `e^x` from `+ - * /` only, so it gives the same bits in every browser. Math.exp does not (V8 and JavaScriptCore differ).                                                  |
+| File         | Job                                                                                                                                                                                                                                                      |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.ts`  | Every tuning constant: canvas size (180x320), fixed step (1/120), speeds, rider scale and board length (`RIDER_SCALE`, `BOARD_LEN`, shared by sim, state and render), storage keys (they keep the old `pixel-descent` name so saves survive the rename). |
+| `rng.ts`     | Seeded PRNG, `normalizeSeed`, the daily seed (`dYYYYMMDD`). Same seed must always give the same course.                                                                                                                                                  |
+| `detMath.ts` | `detExp`: `e^x` from `+ - * /` only, so it gives the same bits in every browser. Math.exp does not (V8 and JavaScriptCore differ).                                                                                                                       |
 
 ## Rules
 

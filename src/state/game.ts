@@ -19,7 +19,6 @@ export interface GameDeps {
   sfx: Sfx;
   /** Vibrate for a number of milliseconds (touch phones only). */
   haptic?: (ms: number) => void;
-  onSeed?: (seed: string) => void;
   announce?: (text: string) => void;
   /** Render and share the result card. Resolves to a short message to show the player. */
   share?: (card: ResultCardData) => Promise<string>;
@@ -66,7 +65,7 @@ export class Game implements GameView {
     return this.controls.screen;
   }
 
-  get scoreTab(): 'seed' | 'daily' {
+  get scoreTab(): 'top' | 'daily' {
     return this.controls.scoreTab;
   }
 
@@ -104,22 +103,21 @@ export class Game implements GameView {
     return Math.round(this.camY);
   }
 
-  /** Best score on this seed. */
-  get seedBest(): number {
-    return this.deps.store.seedBest(this.seed);
-  }
-
-  /** Best score over all seeds. */
+  /** Best score ever. */
   get overallBest(): number {
     return this.deps.store.overallBest();
   }
 
-  bestOn(seed: string): number {
-    return this.deps.store.seedBest(seed);
+  get dailyBest(): number {
+    return this.deps.store.dailyBest(this.today);
   }
 
-  leaderboard(seed: string): readonly ScoreEntry[] {
-    return this.deps.store.leaderboard(seed);
+  get topRuns(): readonly ScoreEntry[] {
+    return this.deps.store.topRuns();
+  }
+
+  get dailyRuns(): readonly ScoreEntry[] {
+    return this.deps.store.dailyRuns(this.today);
   }
 
   get daily(): boolean {
@@ -156,7 +154,6 @@ export class Game implements GameView {
   /** Reset the world for a seed and wait on the title screen (or go straight in if `play`). */
   newRun(seed: string, play = false): void {
     this.seed = seed;
-    this.deps.onSeed?.(seed);
     this.sim = new Sim(seed, { manualSpin: this.settings.manualSpin });
     this.particles.clear();
     this.feedback.reset();
@@ -175,7 +172,7 @@ export class Game implements GameView {
     this.sim.begin();
     this.deps.input.releaseAll();
     this.deps.sfx.start();
-    this.deps.announce?.(`Run started. Seed ${this.seed}.`);
+    this.deps.announce?.('Run started.');
   }
 
   update(dt: number): void {
@@ -284,7 +281,7 @@ export class Game implements GameView {
     const res = recordRun(this.deps.store, summary, day);
     this.result = res;
     this.deps.announce?.(
-      `${this.crashWord}. ${res.dist} metres, score ${res.score}${res.newSeedBest ? ', a new best for this seed' : ''}.`,
+      `${this.crashWord}. ${res.dist} metres, score ${res.score}${res.newBest ? ', a new best' : ''}.`,
     );
   }
 

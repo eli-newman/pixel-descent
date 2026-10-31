@@ -32,8 +32,6 @@ function labelOf(g: GameView, id: ButtonId): string {
       return 'PLAY';
     case 'daily':
       return 'DAILY';
-    case 'newseed':
-      return 'NEW SEED';
     case 'scores':
       return 'SCORES';
     case 'gear':
@@ -44,8 +42,8 @@ function labelOf(g: GameView, id: ButtonId): string {
       return `SOUND ${on(!g.settings.muted)}`;
     case 'back':
       return 'BACK';
-    case 'tabSeed':
-      return 'THIS SEED';
+    case 'tabTop':
+      return 'ALL TIME';
     case 'tabDaily':
       return 'TODAY';
     case 'boardPrev':
@@ -71,7 +69,7 @@ function labelOf(g: GameView, id: ButtonId): string {
     case 'again':
       return 'NEW RUN';
     case 'retry':
-      return 'RETRY SEED';
+      return 'RETRY';
     case 'share':
       return 'SHARE';
     case 'menu':
@@ -133,7 +131,7 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   let y = 4 + 5 * s1 + 3;
   drawText(fb, `${sim.distM}M`, 4, y, WHITE, s2);
   y += 5 * s2 + 3;
-  drawText(fb, `BEST ${g.seedBest}`, 4, y, WHITE, s2);
+  drawText(fb, `BEST ${g.overallBest}`, 4, y, WHITE, s2);
 
   if (g.phase === 'playing' || g.phase === 'crashed') drawGauges(fb, g);
   if (g.settings.muted) drawTextHalo(fb, 'MUTED', W - 26, H - 8);
@@ -211,22 +209,15 @@ function drawMain(fb: Framebuffer, g: GameView): void {
   // title plate over the mountains
   fb.fillRect(22, 10, W - 44, 46, OFF);
   fb.strokeRect(22, 10, W - 44, 46, WHITE);
-  drawTextCentered(fb, 'PIXEL', CX, 15, WHITE, 3);
-  drawTextCentered(fb, 'DESCENT', CX, 34, WHITE, 3);
+  drawTextCentered(fb, 'FALL', CX, 15, WHITE, 3);
+  drawTextCentered(fb, 'LINE', CX, 34, WHITE, 3);
 
   panel(fb, 146, 316);
-  drawTextCentered(fb, `SEED ${g.seed}`, CX, 153, WHITE);
-  const sb = g.seedBest;
-  drawTextCentered(fb, sb > 0 ? `BEST ON SEED ${sb}` : 'NO SCORE ON THIS SEED YET', CX, 162);
+  const best = g.overallBest;
+  drawTextCentered(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, WHITE, 2);
   drawButtons(fb, g);
-  const daily = g.bestOn(g.today);
-  drawTextCentered(
-    fb,
-    `TODAY ${daily > 0 ? daily : '-'}   ALL TIME ${g.overallBest}`,
-    CX,
-    279,
-    WHITE,
-  );
+  const daily = g.dailyBest;
+  drawTextCentered(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 279, WHITE);
   const c = nextChallenge(g);
   if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
   drawTextCentered(
@@ -258,10 +249,10 @@ function nextChallenge(g: GameView): { name: string; value: number; target: numb
 function drawScores(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'TOP 10', CX, 12, WHITE, 2);
-  const seedLabel = g.scoreTab === 'daily' ? g.today : g.seed;
-  drawButtons(fb, g, g.scoreTab === 'daily' ? 'tabDaily' : 'tabSeed');
-  drawTextCentered(fb, `SEED ${seedLabel}`, CX, 62, YELLOW);
-  const list = g.leaderboard(seedLabel);
+  const daily = g.scoreTab === 'daily';
+  drawButtons(fb, g, daily ? 'tabDaily' : 'tabTop');
+  drawTextCentered(fb, daily ? "TODAY'S COURSE" : 'YOUR BEST RUNS', CX, 62, YELLOW);
+  const list = daily ? g.dailyRuns : g.topRuns;
   for (let i = 0; i < 10; i++) {
     const e = list[i];
     const y = 76 + i * 12;
@@ -274,7 +265,6 @@ function drawScores(fb: Framebuffer, g: GameView): void {
       drawText(fb, '-', 36, y, WHITE);
     }
   }
-  drawTextCentered(fb, `ALL TIME BEST ${g.overallBest}`, CX, 206);
   drawTextCentered(fb, 'SCORES STAY ON THIS DEVICE', CX, 262);
 }
 
@@ -364,15 +354,14 @@ function drawGoals(fb: Framebuffer, g: GameView): void {
 }
 
 function drawPause(fb: Framebuffer, g: GameView): void {
-  panel(fb, 50, 244);
+  panel(fb, 50, 228);
   drawTextCentered(fb, 'PAUSED', CX, 56, WHITE, 2);
   drawButtons(fb, g);
   // The spin mode is fixed for a run, so a change made here waits for the next one.
   if (g.settings.manualSpin !== (g.sim.opts.manualSpin === true)) {
     drawTextCentered(fb, 'SPIN MODE STARTS NEXT RUN', CX, 206, YELLOW);
   }
-  drawTextCentered(fb, `SEED ${g.seed}`, CX, 216, WHITE);
-  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 228, YELLOW);
+  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 216, YELLOW);
 }
 
 function drawOver(fb: Framebuffer, g: GameView): void {
@@ -382,22 +371,16 @@ function drawOver(fb: Framebuffer, g: GameView): void {
   panel(fb, top, top + 164);
   drawTextCentered(fb, g.crashWord, CX, top + 6, WHITE, 2);
   drawTextCentered(fb, String(res.score), CX, top + 21, YELLOW, 3);
-  if (res.newSeedBest) {
-    drawTextCentered(fb, 'NEW BEST ON THIS SEED!', CX, top + 41, YELLOW);
+  if (res.newBest) {
+    drawTextCentered(fb, 'NEW BEST!', CX, top + 41, YELLOW);
   } else {
-    drawTextCentered(fb, `BEST ${g.seedBest}`, CX, top + 41, WHITE);
+    drawTextCentered(fb, `BEST ${g.overallBest}`, CX, top + 41, WHITE);
   }
   const sm = res.summary;
   drawTextCentered(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
   drawTextCentered(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);
   const rank = res.rank;
-  drawTextCentered(
-    fb,
-    rank ? `RANK ${rank} ON THIS SEED` : 'NOT IN THE TOP 10 FOR THIS SEED',
-    CX,
-    top + 71,
-    WHITE,
-  );
+  drawTextCentered(fb, rank ? `RANK ${rank} ALL TIME` : 'NOT IN YOUR TOP 10', CX, top + 71, WHITE);
   // new achievements and gear take turns in one line
   const news: string[] = [
     ...res.achievements.map((a) => `GOAL: ${a.name}`),
@@ -406,8 +389,6 @@ function drawOver(fb: Framebuffer, g: GameView): void {
   if (news.length > 0) {
     const n = news[Math.floor(g.animT / 1.4) % news.length] ?? '';
     drawTextCentered(fb, n, CX, top + 80, YELLOW);
-  } else if (res.newOverallBest) {
-    drawTextCentered(fb, 'NEW ALL TIME BEST', CX, top + 80, YELLOW);
   }
   const buttons = menuButtons(g);
   for (let i = 0; i < buttons.length; i++) {

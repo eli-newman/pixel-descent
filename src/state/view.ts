@@ -19,8 +19,9 @@ export interface ParticlesView {
   readonly count: number;
   readonly x: ArrayLike<number>;
   readonly y: ArrayLike<number>;
-  readonly life: ArrayLike<number>;
-  readonly max: ArrayLike<number>;
+  readonly landedCount: number;
+  readonly landedX: ArrayLike<number>;
+  readonly landedY: ArrayLike<number>;
 }
 
 /** The parts of the sim that get drawn. */
@@ -46,13 +47,11 @@ export type SimView = DeepReadonly<
   >
 > & { readonly trail: TrailView };
 
-/** Everything render/ may see of the game. Nothing here can change game state. */
+/** Everything render/ may see of the game. Nothing here can change game state. Seeds are internal, so the player's screens cannot show one. */
 export interface GameView {
   readonly phase: Phase;
   readonly screen: Screen;
-  readonly scoreTab: 'seed' | 'daily';
-  readonly seed: string;
-  readonly today: string;
+  readonly scoreTab: 'top' | 'daily';
   readonly sim: SimView;
   readonly result: DeepReadonly<RunResult> | null;
   readonly focus: number;
@@ -63,13 +62,14 @@ export interface GameView {
   readonly animT: number;
   readonly settings: Readonly<Settings>;
   readonly progress: DeepReadonly<Progress>;
-  readonly seedBest: number;
   readonly overallBest: number;
+  /** Best score on today's daily course. */
+  readonly dailyBest: number;
+  readonly topRuns: readonly Readonly<ScoreEntry>[];
+  readonly dailyRuns: readonly Readonly<ScoreEntry>[];
   readonly touch: boolean;
   readonly achievementCount: number;
   readonly boardIdx: number;
   readonly riderIdx: number;
   readonly crashWord: string;
-  bestOn(seed: string): number;
-  leaderboard(seed: string): readonly Readonly<ScoreEntry>[];
 }

@@ -1,8 +1,8 @@
 {
-  "name": "pixel-descent",
+  "name": "fall-line",
   "version": "1.0.0",
   "private": true,
-  "description": "Pixel Descent - a one-colour pixel-art downhill snowboard game",
+  "description": "Fall Line - a one-colour pixel-art downhill snowboard game",
   "type": "module",
   "scripts": {
     "dev": "vite",

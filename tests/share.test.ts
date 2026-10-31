@@ -54,5 +54,7 @@ describe('share card', () => {
     );
     expect(shareText(card)).toContain('1234');
     expect(shareText({ ...card, daily: true })).toContain('daily');
+    expect(shareText(card)).not.toContain('k3m9qa');
+    expect(shareText(card)).not.toContain('seed');
   });
 });

@@ -43,4 +43,32 @@ describe('Particles', () => {
     p.clear();
     expect(p.count).toBe(0);
   });
+
+  it('leaves a grain on the snow exactly where a fleck comes down', () => {
+    const p = new Particles();
+    p.jet(30, 40, 1, 0, 0, 0.1, half);
+    p.step(0.05);
+    const x = p.x[0];
+    const y = p.y[0];
+    p.step(0.2);
+    expect(p.count).toBe(0);
+    expect(p.landedCount).toBe(1);
+    expect(p.landedX[0]).toBe(x);
+    expect(p.landedY[0]).toBe(y);
+  });
+
+  it('only leaves a grain for every other fleck, keeps a fixed number, and clears them for a new run', () => {
+    const p = new Particles();
+    for (let i = 0; i < 2000; i++) {
+      p.jet(i, 0, 1, 0, 0, 0.01, half);
+      p.step(0.02);
+    }
+    expect(p.landedCount).toBe(320);
+    p.clear();
+    expect(p.landedCount).toBe(0);
+    p.jet(1, 0, 1, 0, 0, 0.01, half);
+    p.jet(2, 0, 1, 0, 0, 0.01, half);
+    p.step(0.02);
+    expect(p.landedCount).toBe(1);
+  });
 });
