@@ -560,7 +560,9 @@ export class Game {
     const f = 0.55 + 0.45 * Math.min(1, Math.max(0, (r.speed - 36) / 150));
     const build = Math.min(1, 0.4 + this.skid / 0.5);
     const peak = skidding && this.skid > 0.15;
-    const want = peak && !this.reduced ? 0.85 : 0;
+    // On a phone the picture is big and the skid is held for a long time, so keep it calm: a lighter spray and no face shot.
+    const calm = this.reduced || this.touch;
+    const want = peak && !calm ? 0.85 : 0;
     this.faceShot += (want - this.faceShot) * Math.min(1, (want > this.faceShot ? 9 : 5) * dt);
     if (!skidding) return;
     this.brakeTick++;
@@ -568,7 +570,7 @@ export class Game {
     const power = f * build;
     const rand = this.deps.rand ?? Math.random;
     // Particles live in world space, so they inherit the rider's downhill speed; otherwise they just fall behind as a trail.
-    const n = Math.round((this.reduced ? 1 : 2) + (this.reduced ? 2 : 8) * power);
+    const n = Math.round((calm ? 1 : 2) + (this.reduced ? 2 : this.touch ? 4 : 8) * power);
     const carry = r.speed;
     // The board is plowed sideways, so the powder is shoved up off its leading (nose) edge, not the tail.
     const pose = poseOf(r, r.x, r.y, 0);
@@ -579,7 +581,7 @@ export class Game {
     this.particles.jet(nx, ny - 1, n, 70 + 80 * power, 22 + 8 * power, 0.75, rand, carry);
     this.particles.jet(mx, my - 1, n >> 1, 60 + 50 * power, 16, 0.6, rand, carry);
     // Powder thrown ahead of the nose falls back down in front of him.
-    if (!this.reduced && power > 0.3) {
+    if (!calm && power > 0.3) {
       this.particles.jet(nx, ny - 3, 2 + Math.round(3 * power), 40, 18, 0.9, rand, carry * 1.25);
     }
   }

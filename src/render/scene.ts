@@ -63,7 +63,7 @@ export class SceneRenderer {
       if (r.kind === 'cliff') this.drawCliff(r, cam, ox, oy);
       else this.drawRamp(r, cam, ox, oy);
     }
-    this.drawTrail(sim, cam, ox, oy, tuck);
+    this.drawTrail(sim, cam, ox, oy, tuck, g.touch);
     for (const gate of sim.gates) this.drawGate(g, gate, cam, ox, oy);
     this.drawPickups(g, cam, ox, oy);
 
@@ -300,7 +300,14 @@ export class SceneRenderer {
   }
 
   /** The board trail: longer and wider the faster the rider is going. */
-  private drawTrail(sim: Sim, cam: number, ox: number, oy: number, tuck: number): void {
+  private drawTrail(
+    sim: Sim,
+    cam: number,
+    ox: number,
+    oy: number,
+    tuck: number,
+    touch: boolean,
+  ): void {
     const t = sim.trail;
     const wide = tuck > 0.35;
     const fast = tuck > 0.7;
@@ -312,12 +319,17 @@ export class SceneRenderer {
       const ny = t.ny(i);
       if (nx !== 0 || ny !== 0) {
         // Sideways board: it scrapes the snow from its tail (the track head) to its nose, no further.
-        const steps = Math.max(1, Math.round(BOARD_LEN * Math.hypot(nx, ny)));
-        for (let k = 0; k <= steps; k++) {
-          const u = (k / steps) * BOARD_LEN;
-          const px = x + Math.round(nx * u);
-          const py = y + Math.round(ny * u);
-          if ((px + py) % 2 === 0 || k === 0 || k === steps) this.fb.put(px, py);
+        // Draw the two edges of the scrape every time and a rung across only now and then, so it reads
+        // as a groove and not a solid slab (and sparser still on touch, where the picture is big).
+        const len = BOARD_LEN;
+        this.fb.put(x, y);
+        this.fb.put(x + Math.round(nx * len), y + Math.round(ny * len));
+        if (i % (touch ? 7 : 5) === 0) {
+          const steps = Math.max(1, Math.round(len * Math.hypot(nx, ny)));
+          for (let k = 0; k <= steps; k += 2) {
+            const u = (k / steps) * len;
+            this.fb.put(x + Math.round(nx * u), y + Math.round(ny * u));
+          }
         }
         continue;
       }
