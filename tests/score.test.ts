@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_M, START_Y } from '../src/config';
+import { PX_PER_M, START_Y } from '../src/core/config';
 import {
   COMBO_WINDOW,
   MAX_COMBO,
   POINTS,
   addDistance,
-  addGate,
   addSpin,
   spinPoints,
   breakCombo,
@@ -15,7 +14,7 @@ import {
   createScore,
   distanceMeters,
   totalScore,
-} from '../src/score';
+} from '../src/sim/score';
 
 describe('score', () => {
   it('measures distance from the start line', () => {
@@ -24,14 +23,13 @@ describe('score', () => {
     expect(distanceMeters(START_Y + 800)).toBe(100);
   });
 
-  it('adds up distance, stars, gates and near misses', () => {
+  it('adds up distance, stars and near misses', () => {
     const s = createScore();
     addStar(s);
     addStar(s);
-    addGate(s);
     addNearMiss(s, 10);
     addDistance(s, 300 * PX_PER_M, 1);
-    expect(totalScore(s)).toBe(300 + 2 * POINTS.star + POINTS.gate + POINTS.nearMiss);
+    expect(totalScore(s)).toBe(300 + 2 * POINTS.star + POINTS.nearMiss);
   });
 
   it('builds a near miss combo inside the window and resets outside it', () => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CHECKPOINTS_ENABLED, START_X, START_Y } from '../src/config';
-import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/collision';
-import { hashSeed } from '../src/rng';
-import { maxFlightPx, topSpeed } from '../src/rider';
-import { Sim } from '../src/sim';
-import { LANE_HALF, SAFE_LANE_END_Y, Spawner, pathHalfWidth } from '../src/world/spawner';
+import { START_X, START_Y } from '../src/core/config';
+import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/sim/collision';
+import { hashSeed } from '../src/core/rng';
+import { maxFlightPx, topSpeed } from '../src/sim/speed';
+import { Sim } from '../src/sim/sim';
+import { LANE_HALF, SAFE_LANE_END_Y, Spawner, pathHalfWidth } from '../src/sim/spawner';
 import { runBot } from './helpers/bot';
 
 describe('spawner', () => {
@@ -23,13 +23,14 @@ describe('spawner', () => {
     expect(parts.flatMap((p) => p.obstacles)).toEqual(whole.obstacles);
     const byId = <T extends { id: number }>(l: T[]): T[] => l.slice().sort((a, b) => a.id - b.id);
     expect(byId(parts.flatMap((p) => p.pickups))).toEqual(byId(whole.pickups));
-    expect(parts.flatMap((p) => p.gates)).toEqual(whole.gates);
   });
 
   it('keeps the rider lane clear at the start for every seed', () => {
     for (let i = 0; i < 60; i++) {
       const batch = new Spawner(hashSeed(`seed-${i}`)).advance(SAFE_LANE_END_Y + 100);
       expect(batch.obstacles.length).toBeGreaterThan(0);
+      // Plain checks, one expect at the end: expect is far too slow for a loop this deep.
+      const hits: string[] = [];
       for (const o of batch.obstacles) {
         if (o.y > SAFE_LANE_END_Y) continue;
         const box = obstacleBox(o);
@@ -37,10 +38,11 @@ describe('spawner', () => {
         // A rider holding the starting lane (a body-width wide strip) never touches it.
         for (const x of [START_X - 14, START_X, START_X + 14]) {
           for (let y = START_Y; y < SAFE_LANE_END_Y; y += 2) {
-            expect(circleHitsBox(x, y + 8, RIDER_RADIUS, box)).toBe(false);
+            if (circleHitsBox(x, y + 8, RIDER_RADIUS, box)) hits.push(`${o.kind}@${o.x},${o.y}`);
           }
         }
       }
+      expect(hits).toEqual([]);
     }
   });
 
@@ -61,13 +63,6 @@ describe('spawner', () => {
       expect(nearest).toBeGreaterThanOrEqual(gap);
     }
   });
-
-  it.skipIf(!CHECKPOINTS_ENABLED)('places checkpoint gates inside the open path', () => {
-    const s = new Spawner(hashSeed('gates'));
-    const batch = s.advance(6000);
-    expect(batch.gates.length).toBeGreaterThan(2);
-    for (const g of batch.gates) expect(Math.abs(g.x - s.pathCenter(g.y))).toBeLessThan(1);
-  });
 });
 
 describe('spawner invariants for jumps, lanes and terrain', () => {
@@ -86,10 +81,11 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         );
         if (r.kind === 'kicker') expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
         else expect(r.half).toBeGreaterThanOrEqual(90);
-        for (const o of batch.obstacles) {
-          if (!obstacleBox(o)) continue;
-          expect(o.y < r.y - 14 || o.y > r.landEnd).toBe(true);
-        }
+        // Plain filter, one expect: expect is far too slow per ramp per obstacle.
+        const inZone = batch.obstacles.filter(
+          (o) => obstacleBox(o) && !(o.y < r.y - 14 || o.y > r.landEnd),
+        );
+        expect(inZone).toEqual([]);
       }
     }
     expect(ramps).toBeGreaterThan(30);
@@ -134,20 +130,22 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
           expect(p.x).toBeGreaterThan(10);
           expect(p.x).toBeLessThan(170);
         }
+        const blocked: string[] = [];
         for (const o of batch.obstacles) {
           const box = obstacleBox(o);
           if (!box || o.y < lane.y0 || o.y > lane.y1) continue;
           const lx = s.laneX(lane, o.y);
           const w = (box.x1 - box.x0) / 2;
-          expect(Math.abs(o.x - lx)).toBeGreaterThanOrEqual(LANE_HALF + w + 2);
+          if (Math.abs(o.x - lx) < LANE_HALF + w + 2) blocked.push(`corridor ${o.x},${o.y}`);
           // the strip between the main path and the lane stays open at both ends
           if (o.y < lane.y0 + 38 || o.y > lane.y1 - 38) {
             const c = s.pathCenter(o.y);
             const lo = Math.min(c, lx) - LANE_HALF;
             const hi = Math.max(c, lx) + LANE_HALF;
-            expect(o.x + w < lo || o.x - w > hi).toBe(true);
+            if (!(o.x + w < lo || o.x - w > hi)) blocked.push(`strip ${o.x},${o.y}`);
           }
         }
+        expect(blocked).toEqual([]);
         // a rider can stay inside the lane the whole way: it never leaves the slope
         for (let y = lane.y0; y <= lane.y1; y += 8) {
           expect(s.laneX(lane, y)).toBeGreaterThan(11);
@@ -167,18 +165,20 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
       for (const p of batch.patches) {
         expect(s.laneAt(p.y)).toBeNull();
       }
+      const buried: string[] = [];
       for (const star of batch.pickups) {
         for (const o of batch.obstacles) {
           const box = obstacleBox(o);
           if (!box || o.y < star.y - 30 || o.y > star.y + 30) continue;
           if (!star.lane) continue;
-          expect(circleHitsBox(star.x, star.y, 2, box)).toBe(false);
+          if (circleHitsBox(star.x, star.y, 2, box)) buried.push(`${star.x},${star.y}`);
         }
       }
+      expect(buried).toEqual([]);
     }
   });
 
-  it('stays winnable at maximum speed and high distance, with jumps, drifts and the avalanche', () => {
+  it('stays winnable at maximum speed and high distance, with jumps and drifts', () => {
     for (const seed of seeds) {
       const sim = new Sim(seed, { forceSpeed: true });
       runBot(sim, 7000);
@@ -219,8 +219,17 @@ describe('mountain world is stable', () => {
   it('generates the same world for a seed as it always has', () => {
     const fp = (seed: string): [number, number, number] => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
-      // Fingerprints taken when batches still carried an (empty) `props` list, so it is added back here.
-      return [hashSeed(JSON.stringify({ ...b, props: [] })), b.obstacles.length, b.ramps.length];
+      // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
+      // ids started at 1,000,000, so those are put back here. The numbers themselves never change.
+      const old = {
+        obstacles: b.obstacles,
+        pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
+        gates: [],
+        ramps: b.ramps,
+        patches: b.patches,
+        props: [],
+      };
+      return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
     expect(fp('alpha')).toEqual([4040464968, 1058, 8]);
     expect(fp('k3m9qa')).toEqual([3537220680, 1081, 8]);

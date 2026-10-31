@@ -1,27 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_SPEED, STEP } from '../src/config';
+import { MAX_SPEED, STEP } from '../src/core/config';
+import { poseOf } from '../src/sim/pose';
+import { launch, riderZ, stepRider } from '../src/sim/rider';
+import { createRider, type RiderState, type Surface } from '../src/sim/riderState';
+import {
+  airTime,
+  cruiseSpeed,
+  maxFlightPx,
+  speedMultiplier,
+  topSpeed,
+  tuckFraction,
+} from '../src/sim/speed';
 import {
   BAIL_HX,
   MAX_SPIN,
   SPIN_RATE,
   SPIN_SETTLE,
-  airTime,
-  createRider,
-  cruiseSpeed,
-  launch,
-  poseOf,
-  maxFlightPx,
-  riderZ,
-  speedMultiplier,
   spinCap,
   spinLanding,
   startTrick,
-  stepRider,
-  topSpeed,
-  tuckFraction,
-  type RiderState,
-  type Surface,
-} from '../src/rider';
+} from '../src/sim/tricks';
 
 const flat: Surface = { ice: false, drift: false };
 

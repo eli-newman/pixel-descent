@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { STEP } from '../src/config';
-import { ReplayPlayer, ReplayRecorder, isReplay } from '../src/replay';
-import { launch, MANUAL_RATE, spinAngle } from '../src/rider';
-import { Store, DEFAULT_SETTINGS } from '../src/storage';
-import { Sim, type SimInput } from '../src/sim';
+import { STEP } from '../src/core/config';
+import { launch } from '../src/sim/rider';
+import { MANUAL_RATE, spinAngle } from '../src/sim/tricks';
+import { Store, DEFAULT_SETTINGS } from '../src/state/storage';
+import { Sim, type SimInput } from '../src/sim/sim';
 import { memoryStorage } from './helpers/fakes';
 
 const none: SimInput = { steer: 0, trick: false };
 
 /** A sim with the rider launched off a long cliff drop (a lot of air), in the given spin mode. */
 function jumper(manual: boolean): Sim {
-  const sim = new Sim('manual-spin', { noAvalanche: true, manualSpin: manual });
+  const sim = new Sim('manual-spin', { manualSpin: manual });
   sim.begin();
   for (let i = 0; i < 5; i++) sim.step(none);
   const r = sim.rider;
@@ -165,43 +165,25 @@ describe('manual spin persistence', () => {
     expect(again.muted).toBe(false);
   });
 
-  it('replays carry the flag, and old replays default to assisted', () => {
-    const rec = new ReplayRecorder();
-    rec.record({ steer: 1, trick: false });
-    const manual = rec.finish('s', false, 1, 1, true);
-    expect(manual.manual).toBe(true);
-    expect(isReplay(JSON.parse(JSON.stringify(manual)))).toBe(true);
-    const plain = rec.finish('s', false, 1, 1);
-    expect(plain.manual).toBeUndefined();
-    expect(isReplay(plain)).toBe(true);
-    expect(isReplay({ ...plain, manual: 'yes' })).toBe(false);
-  });
-
-  it('reproduces a manual spin run exactly from its replay', () => {
+  it('reproduces a manual spin run exactly from the same inputs', () => {
     const script = (i: number): SimInput => ({
       steer: i > 40 && i < 130 ? 1 : i > 200 && i < 260 ? -1 : 0,
       trick: i === 300,
     });
-    const run = (src: (i: number) => SimInput, rec?: ReplayRecorder): Sim => {
-      const sim = new Sim('manual-replay', { noAvalanche: true, manualSpin: true });
+    const run = (): Sim => {
+      const sim = new Sim('manual-repeat', { manualSpin: true });
       sim.begin();
       for (let i = 0; i < 600 && !sim.crashed; i++) {
         if (i === 30) {
           sim.rider.speed = 150;
           launch(sim.rider, true);
         }
-        const input = src(i);
-        rec?.record(input);
-        sim.step(input);
+        sim.step(script(i));
       }
       return sim;
     };
-    const rec = new ReplayRecorder();
-    const live = run(script, rec);
-    const replay = rec.finish('manual-replay', false, live.scoreValue, live.distM, true);
-    const player = new ReplayPlayer(replay);
-    const copy = run((i) => player.at(i));
-    expect(copy.opts.manualSpin).toBe(replay.manual);
+    const live = run();
+    const copy = run();
     expect(copy.scoreValue).toBe(live.scoreValue);
     expect(copy.rider.x).toBe(live.rider.x);
     expect(copy.rider.spinAng).toBe(live.rider.spinAng);

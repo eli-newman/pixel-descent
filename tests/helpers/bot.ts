@@ -1,4 +1,4 @@
-import type { Sim, SimInput } from '../../src/sim';
+import type { Sim, SimInput } from '../../src/sim/sim';
 
 /**
  * A simple path follower: aim at the centre of the guaranteed open path a little way ahead,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Input } from '../src/input';
+import { Input } from '../src/platform/input';
 
 type Pt = { id: number; x: number; y: number; t: number };
 

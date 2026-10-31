@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { STEP } from '../src/config';
-import { Input } from '../src/input';
-import { ReplayPlayer, ReplayRecorder } from '../src/replay';
-import { launch, flipCap, flipLanding, FLIP_RATE, MANUAL_FLIP_RATE } from '../src/rider';
-import { addFlip, flipName, flipPoints, createScore, spinPoints } from '../src/score';
-import { Sim, type SimEvent, type SimInput } from '../src/sim';
+import { STEP } from '../src/core/config';
+import { Input } from '../src/platform/input';
+import { launch } from '../src/sim/rider';
+import { flipCap, flipLanding, FLIP_RATE, MANUAL_FLIP_RATE } from '../src/sim/tricks';
+import { addFlip, flipName, flipPoints, createScore, spinPoints } from '../src/sim/score';
+import { Sim, type SimEvent, type SimInput } from '../src/sim/sim';
 import { makeGame } from './helpers/fakes';
 
 const none: SimInput = { steer: 0, trick: false };
 
 /** A sim with the rider launched into the air, as a kicker hop or a cliff drop. */
 function jumper(opts: { manual?: boolean; cliff?: boolean; speed?: number } = {}): Sim {
-  const sim = new Sim('flip-test', { noAvalanche: true, manualSpin: opts.manual === true });
+  const sim = new Sim('flip-test', { manualSpin: opts.manual === true });
   sim.begin();
   for (let i = 0; i < 5; i++) sim.step(none);
   const r = sim.rider;
@@ -208,51 +208,21 @@ describe('flip scoring', () => {
   });
 });
 
-describe('flip replays', () => {
-  it('round trips the flip input and plays old inputs with no flips', () => {
-    const rec = new ReplayRecorder();
-    const inputs: SimInput[] = [
-      { steer: 0, trick: false },
-      { steer: 0.5, trick: false, flip: 1 },
-      { steer: -1, trick: true, flip: -1 },
-      { steer: 0, trick: false, brake: true, flip: 0 },
-    ];
-    for (const i of inputs) rec.record(i);
-    const p = new ReplayPlayer(rec.finish('s', false, 1, 1));
-    expect(inputs.map((_, i) => p.at(i).flip)).toEqual([0, 1, -1, 0]);
-    const old = new ReplayPlayer({
-      seed: 's',
-      touch: false,
-      steps: 2,
-      score: 0,
-      dist: 0,
-      changes: [0, 8 + 8, 1, 8 | 64 | 128],
-    });
-    expect(old.at(0).flip).toBe(0);
-    expect(old.at(1).flip).toBe(0);
-    expect(old.at(1).trick).toBe(true);
-    expect(old.at(1).brake).toBe(true);
-  });
-
-  it('reproduces a run with flips exactly', () => {
+describe('flip determinism', () => {
+  it('reproduces a run with flips exactly from the same inputs', () => {
     const script = (i: number): SimInput => ({
       steer: 0,
       trick: false,
       flip: i % 400 < 5 ? 1 : i % 400 === 200 ? -1 : 0,
     });
-    const live = new Sim('flip-replay', { noAvalanche: true });
-    const rec = new ReplayRecorder();
-    live.begin();
-    for (let i = 0; i < 4000 && !live.crashed; i++) {
-      const input = script(i);
-      rec.record(input);
-      live.step(input);
-    }
-    const replay = rec.finish('flip-replay', false, live.scoreValue, live.distM);
-    const copy = new Sim('flip-replay', { noAvalanche: true });
-    const player = new ReplayPlayer(replay);
-    copy.begin();
-    for (let i = 0; i < replay.steps; i++) copy.step(player.at(i));
+    const play = (): Sim => {
+      const sim = new Sim('flip-repeat');
+      sim.begin();
+      for (let i = 0; i < 4000 && !sim.crashed; i++) sim.step(script(i));
+      return sim;
+    };
+    const live = play();
+    const copy = play();
     expect(copy.scoreValue).toBe(live.scoreValue);
     expect(copy.rider.y).toBe(live.rider.y);
     expect(copy.score.tricks).toBe(live.score.tricks);

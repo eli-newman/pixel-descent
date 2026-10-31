@@ -1,7 +1,7 @@
-import { Game, type GameDeps } from '../../src/game';
-import type { Action, Input, InputItem } from '../../src/input';
-import type { Sfx } from '../../src/audio';
-import { Store, type StorageLike } from '../../src/storage';
+import { Game, type GameDeps } from '../../src/state/game';
+import type { Action, Input, InputItem } from '../../src/platform/input';
+import type { Sfx } from '../../src/platform/audio';
+import { Store, type StorageLike } from '../../src/state/storage';
 
 export class FakeInput {
   steerValue = 0;
@@ -56,9 +56,6 @@ export class FakeSfx {
   nearMiss(): void {
     this.calls.push('near');
   }
-  gate(): void {
-    this.calls.push('gate');
-  }
   bush(): void {
     this.calls.push('bush');
   }
@@ -82,7 +79,6 @@ export function memoryStorage(): StorageLike & { data: Map<string, string> } {
     data,
     getItem: (k) => data.get(k) ?? null,
     setItem: (k, v) => void data.set(k, v),
-    removeItem: (k) => void data.delete(k),
   };
 }
 
@@ -109,7 +105,6 @@ export function makeGame(
       store,
       input: input as unknown as Input,
       sfx: sfx as unknown as Sfx,
-      reducedMotion: () => false,
       now: () => new Date(2026, 9, 20, 12),
       rand: () => 0.5,
       share: (card) => {

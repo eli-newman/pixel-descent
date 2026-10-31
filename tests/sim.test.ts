@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { AVALANCHE_ENABLED, START_Y, STEP } from '../src/config';
-import {
-  AV_START_GAP,
-  avalancheDanger,
-  avalancheRatio,
-  createAvalanche,
-  stepAvalanche,
-} from '../src/avalanche';
-import { cruiseSpeed, launch, topSpeed } from '../src/rider';
-import { Sim, type SimInput } from '../src/sim';
+import { START_Y, STEP } from '../src/core/config';
+import { launch } from '../src/sim/rider';
+import { cruiseSpeed, topSpeed } from '../src/sim/speed';
+import { Sim, type SimInput } from '../src/sim/sim';
 import { botInput, runBot } from './helpers/bot';
 
 const none: SimInput = { steer: 0, trick: false };
@@ -18,6 +12,35 @@ function play(sim: Sim, steps: number, input: (i: number) => SimInput = () => no
 }
 
 describe('sim', () => {
+  it('reproduces a run with spins in the air exactly from the same inputs', () => {
+    // Hold a direction or press the trick button whenever airborne; otherwise follow the path.
+    const inputs: SimInput[] = [];
+    const live = new Sim('spin-repeat', { forceSpeed: true });
+    live.begin();
+    let jumps = 0;
+    let wasAir = false;
+    for (let i = 0; i < 60000 && !live.crashed && jumps < 3; i++) {
+      const air = live.rider.air;
+      if (air && !wasAir) jumps++;
+      wasAir = air;
+      const input: SimInput = air
+        ? { steer: jumps % 2 === 0 ? 1 : -0.75, trick: jumps === 2 && live.rider.airT < 0.02 }
+        : botInput(live);
+      inputs.push(input);
+      live.step(input);
+    }
+    expect(jumps).toBeGreaterThanOrEqual(2);
+    expect(live.score.tricks).toBeGreaterThan(0);
+    const copy = new Sim('spin-repeat', { forceSpeed: true });
+    copy.begin();
+    for (const input of inputs) copy.step(input);
+    expect(copy.scoreValue).toBe(live.scoreValue);
+    expect(copy.score.trickPoints).toBe(live.score.trickPoints);
+    expect(copy.rider.x).toBe(live.rider.x);
+    expect(copy.rider.spin).toBe(live.rider.spin);
+    expect(copy.crashed).toBe(live.crashed);
+  });
+
   it('starts still and moves once begun', () => {
     const sim = new Sim('start');
     play(sim, 60);
@@ -56,7 +79,7 @@ describe('sim', () => {
   });
 
   it('gains speed going straight and scores more per metre for it', () => {
-    const sim = new Sim('straight', { noAvalanche: true });
+    const sim = new Sim('straight');
     sim.begin();
     // Hold a gentle line down the starting lane, which is clear for 300px.
     play(sim, 700);
@@ -65,7 +88,7 @@ describe('sim', () => {
   });
 
   it('crashes into trees and ends the run after the tumble', () => {
-    const sim = new Sim('crash', { noAvalanche: true });
+    const sim = new Sim('crash');
     sim.begin();
     play(sim, 200000, () => none);
     expect(sim.crashed).toBe(true);
@@ -77,7 +100,7 @@ describe('sim', () => {
   });
 
   it('lands a clean jump, pays for tricks and does not collide in the air', () => {
-    const sim = new Sim('air', { noAvalanche: true, forceSpeed: true });
+    const sim = new Sim('air', { forceSpeed: true });
     sim.begin();
     let tricked = false;
     let landed = 0;
@@ -99,7 +122,7 @@ describe('sim', () => {
 
   it('riding past the rock of a cliff is a slope, not a drop, while the rock itself launches you', () => {
     const run = (gapOffset: number): boolean => {
-      const sim = new Sim('cliff-gap', { noAvalanche: true });
+      const sim = new Sim('cliff-gap');
       sim.begin();
       play(sim, 5);
       const r = sim.rider;
@@ -126,12 +149,12 @@ describe('sim', () => {
   });
 
   it('a cliff drop hangs longer than a kicker and pays a drop bonus on a clean landing', () => {
-    const hop = new Sim('cliff-a', { noAvalanche: true });
+    const hop = new Sim('cliff-a');
     hop.begin();
     play(hop, 5);
     hop.rider.speed = 200;
     launch(hop.rider);
-    const sim = new Sim('cliff-b', { noAvalanche: true });
+    const sim = new Sim('cliff-b');
     sim.begin();
     play(sim, 5);
     sim.rider.speed = 200;
@@ -152,7 +175,7 @@ describe('sim', () => {
   });
 
   it('braking swings the board sideways and plows down to a crawl, then lets go', () => {
-    const sim = new Sim('brake', { noAvalanche: true });
+    const sim = new Sim('brake');
     sim.begin();
     for (let i = 0; i < 400 && !sim.crashed; i++) sim.step(botInput(sim));
     const fast = sim.rider.speed;
@@ -166,7 +189,7 @@ describe('sim', () => {
   });
 
   it('bails when landing mid-trick or sideways', () => {
-    const sim = new Sim('bail', { noAvalanche: true });
+    const sim = new Sim('bail');
     sim.begin();
     play(sim, 5);
     launch(sim.rider);
@@ -180,7 +203,7 @@ describe('sim', () => {
   });
 
   it('scrubs speed on a sloppy landing', () => {
-    const sim = new Sim('sloppy', { noAvalanche: true });
+    const sim = new Sim('sloppy');
     sim.begin();
     play(sim, 5);
     launch(sim.rider);
@@ -199,8 +222,8 @@ describe('sim', () => {
   });
 
   it('quantises steering so tiny differences do not change a run', () => {
-    const a = new Sim('quant', { noAvalanche: true });
-    const b = new Sim('quant', { noAvalanche: true });
+    const a = new Sim('quant');
+    const b = new Sim('quant');
     a.begin();
     b.begin();
     play(a, 600, () => ({ steer: 0.3, trick: false }));
@@ -209,66 +232,9 @@ describe('sim', () => {
   });
 });
 
-describe('avalanche', () => {
-  it('starts off screen and slower than a cruising rider', () => {
-    const av = createAvalanche(START_Y);
-    expect(START_Y - av.y).toBe(AV_START_GAP);
-    expect(avalancheRatio(0)).toBeLessThan(0.7);
-    expect(avalancheRatio(5000)).toBeGreaterThan(1);
-  });
-
-  it('speeds up when the rider is slow', () => {
-    const fast = createAvalanche(1000);
-    const slow = createAvalanche(1000);
-    stepAvalanche(fast, 1000, cruiseSpeed(500), 500, STEP);
-    stepAvalanche(slow, 1000, 30, 500, STEP);
-    expect(slow.speed).toBeGreaterThan(fast.speed);
-  });
-
-  it('catches up if it has fallen far behind', () => {
-    const near = createAvalanche(1000);
-    const far = createAvalanche(1000);
-    far.y = 1000 - 900;
-    stepAvalanche(near, 1000, 200, 500, STEP);
-    stepAvalanche(far, 1000, 200, 500, STEP);
-    expect(far.speed).toBeGreaterThan(near.speed);
-  });
-
-  it('reports danger from 0 (far) to 1 (about to bury)', () => {
-    const av = createAvalanche(1000);
-    expect(avalancheDanger(av, 1000)).toBe(0);
-    av.y = 1000 - 30;
-    expect(avalancheDanger(av, 1000)).toBe(1);
-  });
-
-  it('buries a rider who stalls, and never catches a bot that tucks at top speed', () => {
-    const slow = new Sim('slow', { touch: false });
-    slow.begin();
-    let steps = 0;
-    // hug the wall: steer hard into the edge so the rider scrubs speed
-    while (!slow.crashed && steps++ < 200000) slow.step({ steer: 1, trick: false });
-    expect(slow.crashed).toBe(true);
-
-    const fast = new Sim('fast', { forceSpeed: true });
-    runBot(fast, 3000);
-    expect(fast.crashed).toBe(false);
-    expect(fast.avalanche.minGap).toBeGreaterThan(100);
-  });
-
-  it.skipIf(!AVALANCHE_ENABLED)('eases off for touch riders', () => {
-    const t = new Sim('ease', { touch: true });
-    const k = new Sim('ease', { touch: false });
-    t.begin();
-    k.begin();
-    play(t, 600);
-    play(k, 600);
-    expect(t.avalanche.y).toBeLessThan(k.avalanche.y);
-  });
-});
-
 describe('top speed at distance', () => {
   it('lets a tucked rider outrun the base ramp', () => {
-    const sim = new Sim('speed', { forceSpeed: true, noAvalanche: true });
+    const sim = new Sim('speed', { forceSpeed: true });
     runBot(sim, 1500);
     expect(sim.topSpeedSeen).toBeGreaterThan(topSpeed(0));
     expect(sim.topSpeedSeen).toBeGreaterThan(280);
@@ -277,7 +243,7 @@ describe('top speed at distance', () => {
   describe('spins', () => {
     /** A sim with the rider in the air, a few steps before touchdown, having turned `spin` degrees. */
     function nearLanding(spin: number, dir: 1 | -1 = 1): Sim {
-      const sim = new Sim('spin-land', { noAvalanche: true });
+      const sim = new Sim('spin-land');
       sim.begin();
       play(sim, 5);
       const r = sim.rider;
@@ -338,7 +304,7 @@ describe('top speed at distance', () => {
     });
 
     it('a trick press mid air spins and pays on landing, using only the air that is left', () => {
-      const sim = new Sim('spin-trick', { noAvalanche: true });
+      const sim = new Sim('spin-trick');
       sim.begin();
       play(sim, 5);
       sim.rider.speed = 200;

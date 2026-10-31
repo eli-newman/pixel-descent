@@ -6,8 +6,8 @@ import {
   obstacleBox,
   riderCenter,
   testObstacle,
-} from '../src/collision';
-import type { Obstacle, ObstacleKind } from '../src/world/types';
+} from '../src/sim/collision';
+import type { Obstacle, ObstacleKind } from '../src/sim/types';
 
 function obstacle(kind: ObstacleKind, size: number, half: number, x = 100, y = 200): Obstacle {
   return { id: 1, kind, size, variant: 0, x, y, half, judged: false, touched: false };

@@ -1,5 +1,5 @@
-import { Rng } from '../rng';
-import type { ObstacleKind } from '../world/types';
+import { Rng } from '../core/rng';
+import type { ObstacleKind } from '../sim/types';
 
 type Pt = readonly [number, number];
 
