@@ -77,7 +77,7 @@ Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top
 - **Risk lane**: a narrow side line next to the path with a trail of ringed stars worth 30 each, flanked by trees. The lane, and the strips leading in and out of it, are always clear.
 - Per seed top 10 boards and an overall best are kept in `localStorage`. (The best-run ghost is archived, see below.)
 - Achievements and challenges (50 close calls, 1000 m without lane stars, 10 tricks, 25 lane stars) unlock boards and riders on the GEAR screen: stripe, dots and twin tip boards, beanie, scarf and ears riders.
-- `prefers-reduced-motion` turns off screen shake, zoom punches, snowfall, speed lines, particles, the avalanche crest animation, the panel slide and blinking.
+- The game always runs in its calm mode (`reducedMotion` in `src/main.ts` returns true, whatever the device setting), so phone and desktop look the same. It turns off screen shake, zoom punches, snowfall, speed lines, particles, the avalanche crest animation, the panel slide and blinking.
 
 ## Architecture
 

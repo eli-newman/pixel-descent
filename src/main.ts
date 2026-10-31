@@ -28,7 +28,6 @@ const ctx = canvas.getContext('2d', { alpha: false });
 if (!ctx) throw new Error('2D canvas is not supported');
 ctx.imageSmoothingEnabled = false;
 
-const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 const store = new Store();
 const sfx = new Sfx();
 const input = new Input(canvas);
@@ -48,7 +47,8 @@ const game = new Game(
     store,
     input,
     sfx,
-    reducedMotion: () => reducedQuery.matches,
+    // One calm look on every device (no shake, zoom flash, face shot or snowfall; a lighter spray), so a phone and a desktop match.
+    reducedMotion: () => true,
     haptic: (ms) => {
       if (typeof navigator.vibrate === 'function') navigator.vibrate(ms);
     },
