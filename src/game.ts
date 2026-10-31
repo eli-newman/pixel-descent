@@ -374,18 +374,12 @@ export class Game {
         if (playing) this.trickQueued = true;
         break;
       case 'up':
-        if (playing) this.flipQueued = 1;
+        if (playing) this.flipQueued = -1;
         else this.moveFocus(-1);
         break;
       case 'down':
-        if (playing) this.flipQueued = -1;
-        else this.moveFocus(1);
-        break;
-      case 'flipUp':
         if (playing) this.flipQueued = 1;
-        break;
-      case 'flipDown':
-        if (playing) this.flipQueued = -1;
+        else this.moveFocus(1);
         break;
       case 'left':
       case 'right':

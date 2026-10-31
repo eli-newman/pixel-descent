@@ -1,8 +1,6 @@
 export type Action =
   | 'start'
   | 'trick'
-  | 'flipUp'
-  | 'flipDown'
   | 'pause'
   | 'mute'
   | 'retry'
@@ -43,6 +41,9 @@ const ACTION_KEYS: Record<string, Action> = {
 const DRAG_START = 10;
 /** CSS px of dragging for full steering lock. */
 const DRAG_RANGE = 56;
+/** A quick flick this far (CSS px) within SWIPE_MS is a swipe, not a steering drag. Past half of DRAG_RANGE, so the spin direction is already steered. */
+const SWIPE_MIN = 32;
+const SWIPE_MS = 280;
 
 /** Keyboard, mouse and touch input collected into a steering value and a queue of actions and taps. */
 export class Input {
@@ -52,6 +53,12 @@ export class Input {
   private pointerX0 = 0;
   private pointerSteer = 0;
   private dragging = false;
+  private pointerT0 = 0;
+  private pointerY0 = 0;
+  /** True once this touch has been used for a swipe, so it fires once. */
+  private swiped = false;
+  /** Fingers currently down (touch only): two or more is the brake. */
+  private readonly touches = new Set<number>();
   private readonly cleanup: Array<() => void> = [];
   /** True once a touch has been seen: the game eases the avalanche and shows touch buttons. */
   usingTouch = false;
@@ -89,8 +96,9 @@ export class Input {
     return up === down ? 0 : up ? -1 : 1;
   }
 
-  /** True while a left key and a right key are held together. */
+  /** True while a left key and a right key are held together, or two fingers are down. */
   brake(): boolean {
+    if (this.touches.size >= 2) return true;
     let l = false;
     let r = false;
     for (const code of this.keys) {
@@ -116,6 +124,7 @@ export class Input {
     this.pointerId = null;
     this.pointerSteer = 0;
     this.dragging = false;
+    this.touches.clear();
   }
 
   dispose(): void {
@@ -149,12 +158,18 @@ export class Input {
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.target instanceof Element && e.target.closest('button')) return;
-    if (e.pointerType === 'touch') this.usingTouch = true;
+    if (e.pointerType === 'touch') {
+      this.usingTouch = true;
+      this.touches.add(e.pointerId);
+    }
     const p = this.logical(e.clientX, e.clientY);
     this.queue.push({ kind: 'tap', x: p.x, y: p.y });
     if (this.pointerId !== null) return;
     this.pointerId = e.pointerId;
     this.pointerX0 = e.clientX;
+    this.pointerY0 = e.clientY;
+    this.pointerT0 = e.timeStamp;
+    this.swiped = false;
     this.dragging = false;
     const rect = this.canvas.getBoundingClientRect();
     this.pointerSteer = e.clientX < rect.left + rect.width / 2 ? -1 : 1;
@@ -163,11 +178,30 @@ export class Input {
   private readonly onPointerMove = (e: PointerEvent): void => {
     if (e.pointerId !== this.pointerId) return;
     const dx = e.clientX - this.pointerX0;
+    const dy = e.clientY - this.pointerY0;
+    if (!this.swiped && this.touches.size < 2 && e.timeStamp - this.pointerT0 <= SWIPE_MS) {
+      if (Math.abs(dy) >= SWIPE_MIN && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        // Up is a frontflip, down a backflip, like the keys. The flick does not steer.
+        this.swiped = true;
+        this.pointerSteer = 0;
+        this.push(dy < 0 ? 'up' : 'down');
+        return;
+      }
+      if (Math.abs(dx) >= SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        // A sideways flick is a spin that way: the drag below has already steered that direction.
+        this.swiped = true;
+        this.pointerSteer = Math.max(-1, Math.min(1, dx / DRAG_RANGE));
+        this.push('trick');
+        return;
+      }
+    }
+    if (this.swiped && Math.abs(dy) > Math.abs(dx)) return;
     if (!this.dragging && Math.abs(dx) > DRAG_START) this.dragging = true;
     if (this.dragging) this.pointerSteer = Math.max(-1, Math.min(1, dx / DRAG_RANGE));
   };
 
   private readonly onPointerUp = (e: PointerEvent): void => {
+    this.touches.delete(e.pointerId);
     if (e.pointerId !== this.pointerId) return;
     this.pointerId = null;
     this.pointerSteer = 0;

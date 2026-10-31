@@ -248,10 +248,19 @@ function drawMain(fb: Framebuffer, g: Game): void {
   );
   const c = nextChallenge(g);
   if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
-  drawTextCentered(fb, 'A D STEER  SPACE TRICK  W S FLIP', CX, 297);
   drawTextCentered(
     fb,
-    g.ghost ? 'RACE YOUR GHOST ON THIS SEED' : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
+    g.touch ? 'HOLD SIDE STEER  SWIPE SIDE SPIN' : 'A D STEER  SPACE TRICK  W S FLIP',
+    CX,
+    297,
+  );
+  drawTextCentered(
+    fb,
+    g.ghost
+      ? 'RACE YOUR GHOST ON THIS SEED'
+      : g.touch
+        ? 'SWIPE UP DOWN FLIP  2 FINGERS BRAKE'
+        : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
     CX,
     306,
   );

@@ -21,9 +21,6 @@ const canvas = required<HTMLCanvasElement>('game');
 const stage = required<HTMLElement>('stage');
 const pauseBtn = required<HTMLButtonElement>('pause-btn');
 const muteBtn = required<HTMLButtonElement>('mute-btn');
-const trickBtn = required<HTMLButtonElement>('trick-btn');
-const flipUpBtn = required<HTMLButtonElement>('flip-up-btn');
-const flipDownBtn = required<HTMLButtonElement>('flip-down-btn');
 const status = required<HTMLElement>('status');
 canvas.width = W;
 canvas.height = H;
@@ -108,21 +105,6 @@ pauseBtn.addEventListener('click', () => {
 muteBtn.addEventListener('click', () => {
   input.push('mute');
   muteBtn.blur();
-});
-trickBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  input.usingTouch = true;
-  input.push('trick');
-});
-flipUpBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  input.usingTouch = true;
-  input.push('flipUp');
-});
-flipDownBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  input.usingTouch = true;
-  input.push('flipDown');
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) game.autoPause();

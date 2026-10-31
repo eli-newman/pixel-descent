@@ -317,7 +317,7 @@ describe('flip input', () => {
     input.dispose();
   });
 
-  it('the game turns up, down and the touch buttons into a flip, and up is not a trick', () => {
+  it('the game turns up (frontflip), down (backflip) and the held flip key into a flip, and up is not a trick', () => {
     const { game, input } = makeGame('flip-input');
     input.push('start');
     game.update(1 / 120);
@@ -330,11 +330,11 @@ describe('flip input', () => {
     };
     input.push('up');
     game.update(1 / 120);
-    input.push('flipDown');
+    input.push('down');
     game.update(1 / 120);
     input.flipValue = 1;
     game.update(1 / 120);
-    expect(sent.map((s) => s?.flip)).toEqual([1, -1, 1]);
+    expect(sent.map((s) => s?.flip)).toEqual([-1, 1, 1]);
     expect(sent.some((s) => s?.trick)).toBe(false);
   });
 });
