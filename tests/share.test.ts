@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Framebuffer, OFF, YELLOW } from '../src/render/framebuffer';
-import { CARD_H, CARD_W, renderCard, shareText, shareUrl, type ResultCardData } from '../src/share';
+import {
+  CARD_H,
+  CARD_W,
+  renderCard,
+  shareText,
+  shareUrl,
+  type ResultCardData,
+} from '../src/render/share';
 
 const card: ResultCardData = {
   seed: 'k3m9qa',
@@ -10,7 +17,6 @@ const card: ResultCardData = {
   stars: 8,
   nearMisses: 12,
   tricks: 3,
-  gates: 2,
   cause: 'obstacle',
   newBest: true,
 };

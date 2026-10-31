@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { GHOST_ENABLED } from '../src/config';
-import { menuButtons } from '../src/menu';
-import { dailySeed } from '../src/rng';
-import { makeGame, stepUntil } from './helpers/fakes';
+import { menuButtons } from '../src/state/menu';
+import { dailySeed } from '../src/core/rng';
+import { SAVE_PREFIX } from '../src/core/config';
+import { ACHIEVEMENTS } from '../src/state/progress';
+import { makeGame, memoryStorage, stepUntil } from './helpers/fakes';
 
 describe('game state machine', () => {
   it('walks title, playing, paused, playing', () => {
@@ -125,28 +126,25 @@ describe('game state machine', () => {
     expect((shared[0] as { seed: string }).seed).toBe('shareme');
   });
 
-  it.skipIf(!GHOST_ENABLED)('records a ghost for a new seed best and loads it next time', () => {
-    const rig = makeGame('ghosty');
-    rig.input.push('start');
-    stepUntil(rig.game, () => rig.game.phase === 'over');
-    expect(rig.store.ghost('ghosty')).not.toBeNull();
-    rig.game.newRun('ghosty');
-    expect(rig.game.ghost).not.toBeNull();
-    // the ghost replays the saved run exactly
-    rig.input.push('start');
-    stepUntil(rig.game, () => rig.game.phase === 'over');
-    const ghost = rig.game.ghost;
-    const saved = rig.store.ghost('ghosty');
-    expect(ghost).not.toBeNull();
-    expect(ghost?.scoreValue).toBe(saved?.score);
+  it('throws up spray while braking and none otherwise', () => {
+    const { game, input } = makeGame('spray');
+    input.push('start');
+    for (let i = 0; i < 240; i++) game.update(1 / 120);
+    expect(game.particles.count).toBe(0);
+    input.brakeValue = true;
+    for (let i = 0; i < 120 && !game.sim.crashed; i++) game.update(1 / 120);
+    expect(game.particles.count).toBeGreaterThan(0);
   });
 
-  it('keeps reduced motion free of shake and punch', () => {
-    const { game, input } = makeGame('calm', { reducedMotion: () => true });
-    input.push('start');
-    stepUntil(game, () => game.phase === 'over');
-    expect(game.shake).toBe(0);
-    expect(game.punch).toBe(0);
-    expect(game.particles.count).toBe(0);
+  it('a save holding a retired achievement still loads and does not count it', () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      SAVE_PREFIX + 'progress',
+      JSON.stringify({ achievements: { photo: '2026-01-02', d250: '2026-01-03' } }),
+    );
+    const { game } = makeGame('rig', {}, storage);
+    expect(ACHIEVEMENTS.some((a) => a.id === 'photo')).toBe(false);
+    expect(game.progress.achievements['photo']).toBe('2026-01-02');
+    expect(game.achievementCount).toBe(1);
   });
 });

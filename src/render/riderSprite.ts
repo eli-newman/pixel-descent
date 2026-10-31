@@ -1,10 +1,6 @@
-import type { RiderPose } from '../rider';
+import { BOARD_LEN, RIDER_SCALE as SC } from '../core/config';
+import type { RiderPose } from '../sim/pose';
 import type { Framebuffer } from './framebuffer';
-
-/** Scale of the rider relative to the original 240x480 art. Larger than the first version so it reads at 180x320. */
-const SC = 0.85;
-/** Board length in px: it runs from the rider's feet along the heading to the nose. */
-export const BOARD_LEN = Math.round(23 * SC);
 
 type Pt = readonly [number, number];
 
@@ -115,18 +111,16 @@ class Mask {
   }
 
   /** Draw the set with a one pixel black halo so it reads on top of trees and snow. */
-  stamp(fb: Framebuffer, ghost = false): void {
+  stamp(fb: Framebuffer): void {
     const n = this.n;
-    if (!ghost) {
-      for (let k = 0; k < n; k++) {
-        const i = this.touched[k] ?? 0;
-        if (this.bits[i] !== 1) continue;
-        const x = (i % GRID) + this.ox;
-        const y = Math.floor(i / GRID) + this.oy;
-        for (let a = -1; a <= 1; a++) {
-          for (let b = -1; b <= 1; b++) {
-            if (!this.has(x + a, y + b)) fb.erase(x + a, y + b);
-          }
+    for (let k = 0; k < n; k++) {
+      const i = this.touched[k] ?? 0;
+      if (this.bits[i] !== 1) continue;
+      const x = (i % GRID) + this.ox;
+      const y = Math.floor(i / GRID) + this.oy;
+      for (let a = -1; a <= 1; a++) {
+        for (let b = -1; b <= 1; b++) {
+          if (!this.has(x + a, y + b)) fb.erase(x + a, y + b);
         }
       }
     }
@@ -135,7 +129,6 @@ class Mask {
       if (this.bits[i] !== 1) continue;
       const x = (i % GRID) + this.ox;
       const y = Math.floor(i / GRID) + this.oy;
-      if (ghost && (x + y) % 2 !== 0) continue;
       fb.put(x, y);
     }
   }
@@ -169,8 +162,6 @@ export function flipTuck(pitch: number): number {
 
 export interface DrawOptions {
   style?: RiderStyle;
-  /** Draw as a dithered, outline-free silhouette (the replay ghost). */
-  ghost?: boolean;
   /** Seconds, for the fluttering scarf. */
   time?: number;
 }
@@ -181,63 +172,92 @@ export interface DrawOptions {
  * Going straight downhill at speed (pose.tuck) drops the rider into a low crouch with the board
  * drawn as a long outline pointing straight down the screen.
  */
-export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = {}): void {
+export function drawRider(
+  fb: Framebuffer,
+  pose: Readonly<RiderPose>,
+  opts: Readonly<DrawOptions> = {},
+): void {
   const style = opts.style ?? DEFAULT_STYLE;
-  const { x: rx, y: ry, nx, ny, face: mv, up, ang, steep } = pose;
   // Mid-flip the rider tucks his limbs in; upright (or a full turn) changes nothing.
   const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
-  const n: Pt = [nx, ny];
-  mask.reset(rx, ry - 10);
-  const set = mask;
+  mask.reset(pose.x, pose.y - 10);
+  maskBoard(mask, pose, style.board);
+  maskBody(mask, pose, tuck, style.rider, opts.time ?? 0);
+  if (flipping) mask.squashY(flipScale(pose.pitch));
+  mask.stamp(fb);
+}
 
-  // board: tail on the track head, solid capsule, outlined when it points steeply downhill
-  {
-    fill.reset(rx, ry - 10);
-    const BLEN = BOARD_LEN;
-    const hw = steep ? 2.3 : 1.5;
-    const y0 = Math.floor(Math.min(ry, ry + n[1] * BLEN)) - 4;
-    const y1 = Math.ceil(Math.max(ry, ry + n[1] * BLEN)) + 4;
-    const x0 = Math.floor(Math.min(rx, rx + n[0] * BLEN)) - 4;
-    const x1 = Math.ceil(Math.max(rx, rx + n[0] * BLEN)) + 4;
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        const wx = x - rx;
-        const wy = y - ry;
-        const u = Math.max(0, Math.min(BLEN, wx * n[0] + wy * n[1]));
-        const tip = Math.min(u, BLEN - u);
-        const w = hw * Math.min(1, 0.45 + tip / 4);
-        const curl = -Math.pow(Math.max(0, (u - BLEN + 5) / 5), 2) * 2 * (1 - ang / 110);
-        if (Math.hypot(wx - n[0] * u, wy - n[1] * u - curl) <= w) fill.add(x, y);
-      }
-    }
-    for (let y = y0; y <= y1; y++) {
-      for (let x = x0; x <= x1; x++) {
-        if (!fill.has(x, y)) continue;
-        const interior =
-          fill.has(x + 1, y) && fill.has(x - 1, y) && fill.has(x, y + 1) && fill.has(x, y - 1);
-        if (!steep || !interior) set.add(x, y);
-      }
-    }
-    // Board pattern: toggle pixels down the middle (filled in where the board is hollow, cut out where it is solid).
-    const toggle = (u: number): void => {
-      const px = rx + n[0] * u;
-      const py = ry + n[1] * u;
-      if (steep) set.add(px, py);
-      else set.delete(px, py);
-    };
-    for (let u = 3; u < BLEN - 2; u++) {
-      if (style.board === 1 && u % 4 < 2) toggle(u);
-      if (style.board === 2 && u % 4 === 1) toggle(u);
-    }
-    if (style.board === 3) {
-      // twin tip: notch both ends
-      set.delete(rx + n[0] * 0.5, ry + n[1] * 0.5);
-      set.delete(rx + n[0] * (BLEN - 0.5), ry + n[1] * (BLEN - 0.5));
+/** The board: tail on the track head, solid capsule, outlined when it points steeply downhill. */
+function maskBoard(set: Mask, pose: Readonly<RiderPose>, board: number): void {
+  const { x: rx, y: ry, nx, ny, ang, steep } = pose;
+  const n: Pt = [nx, ny];
+  fill.reset(rx, ry - 10);
+  const BLEN = BOARD_LEN;
+  const hw = steep ? 2.3 : 1.5;
+  const y0 = Math.floor(Math.min(ry, ry + n[1] * BLEN)) - 4;
+  const y1 = Math.ceil(Math.max(ry, ry + n[1] * BLEN)) + 4;
+  const x0 = Math.floor(Math.min(rx, rx + n[0] * BLEN)) - 4;
+  const x1 = Math.ceil(Math.max(rx, rx + n[0] * BLEN)) + 4;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const wx = x - rx;
+      const wy = y - ry;
+      const u = Math.max(0, Math.min(BLEN, wx * n[0] + wy * n[1]));
+      const tip = Math.min(u, BLEN - u);
+      const w = hw * Math.min(1, 0.45 + tip / 4);
+      const curl = -Math.pow(Math.max(0, (u - BLEN + 5) / 5), 2) * 2 * (1 - ang / 110);
+      if (Math.hypot(wx - n[0] * u, wy - n[1] * u - curl) <= w) fill.add(x, y);
     }
   }
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      if (!fill.has(x, y)) continue;
+      const interior =
+        fill.has(x + 1, y) && fill.has(x - 1, y) && fill.has(x, y + 1) && fill.has(x, y - 1);
+      if (!steep || !interior) set.add(x, y);
+    }
+  }
+  // Board pattern: toggle pixels down the middle (filled in where the board is hollow, cut out where it is solid).
+  const toggle = (u: number): void => {
+    const px = rx + n[0] * u;
+    const py = ry + n[1] * u;
+    if (steep) set.add(px, py);
+    else set.delete(px, py);
+  };
+  for (let u = 3; u < BLEN - 2; u++) {
+    if (board === 1 && u % 4 < 2) toggle(u);
+    if (board === 2 && u % 4 === 1) toggle(u);
+  }
+  if (board === 3) {
+    // twin tip: notch both ends
+    set.delete(rx + n[0] * 0.5, ry + n[1] * 0.5);
+    set.delete(rx + n[0] * (BLEN - 0.5), ry + n[1] * (BLEN - 0.5));
+  }
+}
 
-  // rider: legs are solved to land exactly on the board
+/** The joints of the rider for one pose, in screen pixels. */
+interface Skeleton {
+  n: Pt;
+  /** +1 heading right (heel side), -1 heading left (toe side). */
+  mv: 1 | -1;
+  heel: boolean;
+  /** Straight downhill the rider is seen almost head on. */
+  rear: boolean;
+  hip: Pt;
+  sh: Pt;
+  head: Pt;
+  /** Feet on the board and the knees above them: front then back. */
+  ff: Pt;
+  fb: Pt;
+  kf: Pt;
+  kb: Pt;
+}
+
+/** Legs are solved to land exactly on the board. */
+function solveSkeleton(pose: Readonly<RiderPose>, tuck: number): Skeleton {
+  const { x: rx, y: ry, nx, ny, face: mv, up, steep } = pose;
+  const n: Pt = [nx, ny];
   const along = (u: number): Pt => [rx + n[0] * u, ry + n[1] * u];
   const M = along(11.5 * SC);
   const FF = along(17 * SC);
@@ -260,24 +280,27 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
     (hip[1] + f[1]) / 2 - 0.5,
   ];
   const ff: Pt = [FF[0], FF[1] - 1];
-  const fb2: Pt = [FB[0], FB[1] - 1];
-  const kf = knee(ff);
-  const kb = knee(fb2);
+  const fb: Pt = [FB[0], FB[1] - 1];
+  const rear = steep && pose.ang > 74;
+  return { n, mv, heel, rear, hip, sh, head, ff, fb, kf: knee(ff), kb: knee(fb) };
+}
+
+function maskLegsAndTorso(set: Mask, { hip, sh, ff, fb, kf, kb }: Readonly<Skeleton>): void {
   set.line(hip[0], hip[1], kf[0], kf[1], 2);
   set.line(kf[0], kf[1], ff[0], ff[1], 2);
   set.line(hip[0], hip[1], kb[0], kb[1], 2);
-  set.line(kb[0], kb[1], fb2[0], fb2[1], 2);
+  set.line(kb[0], kb[1], fb[0], fb[1], 2);
   set.line(hip[0], hip[1], sh[0], sh[1], 3); // torso
-  const rear = steep && pose.ang > 74;
-  if (rear) {
-    // Straight downhill the rider is seen almost head on: broad shoulders, arms hanging to the sides.
+}
+
+function maskArms(set: Mask, b: Readonly<Skeleton>, tuck: number): void {
+  const { n, heel, hip, sh, kf, kb } = b;
+  if (b.rear) {
+    // Seen head on: broad shoulders, arms hanging to the sides.
     set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
     set.line(sh[0] - 4, sh[1], hip[0] - 4, hip[1] - 1 + tuck * 3, 1);
     set.line(sh[0] + 4, sh[1], hip[0] + 4, hip[1] - 1 + tuck * 3, 1);
     set.line(hip[0] - 2, hip[1], hip[0] + 2, hip[1], 2);
-  }
-  if (rear) {
-    // arms already drawn
   } else if (tuck > 0.45) {
     // arms folded in against the body, hands near the knees
     set.line(sh[0], sh[1] + 1, kf[0], kf[1] - 1, 1);
@@ -292,14 +315,20 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
     ); // front arm reaches along the board
     set.line(sh[0], sh[1] + 1, sh[0] - n[0] * 4 * SC, sh[1] + 4 * SC, 1); // back arm
   }
-  for (let j = 0; j < 3; j++) for (let i = -2; i <= 1; i++) set.add(head[0] + i, head[1] - 1 + j); // helmet
+}
+
+function maskHelmet(set: Mask, { head, rear }: Readonly<Skeleton>): void {
+  for (let j = 0; j < 3; j++) for (let i = -2; i <= 1; i++) set.add(head[0] + i, head[1] - 1 + j);
   if (rear) {
     set.add(head[0] + 2, head[1]);
     set.add(head[0] + 2, head[1] + 1);
     set.add(head[0] - 3, head[1]);
     set.add(head[0] - 3, head[1] + 1);
   }
-  headgear(set, style.rider, head, mv, opts.time ?? 0);
+}
+
+/** Cut the face: goggles from the front, a vent slot from behind. */
+function cutFace(set: Mask, { head, heel, mv }: Readonly<Skeleton>): void {
   if (!heel) {
     // goggles: a hollow lens on the front of the helmet
     const gx = head[0] + (mv > 0 ? 1 : -2);
@@ -311,8 +340,22 @@ export function drawRider(fb: Framebuffer, pose: RiderPose, opts: DrawOptions = 
     set.delete(head[0], head[1] + 1);
     set.delete(head[0] - 1, head[1] + 1);
   }
-  if (flipping) set.squashY(flipScale(pose.pitch));
-  set.stamp(fb, opts.ghost === true);
+}
+
+/** The rider, in paint order: the headgear goes on before the face is cut. */
+function maskBody(
+  set: Mask,
+  pose: Readonly<RiderPose>,
+  tuck: number,
+  rider: number,
+  time: number,
+): void {
+  const b = solveSkeleton(pose, tuck);
+  maskLegsAndTorso(set, b);
+  maskArms(set, b, tuck);
+  maskHelmet(set, b);
+  headgear(set, rider, b.head, b.mv, time);
+  cutFace(set, b);
 }
 
 /** Unlockable headgear: a bobble hat, a fluttering scarf or a pair of ears. */
@@ -339,39 +382,6 @@ function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): 
     set.add(hx + 1, hy - 3);
     set.add(hx + 1, hy - 4);
     set.add(hx + 2 * mv, hy - 4);
-  }
-}
-
-/** Powder cloud on steep sections and spray flecks flying off the tail, looping with time. `tuck` stretches the plume. */
-export function drawSnowKick(
-  fb: Framebuffer,
-  pose: RiderPose,
-  time: number,
-  tuck = 0,
-  air = false,
-): void {
-  if (air) return;
-  const { x: rx, y: ry, nx, ny, ang } = pose;
-  const dx = -ny;
-  const dy = nx;
-  const long = 1 + tuck * 1.2;
-  if (ang > 55) {
-    const n = 9 + Math.round(tuck * 6);
-    for (let k = 0; k < n; k++) {
-      const ph = (time * 1.2 + k / n) % 1;
-      fb.put(
-        rx - nx * (2 + ph * 10 * long) + ((k % 3) - 1) * 3 * ph,
-        ry - ny * (2 + ph * 10 * long) - ph * 6 * (k % 2 ? 1 : 0.5),
-      );
-    }
-  }
-  for (let k = 0; k < 7; k++) {
-    const ph = (time * 1.6 + k / 7) % 1;
-    const back = 2 + ph * 14 * long;
-    const rise = ph * (4 + (k % 3) * 2) - 1;
-    if (ph < 0.8 && (k + Math.floor(time * 6)) % 3 !== 0) {
-      fb.put(rx - nx * back + dx * (2 - rise), ry - ny * back + dy * (2 - rise) - rise * 0.4);
-    }
   }
 }
 
@@ -415,18 +425,4 @@ export function drawWipeout(fb: Framebuffer, x: number, y: number, t: number, fa
     }
   }
   set.stamp(fb);
-}
-
-/** Little stars circling a rider who just wiped out. */
-export function drawDizzy(fb: Framebuffer, x: number, y: number, time: number): void {
-  for (let i = 0; i < 3; i++) {
-    const a = time * 4 + (i * Math.PI * 2) / 3;
-    const sx = Math.round(x + Math.cos(a) * 8);
-    const sy = Math.round(y - 14 + Math.sin(a) * 2.5);
-    fb.put(sx, sy);
-    fb.put(sx - 1, sy);
-    fb.put(sx + 1, sy);
-    fb.put(sx, sy - 1);
-    fb.put(sx, sy + 1);
-  }
 }

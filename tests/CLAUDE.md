@@ -1,0 +1,34 @@
+# tests
+
+Unit tests use Vitest in a node environment with no browser: run `npm test`. Browser tests in `e2e/` use Playwright: run `npm run test:e2e` (first run `npx playwright install chromium firefox webkit`).
+
+| File                                                                                      | Covers                                                                                                                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sim.test.ts`, `rider.test.ts`, `flip.test.ts`, `manualSpin.test.ts`                      | Sim rules, rider physics, flips and manual spin.                                                                                                                                                                                                                                                     |
+| `collision.test.ts`, `score.test.ts`, `spawner.test.ts`, `rng.test.ts`, `detMath.test.ts` | Hitboxes, scoring, course generation, seeded RNG, cross-engine exp.                                                                                                                                                                                                                                  |
+| `game.test.ts`, `touch.test.ts`, `progress.test.ts`                                       | Game state machine, retired achievements in old saves, touch input, achievements and gear.                                                                                                                                                                                                           |
+| `storage.test.ts`, `share.test.ts`                                                        | Saved data (including saves from before ghosts and gates were removed), share card text.                                                                                                                                                                                                             |
+| `render.test.ts`                                                                          | Golden frames: FNV-1a hashes of the real scene and UI output across one scripted calm-mode run (title screens, ride, air, spin, flip, pause, crash, game over). A changed hash means a visible pixel changed. Refresh with `npx vitest run tests/render.test.ts -u`, only after looking at the game. |
+| `contrast.test.ts`                                                                        | The real palette from `render/framebuffer.ts` passes WCAG AAA on black, matches `--yellow` in `style.css`, and real rendered screens use nothing else.                                                                                                                                               |
+| `viewport.test.ts`, `loop.test.ts`, `effects.test.ts`                                     | Canvas fitting, the fixed timestep with a fake `requestAnimationFrame`, the particle pool.                                                                                                                                                                                                           |
+| `helpers/fakes.ts`, `helpers/bot.ts`, `helpers/node.d.ts`                                 | Fake storage, input, audio; a scripted rider; the one Node type the tests need.                                                                                                                                                                                                                      |
+
+## Browser tests (`e2e/`)
+
+| File                 | Covers                                                                                                                                                                                                                                                                                                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `e2e/smoke.spec.ts`  | Chromium only: the production bundle loads, draws, plays and pauses on desktop and on a touch phone viewport.                                                                                                                                                                                                                           |
+| `e2e/course.spec.ts` | Chromium, Firefox and WebKit: 62 seeds (50 random-style, 12 daily) to 7500 m each hash bit-identically to node. Bundles the real course code with Vite and injects it, so production has no test hook. A failure here means shared seed links would give different courses in different browsers: fix the code, do not loosen the test. |
+| `e2e/courseHash.ts`  | The hasher that `course.spec.ts` runs in each engine: exact bytes of every object plus the unrounded path and difficulty curves. Not a test itself.                                                                                                                                                                                     |
+
+## Rules
+
+- No `expect` inside a deep loop. It costs microseconds per call, and three tests once spent 2 to 3s on it unloaded and 13s under load. Check with plain code, collect the offenders, then `expect(offenders).toEqual([])` once, which also reports them on failure.
+- `testTimeout` is 30s in `vite.config.ts`, because every test is synchronous CPU work and the 5s default only measured machine contention. A slow test is still a smell: fix the test before leaning on the timeout.
+- Import from `../src/<folder>/<file>`. Tests mirror behavior, not file layout, so a moved source file only needs import path updates.
+- A bug fix gets a test that fails before the fix.
+- Never skip or delete a failing test to get green. Fix the cause.
+
+## Keeping docs in sync (mandatory)
+
+When you add, remove or rename a test file or helper, update this table in the same change.

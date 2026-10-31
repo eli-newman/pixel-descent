@@ -1,5 +1,5 @@
-import { START_X, W } from '../config';
-import { Rng } from '../rng';
+import { START_X, W } from '../core/config';
+import { Rng } from '../core/rng';
 import { Framebuffer, OFF, WHITE } from './framebuffer';
 
 /** Height of the pre-rendered start area (peaks, foothills, gate), in world pixels. */

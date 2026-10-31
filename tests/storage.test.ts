@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { LEGACY_BEST_KEY, SAVE_PREFIX } from '../src/config';
-import { Store, DEFAULT_SETTINGS } from '../src/storage';
+import { LEGACY_BEST_KEY, SAVE_PREFIX } from '../src/core/config';
+import { Store, DEFAULT_SETTINGS, type StorageLike } from '../src/state/storage';
 import { memoryStorage } from './helpers/fakes';
+
+/** Like localStorage: keys can be listed and removed. */
+function listableStorage(): StorageLike & { data: Map<string, string> } {
+  const data = new Map<string, string>();
+  return {
+    data,
+    getItem: (k) => data.get(k) ?? null,
+    setItem: (k, v) => void data.set(k, v),
+    get length() {
+      return data.size;
+    },
+    key: (i) => [...data.keys()][i] ?? null,
+    removeItem: (k) => void data.delete(k),
+  };
+}
 
 const e = (score: number): { score: number; dist: number; date: string } => ({
   score,
@@ -84,22 +99,97 @@ describe('store', () => {
     expect(DEFAULT_SETTINGS.music).toBe(false);
   });
 
-  it('caps stored ghosts', () => {
+  it('loads a save written before ghosts and gates were removed', () => {
     const st = memoryStorage();
+    st.setItem(
+      SAVE_PREFIX + 'scores',
+      JSON.stringify({
+        best: 500,
+        seeds: { old: [{ score: 500, dist: 100, date: '2026-01-02' }] },
+        order: ['old'],
+        ghosts: ['old'],
+      }),
+    );
+    st.setItem(
+      SAVE_PREFIX + 'progress',
+      JSON.stringify({
+        stats: { runs: 7, tricks: 12, gates: 3 },
+        achievements: { photo: '2026-01-02' },
+        gear: { board: 'dots', rider: 'classic' },
+      }),
+    );
+    st.setItem(SAVE_PREFIX + 'ghost:old', JSON.stringify({ seed: 'old', changes: [] }));
     const s = new Store(st);
-    for (let i = 0; i < 20; i++) {
-      s.saveGhost(`g${i}`, {
-        seed: `g${i}`,
-        touch: false,
-        steps: 1,
-        score: 1,
-        dist: 1,
-        changes: [0, 8],
-      });
+    expect(s.overallBest()).toBe(500);
+    expect(s.seedBest('old')).toBe(500);
+    const p = s.progress();
+    expect(p.stats.runs).toBe(7);
+    expect(p.stats.tricks).toBe(12);
+    expect(p.achievements['photo']).toBe('2026-01-02');
+    expect(p.gear.board).toBe('dots');
+    s.recordRun('new', { score: 10, dist: 1, date: '2026-01-03' });
+    s.saveProgress();
+    const again = new Store(st);
+    expect(again.seedBest('old')).toBe(500);
+    expect(again.seedBest('new')).toBe(10);
+    expect(again.progress().stats.runs).toBe(7);
+  });
+
+  it('clears old ghost replays and keeps everything else', () => {
+    const st = listableStorage();
+    st.setItem(SAVE_PREFIX + 'ghost:a', '{}');
+    st.setItem(SAVE_PREFIX + 'ghost:b', '{}');
+    const kept = {
+      [SAVE_PREFIX + 'scores']: JSON.stringify({ best: 9, seeds: {}, order: [] }),
+      [SAVE_PREFIX + 'settings']: JSON.stringify({ muted: true }),
+      [SAVE_PREFIX + 'progress']: JSON.stringify({ stats: { runs: 3 } }),
+      [LEGACY_BEST_KEY]: '5',
+      'pixel-descent:v1:ghost:a': 'other version',
+      'someone-else:ghost:a': 'not ours',
+    };
+    for (const [k, v] of Object.entries(kept)) st.setItem(k, v);
+    const s = new Store(st);
+    expect(Object.fromEntries(st.data)).toEqual(kept);
+    expect(s.overallBest()).toBe(9);
+    expect(s.settings().muted).toBe(true);
+    expect(s.progress().stats.runs).toBe(3);
+  });
+
+  it('survives storage that throws while clearing old keys', () => {
+    const lists = listableStorage();
+    lists.setItem(SAVE_PREFIX + 'ghost:a', '{}');
+    const badKey: StorageLike = {
+      ...lists,
+      length: 1,
+      key: () => {
+        throw new Error('blocked');
+      },
+    };
+    const badRemove: StorageLike = {
+      ...lists,
+      length: 1,
+      key: () => SAVE_PREFIX + 'ghost:a',
+      removeItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    for (const bad of [badKey, badRemove]) {
+      expect(new Store(bad).overallBest()).toBe(0);
     }
-    const keys = [...st.data.keys()].filter((k) => k.includes('ghost:'));
-    expect(keys.length).toBeLessThanOrEqual(12);
-    expect(s.ghost('g19')).not.toBeNull();
-    expect(s.ghost('g0')).toBeNull();
+  });
+
+  it('drops removed fields from a save the next time it is written', () => {
+    const st = memoryStorage();
+    st.setItem(
+      SAVE_PREFIX + 'scores',
+      JSON.stringify({ best: 5, seeds: {}, order: [], ghosts: ['old'] }),
+    );
+    st.setItem(SAVE_PREFIX + 'progress', JSON.stringify({ stats: { runs: 1, gates: 3 } }));
+    const s = new Store(st);
+    s.recordRun('a', e(10));
+    s.progress();
+    s.saveProgress();
+    expect(st.data.get(SAVE_PREFIX + 'scores')).not.toContain('ghosts');
+    expect(st.data.get(SAVE_PREFIX + 'progress')).not.toContain('gates');
   });
 });

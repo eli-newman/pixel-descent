@@ -1,6 +1,6 @@
-import { CHECKPOINTS_ENABLED, H, KMH_PER_PXS, W } from '../config';
-import { PANEL_SLIDE, type Game } from '../game';
-import { menuButtons, OVER_PANEL_TOP, type ButtonId, type UiButton } from '../menu';
+import { H, KMH_PER_PXS, W } from '../core/config';
+import type { GameView } from '../state/view';
+import { menuButtons, OVER_PANEL_TOP, type ButtonId, type UiButton } from '../state/menu';
 import {
   ACHIEVEMENTS,
   BOARDS,
@@ -10,12 +10,12 @@ import {
   challengeDone,
   riderIndex,
   type GearDef,
-} from '../progress';
+} from '../state/progress';
 import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { hudRect } from './layout';
 import { drawRider, type RiderStyle } from './riderSprite';
-import type { RiderPose } from '../rider';
+import type { RiderPose } from '../sim/pose';
 
 const CX = W / 2;
 
@@ -25,12 +25,7 @@ function panel(fb: Framebuffer, y0: number, y1: number): void {
   fb.strokeRect(10, y0 + 2, W - 20, y1 - y0 - 4, WHITE);
 }
 
-/** Yellow text that blinks gently (steady when reduced motion is preferred). */
-function blink(g: Game): boolean {
-  return g.reduced || Math.floor(g.animT * 2.2) % 2 === 0;
-}
-
-function labelOf(g: Game, id: ButtonId): string {
+function labelOf(g: GameView, id: ButtonId): string {
   const on = (v: boolean): string => (v ? 'ON' : 'OFF');
   switch (id) {
     case 'play':
@@ -86,13 +81,12 @@ function labelOf(g: Game, id: ButtonId): string {
 
 function drawButton(
   fb: Framebuffer,
-  g: Game,
-  bt: UiButton,
+  g: GameView,
+  bt: Readonly<UiButton>,
   focused: boolean,
-  dy = 0,
   selected = false,
 ): void {
-  const y = bt.y + dy;
+  const y = bt.y;
   const edge = bt.accent || selected ? YELLOW : WHITE;
   fb.fillRect(bt.x, y, bt.w, bt.h, OFF);
   fb.strokeRect(bt.x, y, bt.w, bt.h, edge);
@@ -106,7 +100,7 @@ function drawButton(
 }
 
 /** Heads-up display, title, pause and game over screens, all drawn into the low-res buffer. */
-export function renderUi(fb: Framebuffer, g: Game): void {
+export function renderUi(fb: Framebuffer, g: GameView): void {
   switch (g.phase) {
     case 'title':
       drawTitle(fb, g);
@@ -126,7 +120,7 @@ export function renderUi(fb: Framebuffer, g: Game): void {
   }
 }
 
-function drawHud(fb: Framebuffer, g: Game): void {
+function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   const big = g.settings.bigHud;
   const rect = hudRect(big);
@@ -152,8 +146,8 @@ function drawHud(fb: Framebuffer, g: Game): void {
   }
 }
 
-/** Speed read-out, score multiplier, combo meter and the avalanche warning. */
-function drawGauges(fb: Framebuffer, g: Game): void {
+/** Speed read-out, score multiplier and combo meter. */
+function drawGauges(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   const big = g.settings.bigHud;
   const live = g.phase === 'playing';
@@ -186,22 +180,9 @@ function drawGauges(fb: Framebuffer, g: Game): void {
     fb.strokeRect(x, y - 1, w, 6, YELLOW);
     fb.fillRect(x + 1, y, Math.round((w - 2) * sim.comboLeft), 4, YELLOW);
   }
-  // avalanche gauge on the right edge: how close the wall is
-  if (sim.danger > 0.15) {
-    const x = W - 7;
-    const top = 44;
-    const h = 60;
-    fb.fillRect(x - 2, top - 2, 7, h + 4, OFF);
-    fb.strokeRect(x - 1, top - 1, 5, h + 2, WHITE);
-    const f = Math.round(h * sim.danger);
-    if (sim.danger < 0.7 || g.reduced || Math.floor(g.animT * 6) % 2 === 0) {
-      fb.fillRect(x, top, 3, f, sim.danger > 0.6 ? YELLOW : WHITE);
-    }
-    drawTextHalo(fb, '!', x - 1, top + h + 4, YELLOW);
-  }
 }
 
-function drawTitle(fb: Framebuffer, g: Game): void {
+function drawTitle(fb: Framebuffer, g: GameView): void {
   switch (g.screen) {
     case 'main':
       drawMain(fb, g);
@@ -218,15 +199,15 @@ function drawTitle(fb: Framebuffer, g: Game): void {
   }
 }
 
-function drawButtons(fb: Framebuffer, g: Game, selected?: ButtonId): void {
+function drawButtons(fb: Framebuffer, g: GameView, selected?: ButtonId): void {
   const buttons = menuButtons(g);
   for (let i = 0; i < buttons.length; i++) {
     const bt = buttons[i];
-    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus, 0, bt.id === selected);
+    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus, bt.id === selected);
   }
 }
 
-function drawMain(fb: Framebuffer, g: Game): void {
+function drawMain(fb: Framebuffer, g: GameView): void {
   // title plate over the mountains
   fb.fillRect(22, 10, W - 44, 46, OFF);
   fb.strokeRect(22, 10, W - 44, 46, WHITE);
@@ -238,7 +219,7 @@ function drawMain(fb: Framebuffer, g: Game): void {
   const sb = g.seedBest;
   drawTextCentered(fb, sb > 0 ? `BEST ON SEED ${sb}` : 'NO SCORE ON THIS SEED YET', CX, 162);
   drawButtons(fb, g);
-  const daily = g.store.seedBest(g.today);
+  const daily = g.bestOn(g.today);
   drawTextCentered(
     fb,
     `TODAY ${daily > 0 ? daily : '-'}   ALL TIME ${g.overallBest}`,
@@ -256,18 +237,14 @@ function drawMain(fb: Framebuffer, g: Game): void {
   );
   drawTextCentered(
     fb,
-    g.ghost
-      ? 'RACE YOUR GHOST ON THIS SEED'
-      : g.touch
-        ? 'SWIPE UP DOWN FLIP  2 FINGERS BRAKE'
-        : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
+    g.touch ? 'SWIPE UP DOWN FLIP  2 FINGERS BRAKE' : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
     CX,
     306,
   );
 }
 
 /** The unfinished challenge closest to done. */
-function nextChallenge(g: Game): { name: string; value: number; target: number } | null {
+function nextChallenge(g: GameView): { name: string; value: number; target: number } | null {
   let best: { name: string; value: number; target: number; f: number } | null = null;
   for (const c of CHALLENGES) {
     if (challengeDone(c, g.progress)) continue;
@@ -278,13 +255,13 @@ function nextChallenge(g: Game): { name: string; value: number; target: number }
   return best;
 }
 
-function drawScores(fb: Framebuffer, g: Game): void {
+function drawScores(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'TOP 10', CX, 12, WHITE, 2);
   const seedLabel = g.scoreTab === 'daily' ? g.today : g.seed;
   drawButtons(fb, g, g.scoreTab === 'daily' ? 'tabDaily' : 'tabSeed');
   drawTextCentered(fb, `SEED ${seedLabel}`, CX, 62, YELLOW);
-  const list = g.store.leaderboard(seedLabel);
+  const list = g.leaderboard(seedLabel);
   for (let i = 0; i < 10; i++) {
     const e = list[i];
     const y = 76 + i * 12;
@@ -298,21 +275,14 @@ function drawScores(fb: Framebuffer, g: Game): void {
     }
   }
   drawTextCentered(fb, `ALL TIME BEST ${g.overallBest}`, CX, 206);
-  drawTextCentered(
-    fb,
-    g.scoreTab === 'seed' && g.ghost ? 'GHOST SAVED FOR THIS SEED' : '',
-    CX,
-    220,
-    WHITE,
-  );
   drawTextCentered(fb, 'SCORES STAY ON THIS DEVICE', CX, 262);
 }
 
 function gearRow(
   fb: Framebuffer,
-  g: Game,
+  g: GameView,
   title: string,
-  list: readonly GearDef[],
+  list: readonly Readonly<GearDef>[],
   idx: number,
   y: number,
 ): void {
@@ -325,7 +295,7 @@ function gearRow(
   void idx;
 }
 
-function drawGear(fb: Framebuffer, g: Game): void {
+function drawGear(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'GEAR', CX, 12, WHITE, 2);
   const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx };
@@ -352,7 +322,7 @@ function drawGear(fb: Framebuffer, g: Game): void {
   drawTextCentered(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
 }
 
-function drawGoals(fb: Framebuffer, g: Game): void {
+function drawGoals(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'GOALS', CX, 12, WHITE, 2);
   drawText(fb, 'CHALLENGES', 16, 32, YELLOW);
@@ -393,7 +363,7 @@ function drawGoals(fb: Framebuffer, g: Game): void {
   drawButtons(fb, g);
 }
 
-function drawPause(fb: Framebuffer, g: Game): void {
+function drawPause(fb: Framebuffer, g: GameView): void {
   panel(fb, 50, 244);
   drawTextCentered(fb, 'PAUSED', CX, 56, WHITE, 2);
   drawButtons(fb, g);
@@ -405,29 +375,21 @@ function drawPause(fb: Framebuffer, g: Game): void {
   drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 228, YELLOW);
 }
 
-function drawOver(fb: Framebuffer, g: Game): void {
+function drawOver(fb: Framebuffer, g: GameView): void {
   const res = g.result;
   if (!res) return;
-  const t = Math.min(1, (g.animT - g.overAt) / PANEL_SLIDE);
-  const ease = g.reduced ? 1 : 1 - Math.pow(1 - t, 3);
-  const top = Math.round(H + (OVER_PANEL_TOP - H) * ease);
-  const dy = top - OVER_PANEL_TOP;
+  const top = OVER_PANEL_TOP;
   panel(fb, top, top + 164);
-  drawTextCentered(fb, g.crashWord(), CX, top + 6, WHITE, 2);
+  drawTextCentered(fb, g.crashWord, CX, top + 6, WHITE, 2);
   drawTextCentered(fb, String(res.score), CX, top + 21, YELLOW, 3);
   if (res.newSeedBest) {
-    if (blink(g)) drawTextCentered(fb, 'NEW BEST ON THIS SEED!', CX, top + 41, YELLOW);
+    drawTextCentered(fb, 'NEW BEST ON THIS SEED!', CX, top + 41, YELLOW);
   } else {
     drawTextCentered(fb, `BEST ${g.seedBest}`, CX, top + 41, WHITE);
   }
   const sm = res.summary;
   drawTextCentered(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
-  drawTextCentered(
-    fb,
-    `${CHECKPOINTS_ENABLED ? `FLAGS ${sm.gates}  ` : ''}TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`,
-    CX,
-    top + 60,
-  );
+  drawTextCentered(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);
   const rank = res.rank;
   drawTextCentered(
     fb,
@@ -450,7 +412,7 @@ function drawOver(fb: Framebuffer, g: Game): void {
   const buttons = menuButtons(g);
   for (let i = 0; i < buttons.length; i++) {
     const bt = buttons[i];
-    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus, dy);
+    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus);
   }
   drawTextCentered(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
   const toast = g.toasts[0];

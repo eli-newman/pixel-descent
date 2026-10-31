@@ -10,7 +10,7 @@ import {
   cycleGear,
   sanitiseGear,
   type RunSummary,
-} from '../src/progress';
+} from '../src/state/progress';
 
 function run(over: Partial<RunSummary> = {}): RunSummary {
   return {
@@ -21,13 +21,11 @@ function run(over: Partial<RunSummary> = {}): RunSummary {
     stars: 1,
     laneStars: 0,
     nearMisses: 0,
-    gates: 0,
     tricks: 0,
     landings: 0,
     maxCombo: 0,
     sendItTime: 0,
     topSpeed: 100,
-    minGap: 300,
     time: 10,
     cause: 'obstacle',
     ...over,

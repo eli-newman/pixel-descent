@@ -1,15 +1,15 @@
-import { Sfx } from './audio';
-import { H, W } from './config';
-import { Game } from './game';
-import { Input } from './input';
-import { Loop } from './loop';
-import { normalizeSeed } from './rng';
+import { Sfx } from './platform/audio';
+import { H, W } from './core/config';
+import { Game } from './state/game';
+import { Input } from './platform/input';
+import { Loop } from './platform/loop';
+import { normalizeSeed } from './core/rng';
 import { Framebuffer } from './render/framebuffer';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
-import { shareResult } from './shareDom';
-import { Store } from './storage';
-import { fitCanvas } from './viewport';
+import { shareResult } from './platform/shareDom';
+import { Store } from './state/storage';
+import { fitCanvas } from './platform/viewport';
 
 function required<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -47,8 +47,6 @@ const game = new Game(
     store,
     input,
     sfx,
-    // One calm look on every device (no shake, zoom flash, face shot or snowfall; a lighter spray), so a phone and a desktop match.
-    reducedMotion: () => true,
     haptic: (ms) => {
       if (typeof navigator.vibrate === 'function') navigator.vibrate(ms);
     },
@@ -72,12 +70,11 @@ const game = new Game(
 
 const fb = new Framebuffer(W, H);
 const scene = new SceneRenderer(fb);
-let image: ImageData | null = null;
+const image = new ImageData(fb.data, W, H);
 
 function render(): void {
-  const out = scene.render(game);
-  renderUi(out, game);
-  if (!image || image.data !== out.data) image = new ImageData(out.data, W, H);
+  scene.render(game);
+  renderUi(fb, game);
   ctx?.putImageData(image, 0, 0);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
 }

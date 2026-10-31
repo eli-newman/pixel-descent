@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Rng, hash2, hashSeed, normalizeSeed, randomSeedString } from '../src/rng';
+import { Rng, hash2, hashSeed, normalizeSeed, randomSeedString } from '../src/core/rng';
 
 describe('rng', () => {
   it('produces the same sequence for the same seed', () => {
