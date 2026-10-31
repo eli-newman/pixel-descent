@@ -125,10 +125,13 @@ export function addFlip(s: ScoreState, flips: number, spinDeg: number, mult: num
   return pts;
 }
 
-/** Trick name for the toast: "BACKFLIP", "DOUBLE FRONTFLIP", "3X BACKFLIP". `turns` is signed. */
+/**
+ * Trick name for the toast: "FRONTFLIP", "DOUBLE BACKFLIP", "3X FRONTFLIP". `turns` is signed. The on-screen
+ * names are deliberately swapped from the code's sign convention, where positive turns are called a backflip.
+ */
 export function flipName(turns: number): string {
   const n = Math.abs(turns);
-  const base = turns > 0 ? 'BACKFLIP' : 'FRONTFLIP';
+  const base = turns > 0 ? 'FRONTFLIP' : 'BACKFLIP';
   if (n <= 1) return base;
   return `${n === 2 ? 'DOUBLE' : n === 3 ? 'TRIPLE' : `${n}X`} ${base}`;
 }
