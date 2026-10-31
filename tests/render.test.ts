@@ -144,7 +144,7 @@ describe('golden frames', () => {
         "ride-8s": "9f18132e",
         "spin": "03813f51",
         "start": "7ac9599c",
-        "title": "e4a149b5",
+        "title": "223e00fc",
         "title-gear": "f664c0b5",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
