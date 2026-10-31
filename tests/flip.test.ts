@@ -201,10 +201,10 @@ describe('flip scoring', () => {
   });
 
   it('names the tricks', () => {
-    expect(flipName(1)).toBe('BACKFLIP');
-    expect(flipName(-1)).toBe('FRONTFLIP');
-    expect(flipName(-2)).toBe('DOUBLE FRONTFLIP');
-    expect(flipName(2)).toBe('DOUBLE BACKFLIP');
+    expect(flipName(1)).toBe('FRONTFLIP');
+    expect(flipName(-1)).toBe('BACKFLIP');
+    expect(flipName(-2)).toBe('DOUBLE BACKFLIP');
+    expect(flipName(2)).toBe('DOUBLE FRONTFLIP');
   });
 });
 
