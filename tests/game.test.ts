@@ -31,10 +31,10 @@ describe('game state machine', () => {
     stepUntil(game, () => game.phase === 'over');
     expect(game.phase).toBe('over');
     expect(game.result).not.toBeNull();
-    expect(store.leaderboard('crashy')[0]?.score).toBe(game.result?.score);
+    expect(store.topRuns()[0]?.score).toBe(game.result?.score);
     expect(store.overallBest()).toBe(game.result?.score);
     expect(game.result?.rank).toBe(1);
-    expect(game.result?.newSeedBest).toBe(true);
+    expect(game.result?.newBest).toBe(true);
   });
 
   it('freezes the simulation, not the clock, during hit-stop', () => {
@@ -88,17 +88,51 @@ describe('game state machine', () => {
     expect(game.seed).toBe('d20261020');
   });
 
-  it('keeps best scores per seed as well as overall', () => {
+  it('keeps one best score across courses', () => {
     const { game, input, store } = makeGame('seeda');
     input.push('start');
     stepUntil(game, () => game.phase === 'over');
-    const a = store.seedBest('seeda');
+    const a = store.overallBest();
     expect(a).toBeGreaterThan(0);
-    expect(store.seedBest('seedb')).toBe(0);
-    expect(game.seedBest).toBe(a);
     game.newRun('seedb');
-    expect(game.seedBest).toBe(0);
     expect(game.overallBest).toBe(a);
+    expect(game.topRuns).toHaveLength(1);
+  });
+
+  it('counts a daily run on the daily board and an ordinary run only all time', () => {
+    const { game, input } = makeGame('ordinary');
+    input.push('start');
+    stepUntil(game, () => game.phase === 'over');
+    expect(game.dailyRuns).toHaveLength(0);
+    expect(game.dailyBest).toBe(0);
+    game.newRun(game.today, true);
+    stepUntil(game, () => game.phase === 'over');
+    expect(game.dailyRuns).toHaveLength(1);
+    expect(game.dailyBest).toBe(game.result?.score);
+    expect(game.topRuns).toHaveLength(2);
+  });
+
+  it('starts a fresh course when going back to the menu', () => {
+    const { game, input } = makeGame('first');
+    input.push('start');
+    stepUntil(game, () => game.phase === 'over');
+    for (let i = 0; i < 100; i++) game.update(1 / 120);
+    const tapButton = (id: string): void => {
+      const bt = menuButtons(game).find((x) => x.id === id);
+      expect(bt).toBeDefined();
+      input.tap((bt?.x ?? 0) + 3, (bt?.y ?? 0) + 3);
+      game.update(1 / 120);
+    };
+    tapButton('menu');
+    expect(game.phase).toBe('title');
+    expect(game.seed).not.toBe('first');
+    const second = game.seed;
+    game.begin();
+    input.push('pause');
+    game.update(1 / 120);
+    tapButton('quit');
+    expect(game.phase).toBe('title');
+    expect(game.seed).not.toBe(second);
   });
 
   it('remembers mute and settings between sessions', () => {

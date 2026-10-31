@@ -1,4 +1,4 @@
-import { BOARD_LEN, H, W } from '../core/config';
+import { H, W } from '../core/config';
 import type { DeepReadonly, GameView, SimView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
@@ -9,6 +9,7 @@ import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
 import { hudRect, type Rect } from './layout';
+import { TrackPainter } from './track';
 
 /** How tall a kicker is for its cast shadow, in pixels at the lip. */
 const RAMP_HEIGHT = 8;
@@ -16,6 +17,7 @@ const RAMP_HEIGHT = 8;
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
   private readonly backdrop = buildBackdrop();
+  private readonly track = new TrackPainter();
 
   constructor(private readonly fb: Framebuffer) {}
 
@@ -35,7 +37,8 @@ export class SceneRenderer {
       if (r.kind === 'cliff') this.drawCliff(r, cam);
       else this.drawRamp(r, cam);
     }
-    this.drawTrail(sim, cam, tuck);
+    this.track.draw(fb, sim.trail, cam);
+    this.drawLanded(g, cam);
     this.drawPickups(g, cam);
 
     // Cast shadows first, so every sprite sits on top of every shadow.
@@ -262,50 +265,6 @@ export class SceneRenderer {
     }
   }
 
-  /** The board trail: longer and wider the faster the rider is going. */
-  private drawTrail(sim: SimView, cam: number, tuck: number): void {
-    const t = sim.trail;
-    const wide = tuck > 0.35;
-    const fast = tuck > 0.7;
-    for (let i = 0; i < t.count; i++) {
-      const x = Math.round(t.x(i));
-      const y = Math.round(t.y(i)) - cam;
-      if (y < -2 || y > H + 2) continue;
-      const nx = t.nx(i);
-      const ny = t.ny(i);
-      if (nx !== 0 || ny !== 0) {
-        // Sideways board: it scrapes the snow from its tail (the track head) to its nose, no further.
-        // Draw the two edges of the scrape every time and a rung across only now and then, so it reads
-        // as a groove and not a solid slab.
-        const len = BOARD_LEN;
-        this.fb.put(x, y);
-        this.fb.put(x + Math.round(nx * len), y + Math.round(ny * len));
-        if (i % 5 === 0) {
-          const steps = Math.max(1, Math.round(len * Math.hypot(nx, ny)));
-          for (let k = 0; k <= steps; k += 2) {
-            const u = (k / steps) * len;
-            this.fb.put(x + Math.round(nx * u), y + Math.round(ny * u));
-          }
-        }
-        continue;
-      }
-      this.fb.put(x, y);
-      this.fb.put(x + 1, y);
-      if (i % 2 === 0) {
-        this.fb.put(x - 2, y);
-        this.fb.put(x + 3, y);
-      }
-      if (wide && i % 3 === 0) {
-        this.fb.put(x - 3, y);
-        this.fb.put(x + 4, y);
-      }
-      if (fast && i % 4 === 0) {
-        this.fb.put(x - 5, y);
-        this.fb.put(x + 6, y);
-      }
-    }
-  }
-
   private drawPickups(g: GameView, cam: number): void {
     for (const p of g.sim.pickups) {
       const x = p.x;
@@ -371,11 +330,14 @@ export class SceneRenderer {
 
   private drawParticles(g: GameView, cam: number): void {
     const p = g.particles;
-    for (let i = 0; i < p.count; i++) {
-      const life = p.life[i] ?? 0;
-      const max = p.max[i] ?? 1;
-      if (life < max * 0.25 && Math.floor(life * 20) % 2 === 0) continue;
-      this.fb.put(p.x[i] ?? 0, (p.y[i] ?? 0) - cam, WHITE);
+    for (let i = 0; i < p.count; i++) this.fb.put(p.x[i] ?? 0, (p.y[i] ?? 0) - cam, WHITE);
+  }
+
+  /** Spray that has come down. Drawn under everything standing on the snow. */
+  private drawLanded(g: GameView, cam: number): void {
+    const p = g.particles;
+    for (let i = 0; i < p.landedCount; i++) {
+      this.fb.put(p.landedX[i] ?? 0, (p.landedY[i] ?? 0) - cam, WHITE);
     }
   }
 }

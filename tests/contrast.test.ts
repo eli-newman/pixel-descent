@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { Framebuffer, OFF, WHITE, YELLOW } from '../src/render/framebuffer';
+import { Framebuffer, GREY, OFF, SOFT_GREY, WHITE, YELLOW } from '../src/render/framebuffer';
 import { SceneRenderer } from '../src/render/scene';
 import { renderUi } from '../src/render/ui';
 import { makeGame } from './helpers/fakes';
@@ -32,6 +32,14 @@ describe('high contrast', () => {
     expect(ratio(rgb(YELLOW), rgb(OFF))).toBeGreaterThanOrEqual(7);
   });
 
+  it('the track shadow stays visible on black but well below white, so it never reads as the line', () => {
+    expect(ratio(rgb(GREY), rgb(OFF))).toBeGreaterThanOrEqual(3);
+    expect(ratio(rgb(WHITE), rgb(GREY))).toBeGreaterThanOrEqual(3);
+    // Inside a side slip it sits on white, so it has to stay visible there without looking harsh.
+    expect(ratio(rgb(WHITE), rgb(SOFT_GREY))).toBeGreaterThanOrEqual(2);
+    expect(ratio(rgb(WHITE), rgb(SOFT_GREY))).toBeLessThan(ratio(rgb(WHITE), rgb(GREY)));
+  });
+
   it('uses the same yellow on the canvas and in the page', () => {
     const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
     const hex = /--yellow:\s*#([0-9a-f]{6})/i.exec(css)?.[1];
@@ -43,8 +51,8 @@ describe('high contrast', () => {
   it('draws real screens with nothing outside the palette', () => {
     const { game, input } = makeGame('palette');
     const scene = new SceneRenderer(new Framebuffer(W, H));
-    const palette = new Set([OFF, WHITE, YELLOW].map((c) => rgb(c).join()));
-    const check = (): void => {
+    const check = (colors: readonly number[]): void => {
+      const palette = new Set(colors.map((c) => rgb(c).join()));
       const out = scene.render(game);
       renderUi(out, game);
       // One expect per screen: expect is far too slow per pixel.
@@ -56,12 +64,12 @@ describe('high contrast', () => {
       expect([...stray]).toEqual([]);
     };
     game.update(1 / 120);
-    check();
+    check([OFF, WHITE, YELLOW]);
     input.push('start');
     for (let i = 0; i < 480; i++) game.update(1 / 120);
-    check();
+    check([OFF, WHITE, YELLOW, GREY, SOFT_GREY]);
     for (let i = 0; i < 120 * 300 && game.phase !== 'over'; i++) game.update(1 / 120);
     expect(game.phase).toBe('over');
-    check();
+    check([OFF, WHITE, YELLOW, GREY, SOFT_GREY]);
   });
 });

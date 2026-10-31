@@ -25,38 +25,84 @@ const e = (score: number): { score: number; dist: number; date: string } => ({
 });
 
 describe('store', () => {
-  it('keeps a sorted top 10 per seed', () => {
+  it('keeps a sorted top 10 across every course', () => {
     const s = new Store(memoryStorage());
-    for (let i = 1; i <= 14; i++) s.recordRun('a', e(i * 10));
-    const board = s.leaderboard('a');
-    expect(board).toHaveLength(10);
-    expect(board.map((x) => x.score)).toEqual([140, 130, 120, 110, 100, 90, 80, 70, 60, 50]);
+    for (let i = 1; i <= 14; i++) s.recordRun(`course${i}`, e(i * 10));
+    expect(s.topRuns().map((x) => x.score)).toEqual([140, 130, 120, 110, 100, 90, 80, 70, 60, 50]);
     expect(s.recordRun('a', e(5)).rank).toBeNull();
-    expect(s.recordRun('a', e(95)).rank).toBe(6);
+    expect(s.recordRun('b', e(95)).rank).toBe(6);
   });
 
-  it('tracks best per seed and overall separately', () => {
+  it('only counts a new best when it beats every course', () => {
     const s = new Store(memoryStorage());
-    const a = s.recordRun('a', e(500));
-    expect(a.newSeedBest && a.newOverallBest).toBe(true);
+    expect(s.recordRun('a', e(500)).newBest).toBe(true);
     const b = s.recordRun('b', e(300));
-    expect(b.newSeedBest).toBe(true);
-    expect(b.newOverallBest).toBe(false);
-    expect(s.seedBest('b')).toBe(300);
+    expect(b.newBest).toBe(false);
+    expect(b.best).toBe(500);
     expect(s.overallBest()).toBe(500);
-    expect(s.recordRun('b', e(200)).newSeedBest).toBe(false);
+  });
+
+  it('keeps a board for the newest daily course only', () => {
+    const s = new Store(memoryStorage());
+    s.recordRun('d20261019', e(50));
+    s.recordRun('d20261020', e(30));
+    s.recordRun('d20261020', e(40));
+    s.recordRun('random', e(99));
+    expect(s.dailyRuns('d20261020').map((x) => x.score)).toEqual([40, 30]);
+    expect(s.dailyBest('d20261020')).toBe(40);
+    expect(s.dailyRuns('d20261019')).toEqual([]);
+    expect(s.dailyBest('d20261021')).toBe(0);
+  });
+
+  it('does not let a link to an older daily course replace the newest board', () => {
+    const s = new Store(memoryStorage());
+    s.recordRun('d20261020', e(30));
+    s.recordRun('d20261019', e(70));
+    expect(s.dailyBest('d20261020')).toBe(30);
+    expect(s.overallBest()).toBe(70);
+    expect(s.topRuns()[0]?.score).toBe(70);
   });
 
   it('ignores zero scores', () => {
     const s = new Store(memoryStorage());
-    expect(s.recordRun('a', e(0)).rank).toBeNull();
-    expect(s.leaderboard('a')).toHaveLength(0);
+    const r = s.recordRun('d20261020', e(0));
+    expect(r.rank).toBeNull();
+    expect(r.newBest).toBe(false);
+    expect(s.topRuns()).toHaveLength(0);
+    expect(s.dailyRuns('d20261020')).toHaveLength(0);
   });
 
   it('persists across instances', () => {
     const st = memoryStorage();
-    new Store(st).recordRun('a', e(42));
-    expect(new Store(st).seedBest('a')).toBe(42);
+    const first = new Store(st);
+    first.recordRun('a', e(42));
+    first.recordRun('d20261020', e(21));
+    const again = new Store(st);
+    expect(again.topRuns().map((x) => x.score)).toEqual([42, 21]);
+    expect(again.dailyBest('d20261020')).toBe(21);
+  });
+
+  it('merges the per-seed boards of an older save into one all-time board', () => {
+    const st = memoryStorage();
+    const seeds = {
+      a: [e(300), e(100)],
+      b: [e(200)],
+      d20261019: [e(50)],
+      d20261020: [e(40), e(20)],
+      broken: 'nope',
+    };
+    st.setItem(SAVE_PREFIX + 'scores', JSON.stringify({ best: 900, seeds, order: ['a'] }));
+    const s = new Store(st);
+    expect(s.overallBest()).toBe(900);
+    expect(s.topRuns().map((x) => x.score)).toEqual([300, 200, 100, 50, 40, 20]);
+    expect(s.dailyRuns('d20261020').map((x) => x.score)).toEqual([40, 20]);
+    s.recordRun('c', e(250));
+    const raw = st.data.get(SAVE_PREFIX + 'scores');
+    expect(raw).not.toContain('seeds');
+    expect(raw).not.toContain('order');
+    const again = new Store(st);
+    expect(again.topRuns().map((x) => x.score)).toEqual([300, 250, 200, 100, 50, 40, 20]);
+    expect(again.dailyBest('d20261020')).toBe(40);
   });
 
   it('migrates the old single best score', () => {
@@ -64,7 +110,7 @@ describe('store', () => {
     st.setItem(LEGACY_BEST_KEY, '777');
     const s = new Store(st);
     expect(s.overallBest()).toBe(777);
-    expect(s.seedBest('x')).toBe(0);
+    expect(s.topRuns()).toEqual([]);
   });
 
   it('survives storage that throws', () => {
@@ -79,7 +125,7 @@ describe('store', () => {
     const s = new Store(bad);
     expect(s.overallBest()).toBe(0);
     expect(s.recordRun('a', e(10)).rank).toBe(1);
-    expect(s.leaderboard('a')).toHaveLength(1);
+    expect(s.topRuns()).toHaveLength(1);
     expect(s.saveSettings({ muted: true }).muted).toBe(true);
   });
 
@@ -121,7 +167,7 @@ describe('store', () => {
     st.setItem(SAVE_PREFIX + 'ghost:old', JSON.stringify({ seed: 'old', changes: [] }));
     const s = new Store(st);
     expect(s.overallBest()).toBe(500);
-    expect(s.seedBest('old')).toBe(500);
+    expect(s.topRuns()[0]?.score).toBe(500);
     const p = s.progress();
     expect(p.stats.runs).toBe(7);
     expect(p.stats.tricks).toBe(12);
@@ -130,8 +176,7 @@ describe('store', () => {
     s.recordRun('new', { score: 10, dist: 1, date: '2026-01-03' });
     s.saveProgress();
     const again = new Store(st);
-    expect(again.seedBest('old')).toBe(500);
-    expect(again.seedBest('new')).toBe(10);
+    expect(again.topRuns().map((x) => x.score)).toEqual([500, 10]);
     expect(again.progress().stats.runs).toBe(7);
   });
 

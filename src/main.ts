@@ -33,6 +33,17 @@ const sfx = new Sfx();
 const input = new Input(canvas);
 const params = new URLSearchParams(window.location.search);
 
+// A shared link opens its course once. Clearing it keeps seeds out of sight, and a reload starts fresh.
+if (params.has('seed')) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('seed');
+    window.history.replaceState(null, '', url);
+  } catch {
+    // History can be unavailable (sandboxed frames). The link still opens its course.
+  }
+}
+
 /** Map a pointer position to the 180x320 logical canvas. */
 input.logical = (clientX, clientY) => {
   const rect = canvas.getBoundingClientRect();
@@ -49,16 +60,6 @@ const game = new Game(
     sfx,
     haptic: (ms) => {
       if (typeof navigator.vibrate === 'function') navigator.vibrate(ms);
-    },
-    onSeed: (seed) => {
-      // Keep the address bar shareable: anyone opening this URL gets the same course.
-      try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('seed', seed);
-        window.history.replaceState(null, '', url);
-      } catch {
-        // History can be unavailable (sandboxed frames); the seed is still shown on screen.
-      }
     },
     announce: (text) => {
       status.textContent = text;

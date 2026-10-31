@@ -4,13 +4,12 @@ export type Screen = 'main' | 'scores' | 'gear' | 'goals';
 export type ButtonId =
   | 'play'
   | 'daily'
-  | 'newseed'
   | 'scores'
   | 'gear'
   | 'goals'
   | 'sound'
   | 'back'
-  | 'tabSeed'
+  | 'tabTop'
   | 'tabDaily'
   | 'boardPrev'
   | 'boardNext'
@@ -46,8 +45,7 @@ function b(id: ButtonId, x: number, y: number, w: number, h: number, accent = fa
 
 const TITLE: UiButton[] = [
   b('play', 14, 172, 152, 26, true),
-  b('daily', 14, 202, 74, MIN_TOUCH),
-  b('newseed', 92, 202, 74, MIN_TOUCH),
+  b('daily', 14, 202, 152, MIN_TOUCH),
   b('scores', 14, 228, 74, MIN_TOUCH),
   b('gear', 92, 228, 74, MIN_TOUCH),
   b('goals', 14, 254, 74, MIN_TOUCH),
@@ -55,7 +53,7 @@ const TITLE: UiButton[] = [
 ];
 
 const SCORES: UiButton[] = [
-  b('tabSeed', 14, 34, 74, MIN_TOUCH),
+  b('tabTop', 14, 34, 74, MIN_TOUCH),
   b('tabDaily', 92, 34, 74, MIN_TOUCH),
   b('back', 14, 286, 152, 26, true),
 ];

@@ -9,8 +9,7 @@ export interface RunResult {
   score: number;
   dist: number;
   rank: number | null;
-  newSeedBest: boolean;
-  newOverallBest: boolean;
+  newBest: boolean;
   achievements: Achievement[];
   gear: GearDef[];
 }
@@ -52,8 +51,7 @@ export function recordRun(store: Store, summary: RunSummary, day: string): RunRe
     score,
     dist,
     rank: rec.rank,
-    newSeedBest: rec.newSeedBest,
-    newOverallBest: rec.newOverallBest,
+    newBest: rec.newBest,
     achievements: out.newAchievements,
     gear: out.newGear,
   };
@@ -69,6 +67,6 @@ export function toCard(res: RunResult): ResultCardData {
     nearMisses: res.summary.nearMisses,
     tricks: res.summary.tricks,
     cause: res.summary.cause,
-    newBest: res.newSeedBest,
+    newBest: res.newBest,
   };
 }

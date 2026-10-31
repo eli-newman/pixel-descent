@@ -2,7 +2,12 @@ import { BOARD_LEN } from '../core/config';
 import { poseOf } from '../sim/pose';
 import { type RiderState } from '../sim/riderState';
 
-/** Fixed size particle pool: jets never allocate, and stepping compacts in place. */
+/** Only every other fleck leaves a grain behind, so a long skid dusts the snow without burying it. */
+const LAND_EVERY = 2;
+/** Grains kept on the snow. The oldest are overwritten, and by then the camera has usually moved past them. */
+const LANDED_CAPACITY = 320;
+
+/** Fixed size particle pool: jets never allocate, and stepping compacts in place. Flecks that come down stay on the snow. */
 export class Particles {
   readonly x: Float32Array;
   readonly y: Float32Array;
@@ -11,6 +16,11 @@ export class Particles {
   readonly life: Float32Array;
   readonly max: Float32Array;
   count = 0;
+  readonly landedX = new Float32Array(LANDED_CAPACITY);
+  readonly landedY = new Float32Array(LANDED_CAPACITY);
+  landedCount = 0;
+  private landedHead = 0;
+  private falling = 0;
 
   constructor(readonly capacity = 256) {
     this.x = new Float32Array(capacity);
@@ -23,6 +33,9 @@ export class Particles {
 
   clear(): void {
     this.count = 0;
+    this.landedCount = 0;
+    this.landedHead = 0;
+    this.falling = 0;
   }
 
   /**
@@ -55,7 +68,10 @@ export class Particles {
     let w = 0;
     for (let i = 0; i < this.count; i++) {
       const life = (this.life[i] ?? 0) - dt;
-      if (life <= 0) continue;
+      if (life <= 0) {
+        this.land(this.x[i] ?? 0, this.y[i] ?? 0);
+        continue;
+      }
       const vy = (this.vy[i] ?? 0) + 60 * dt;
       const vx = (this.vx[i] ?? 0) * drag;
       this.x[w] = (this.x[i] ?? 0) + vx * dt;
@@ -67,6 +83,14 @@ export class Particles {
       w++;
     }
     this.count = w;
+  }
+
+  private land(x: number, y: number): void {
+    if (this.falling++ % LAND_EVERY !== 0) return;
+    this.landedX[this.landedHead] = x;
+    this.landedY[this.landedHead] = y;
+    this.landedHead = (this.landedHead + 1) % LANDED_CAPACITY;
+    this.landedCount = Math.min(LANDED_CAPACITY, this.landedCount + 1);
   }
 }
 

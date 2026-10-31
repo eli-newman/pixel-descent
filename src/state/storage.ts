@@ -1,4 +1,5 @@
 import { LEGACY_BEST_KEY, SAVE_PREFIX } from '../core/config';
+import { isDailySeed } from '../core/rng';
 import { createProgress, sanitiseGear, type Progress } from './progress';
 
 /** The slice of the Storage API the game needs, so tests can pass a fake. */
@@ -40,25 +41,33 @@ export const DEFAULT_SETTINGS: Settings = {
   manualSpin: false,
 };
 
+/** The board of one daily course. Only the newest day is kept, as older ones are never shown. */
+interface DailyBoard {
+  seed: string;
+  runs: ScoreEntry[];
+}
+
 interface ScoreBook {
   best: number;
-  seeds: Record<string, ScoreEntry[]>;
-  /** Seeds in the order they were last played, oldest first, to cap storage. */
-  order: string[];
+  /** The best runs ever, on any course, best first. */
+  top: ScoreEntry[];
+  daily: DailyBoard | null;
+}
+
+/** A score book as saved. Older saves kept a board per seed instead of `top` and `daily`. */
+interface SavedBook extends Partial<ScoreBook> {
+  seeds?: Record<string, unknown>;
 }
 
 const TOP = 10;
-const MAX_SEEDS = 80;
-/** Replays of the removed ghost rider, one key per seed. */
+/** Replays of the removed ghost rider, one key per course. */
 const STALE_PREFIX = SAVE_PREFIX + 'ghost:';
 
 export interface RecordResult {
-  /** 1-based place on this seed's board, or null if the run did not make the top 10. */
+  /** 1-based place among the best runs ever, or null if the run did not make the top 10. */
   rank: number | null;
-  newSeedBest: boolean;
-  newOverallBest: boolean;
-  seedBest: number;
-  overallBest: number;
+  newBest: boolean;
+  best: number;
 }
 
 function memoryBackend(): StorageLike {
@@ -86,8 +95,45 @@ function isEntry(v: unknown): v is ScoreEntry {
   return typeof e.score === 'number' && typeof e.dist === 'number' && typeof e.date === 'string';
 }
 
+function entries(list: unknown): ScoreEntry[] {
+  return Array.isArray(list) ? list.filter(isEntry) : [];
+}
+
+function bestFirst(list: ScoreEntry[]): ScoreEntry[] {
+  return list.sort((x, y) => y.score - x.score).slice(0, TOP);
+}
+
+/** Put a run on a board, best first. Returns its 1-based place, or null if it did not make the top 10. */
+function place(board: ScoreEntry[], entry: ScoreEntry): number | null {
+  let at = board.findIndex((e) => e.score < entry.score);
+  if (at < 0) at = board.length;
+  if (at >= TOP) return null;
+  board.splice(at, 0, entry);
+  board.length = Math.min(board.length, TOP);
+  return at + 1;
+}
+
+/** The all-time board of a save: as saved, or merged from the per-seed boards of an older save. */
+function loadTop(raw: SavedBook): ScoreEntry[] {
+  if (raw.top !== undefined) return bestFirst(entries(raw.top));
+  const seeds = raw.seeds && typeof raw.seeds === 'object' ? Object.values(raw.seeds) : [];
+  return bestFirst(seeds.flatMap(entries));
+}
+
+/** The daily board of a save: as saved, or the newest day's board of an older save. */
+function loadDaily(raw: SavedBook): DailyBoard | null {
+  const saved = raw.daily;
+  if (saved && typeof saved === 'object' && typeof saved.seed === 'string') {
+    return { seed: saved.seed, runs: bestFirst(entries(saved.runs)) };
+  }
+  if (!raw.seeds || typeof raw.seeds !== 'object') return null;
+  // Daily seeds are dYYYYMMDD, so the newest day sorts last.
+  const seed = Object.keys(raw.seeds).filter(isDailySeed).sort().pop();
+  return seed === undefined ? null : { seed, runs: bestFirst(entries(raw.seeds[seed])) };
+}
+
 /**
- * Everything the game keeps between visits: per-seed top 10 boards, the overall best, settings
+ * Everything the game keeps between visits: the all-time top 10, today's top 10, the best score, settings
  * and progress. Every storage call is wrapped, because storage can be
  * blocked or full; the game then simply runs from memory for the session.
  */
@@ -136,16 +182,12 @@ export class Store {
 
   private load(): ScoreBook {
     if (this.book) return this.book;
-    const raw = this.read<Partial<ScoreBook>>('scores');
-    const book: ScoreBook = { best: 0, seeds: {}, order: [] };
+    const raw = this.read<SavedBook>('scores');
+    const book: ScoreBook = { best: 0, top: [], daily: null };
     if (raw && typeof raw === 'object') {
       if (typeof raw.best === 'number' && raw.best > 0) book.best = Math.floor(raw.best);
-      if (raw.seeds && typeof raw.seeds === 'object') {
-        for (const [seed, list] of Object.entries(raw.seeds)) {
-          if (Array.isArray(list)) book.seeds[seed] = list.filter(isEntry).slice(0, TOP);
-        }
-      }
-      if (Array.isArray(raw.order)) book.order = raw.order.filter((s) => typeof s === 'string');
+      book.top = loadTop(raw);
+      book.daily = loadDaily(raw);
     } else {
       // First run of this version: carry over the single best score of version 1.
       try {
@@ -163,52 +205,42 @@ export class Store {
     if (this.book) this.write('scores', this.book);
   }
 
-  /** Best score over all seeds. */
+  /** Best score ever. */
   overallBest(): number {
     return this.load().best;
   }
 
-  /** Top 10 for a seed, best first. */
-  leaderboard(seed: string): readonly ScoreEntry[] {
-    return this.load().seeds[seed] ?? [];
+  /** The best runs ever, best first. */
+  topRuns(): readonly ScoreEntry[] {
+    return this.load().top;
   }
 
-  seedBest(seed: string): number {
-    return this.leaderboard(seed)[0]?.score ?? 0;
+  /** The top 10 on a daily course, best first. */
+  dailyRuns(seed: string): readonly ScoreEntry[] {
+    const { daily } = this.load();
+    return daily?.seed === seed ? daily.runs : [];
   }
 
-  /** Add a finished run. Seeds with no score are not stored. */
+  dailyBest(seed: string): number {
+    return this.dailyRuns(seed)[0]?.score ?? 0;
+  }
+
+  /** Add a finished run. Runs with no score are not stored. */
   recordRun(seed: string, entry: ScoreEntry): RecordResult {
     const book = this.load();
-    const prevSeedBest = this.seedBest(seed);
-    const prevOverall = book.best;
-    const list = (book.seeds[seed] ?? []).slice();
+    const prevBest = book.best;
     let rank: number | null = null;
     if (entry.score > 0) {
-      let at = list.findIndex((e) => e.score < entry.score);
-      if (at < 0) at = list.length;
-      if (at < TOP) {
-        list.splice(at, 0, entry);
-        list.length = Math.min(list.length, TOP);
-        rank = at + 1;
-      }
-      book.seeds[seed] = list;
-      book.order = book.order.filter((s) => s !== seed);
-      book.order.push(seed);
-      while (book.order.length > MAX_SEEDS) {
-        const old = book.order.shift();
-        if (old !== undefined) delete book.seeds[old];
-      }
+      rank = place(book.top, entry);
       book.best = Math.max(book.best, entry.score);
+      if (isDailySeed(seed)) {
+        // A link to an older daily course counts towards the records, not today's board.
+        if (!book.daily || seed > book.daily.seed) book.daily = { seed, runs: [] };
+        if (seed === book.daily.seed) place(book.daily.runs, entry);
+      }
       this.saveBook();
     }
-    return {
-      rank,
-      newSeedBest: entry.score > 0 && entry.score > prevSeedBest,
-      newOverallBest: entry.score > 0 && entry.score > prevOverall,
-      seedBest: this.seedBest(seed),
-      overallBest: book.best,
-    };
+    return { rank, newBest: entry.score > prevBest && entry.score > 0, best: book.best };
   }
 
   settings(): Settings {
