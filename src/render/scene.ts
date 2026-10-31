@@ -576,7 +576,8 @@ export class SceneRenderer {
 
   /** Brief zoom on the rider after an impact or a near miss: a nearest-neighbour blow up of the scene. */
   private zoomPunch(g: Game): Framebuffer {
-    const k = g.reduced ? 0 : g.punch;
+    // No zoom punch on touch: a sudden zoom while you slide reads as the page zooming.
+    const k = g.reduced || g.touch ? 0 : g.punch;
     if (k < 0.04) return this.fb;
     const z = 1 + 0.06 * Math.min(1, k);
     const r = g.sim.rider;
