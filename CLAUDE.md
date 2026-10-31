@@ -1,4 +1,4 @@
-# Fall Line
+# Powline
 
 Black and white pixel-art downhill snowboard game, with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
 
@@ -19,7 +19,7 @@ Before calling any change done: `npm run check`, `npm run build` and `npm run te
 
 ## Hosting and deploy
 
-Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, linked locally through `.vercel/`, which is git-ignored). Live at https://pixel-descent.vercel.app. The code is on GitHub at `eli-newman/pixel-descent`.
+Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, linked locally through `.vercel/`, which is git-ignored). Live at https://powline.vercel.app (`https://pixel-descent.vercel.app` still serves it too). The project and GitHub repo keep the old `pixel-descent` name, which players never see. The code is on GitHub at `eli-newman/pixel-descent`.
 
 The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
 
