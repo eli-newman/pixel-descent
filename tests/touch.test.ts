@@ -82,8 +82,10 @@ describe('touch gestures', () => {
     expect(input.brake()).toBe(false);
     down({ id: 2, x: 300, y: 300, t: 10 });
     expect(input.brake()).toBe(true);
+    expect(input.steer()).toBe(0);
     up({ id: 2, x: 300, y: 300, t: 200 });
     expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(-1);
     input.dispose();
   });
 });

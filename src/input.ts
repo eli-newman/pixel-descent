@@ -45,6 +45,10 @@ const DRAG_RANGE = 56;
 const SWIPE_MIN = 32;
 const SWIPE_MS = 280;
 
+function preventDefault(e: Event): void {
+  e.preventDefault();
+}
+
 /** Keyboard, mouse and touch input collected into a steering value and a queue of actions and taps. */
 export class Input {
   private readonly keys = new Set<string>();
@@ -73,6 +77,12 @@ export class Input {
     this.on(window, 'pointermove', this.onPointerMove);
     this.on(window, 'pointerup', this.onPointerUp);
     this.on(window, 'pointercancel', this.onPointerUp);
+    // Two fingers must never pinch-zoom the page: iOS Safari ignores user-scalable=no, so cancel the gesture and any touch move.
+    for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+      window.addEventListener(type, preventDefault);
+      this.cleanup.push(() => window.removeEventListener(type, preventDefault));
+    }
+    this.on(window, 'touchmove', preventDefault, { passive: false });
   }
 
   /** Steering in [-1, 1]: negative is left (toe side), positive is right (heel side). */
@@ -82,6 +92,8 @@ export class Input {
       if (LEFT.has(code)) k -= 1;
       if (RIGHT.has(code)) k += 1;
     }
+    // Two fingers are the brake: like holding both arrows, they cancel out and do not steer.
+    if (this.touches.size >= 2) return Math.max(-1, Math.min(1, k));
     return Math.max(-1, Math.min(1, k + this.pointerSteer));
   }
 
@@ -135,8 +147,9 @@ export class Input {
     target: Window,
     type: K,
     handler: (e: WindowEventMap[K]) => void,
+    options?: AddEventListenerOptions,
   ): void {
-    target.addEventListener(type, handler);
+    target.addEventListener(type, handler, options);
     this.cleanup.push(() => target.removeEventListener(type, handler));
   }
 
