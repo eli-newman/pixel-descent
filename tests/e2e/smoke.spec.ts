@@ -62,6 +62,21 @@ test.describe('desktop', () => {
 test.describe('mobile', () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
+  test('keeps its size when the page is zoomed', async ({ page }) => {
+    await page.goto('/');
+    await expectTitleDrawn(page);
+    const before = await page.locator('#stage').boundingBox();
+
+    // iOS Safari reports the zoomed area here. Chromium does not, so stand in for it.
+    await page.evaluate(() => {
+      Object.defineProperty(window, 'innerWidth', { value: 350 });
+      Object.defineProperty(window, 'innerHeight', { value: 620 });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(await page.locator('#stage').boundingBox()).toEqual(before);
+  });
+
   test('plays and pauses with touch', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/');

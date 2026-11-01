@@ -93,9 +93,10 @@ function layout(): void {
   };
   // On a touch screen keep the picture clear of rounded corners and bezels, so the score is never clipped.
   const margin = window.matchMedia('(pointer: coarse)').matches ? TOUCH_MARGIN : 0;
+  // Not innerWidth or innerHeight: iOS Safari shrinks those while the page is zoomed, which would shrink the picture too.
   const fit = fitCanvas(
-    window.innerWidth,
-    window.innerHeight,
+    document.documentElement.clientWidth,
+    document.documentElement.clientHeight,
     window.devicePixelRatio || 1,
     safe,
     margin,

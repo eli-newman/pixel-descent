@@ -83,6 +83,7 @@ export class Input {
       this.cleanup.push(() => window.removeEventListener(type, preventDefault));
     }
     this.on(window, 'touchmove', preventDefault, { passive: false });
+    this.on(window, 'touchend', this.onTouchEnd, { passive: false });
   }
 
   /** Steering in [-1, 1]: negative is left (toe side), positive is right (heel side). */
@@ -152,6 +153,12 @@ export class Input {
     target.addEventListener(type, handler, options);
     this.cleanup.push(() => target.removeEventListener(type, handler));
   }
+
+  /** Quick taps must never zoom the page: iOS Safari also ignores user-scalable=no for double taps. Buttons still need their click. */
+  private readonly onTouchEnd = (e: TouchEvent): void => {
+    if (e.target instanceof Element && e.target.closest('button')) return;
+    e.preventDefault();
+  };
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
