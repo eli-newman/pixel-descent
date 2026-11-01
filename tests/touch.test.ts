@@ -38,6 +38,28 @@ const actions = (input: Input): string[] =>
 describe('touch gestures', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('cancels the end of a touch so double taps cannot zoom, except on buttons', () => {
+    const win = new EventTarget();
+    vi.stubGlobal('window', win);
+    class FakeElement {
+      constructor(private readonly isButton: boolean) {}
+      closest(): unknown {
+        return this.isButton ? this : null;
+      }
+    }
+    vi.stubGlobal('Element', FakeElement);
+    const input = new Input({} as HTMLCanvasElement);
+    const touchEnd = (target: unknown): Event => {
+      const e = new Event('touchend', { cancelable: true });
+      Object.defineProperty(e, 'target', { value: target });
+      win.dispatchEvent(e);
+      return e;
+    };
+    expect(touchEnd(new FakeElement(false)).defaultPrevented).toBe(true);
+    expect(touchEnd(new FakeElement(true)).defaultPrevented).toBe(false);
+    input.dispose();
+  });
+
   it('a quick swipe up is a frontflip (up) and swipe down a backflip (down)', () => {
     const { input, down, move, up } = touchInput();
     down({ id: 1, x: 200, y: 300, t: 0 });
