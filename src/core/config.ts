@@ -19,6 +19,20 @@ export const PX_PER_M = 8;
 /** The rider is kept this far from the left and right edges of the slope. */
 export const EDGE = 7;
 
+/**
+ * Jumps (kickers and cliffs): the first one's distance below the start, and the gap from one jump's lip
+ * to the next before a random extra of up to JUMP_JITTER. In px (8 per metre). The mean of about 1200 px
+ * puts a jump every 150 m, every 4 to 5 s at speed, so tricks are a regular part of a run.
+ */
+export const FIRST_JUMP_Y = 600;
+export const JUMP_GAP_MIN = 1000;
+export const JUMP_GAP_MAX = 1300;
+export const JUMP_JITTER = 100;
+/** Share of jumps that are cliffs instead of kickers. A cliff clears far more landing ground, so most jumps are kickers. */
+export const CLIFF_CHANCE = 0.3;
+/** Half width of a kicker in px. Wide enough to hit without lining up to the pixel, still inside the open path. */
+export const KICKER_HALF = 17;
+
 /** Hard cap on rider speed in px/s (the old cruising cap was about 235). */
 export const MAX_SPEED = 340;
 
