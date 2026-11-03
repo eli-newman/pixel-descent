@@ -12,7 +12,7 @@ The rules of the game as pure, deterministic code. Feed a seed and inputs at the
 | `pose.ts`       | `RiderPose` and `poseOf`: what the renderer needs to draw the rider.                                                                                                           |
 | `landing.ts`    | `touchDown`: judges a landing (clean, sloppy, bail), pays the score, returns the `LandEvent`.                                                                                  |
 | `world.ts`      | Live object lists: adding spawned batches, culling, the surface under the rider, ramp crossing (`WorldLists`, `addBatch`, `cullAbove`, `surfaceAt`, `takeRamp`).               |
-| `collision.ts`  | Hitbox overlap tests and near-miss rules.                                                                                                                                      |
+| `collision.ts`  | Hitbox overlap tests and near-miss rules. `isPebble` / `PEBBLE_SIZE`: rocks below it never collide, and the renderer draws them flat by the same rule.                         |
 | `score.ts`      | Points, combos, near-miss rewards.                                                                                                                                             |
 | `trail.ts`      | Fixed-size ring buffer of board positions (allocation-free).                                                                                                                   |
 | `spawner.ts`    | Deterministic endless course generator (trees, rocks, lane stars, kickers, ice, drifts, risk lanes) with a guaranteed-open path.                                               |
