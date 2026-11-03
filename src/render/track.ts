@@ -148,23 +148,16 @@ export class TrackPainter {
 
   private drawLine(fb: Framebuffer, i: number, cam: number): void {
     if (this.skis) {
-      const inner = this.skiInner(i - 1);
-      const outer = inner + this.skiWidth(i - 1);
-      this.span(fb, i, cam, -outer, -inner, WHITE);
-      this.span(fb, i, cam, inner, outer, WHITE);
+      const w = this.skiWidth(i - 1);
+      // Each ski's line is centred on its own path, a real perpendicular away from the middle, so the pair stays
+      // evenly apart where the spans swap between rows and columns. It swells outwards, keeping the gap open.
+      const off = SKI_GAP / 2 + (w - SKI_WIDTH) / 2;
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, -off);
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, off);
       return;
     }
     const half = this.width(i - 1) / 2;
     this.span(fb, i, cam, -half, half, WHITE);
-  }
-
-  /**
-   * Where each ski line starts, measured along the span axis from the centre. Spans run along x or y, so on a slant
-   * the offset is stretched to keep the two lines the same distance apart across the track.
-   */
-  private skiInner(i: number): number {
-    const axis = Math.max(Math.abs(this.tx[i] ?? 0), Math.abs(this.ty[i] ?? 0)) || 1;
-    return (SKI_GAP / 2 - SKI_WIDTH / 2) / axis;
   }
 
   private skiWidth(i: number): number {
@@ -179,20 +172,25 @@ export class TrackPainter {
     const reach =
       ((this.skis ? SKI_SHADOW : SHADOW) * this.depth(i - 1) * this.facing(i - 1)) / MAX_DEPTH;
     if (reach < 0.5) return;
-    // Skis: the pair's outer edge casts it, so the gap between the two lines stays clean.
-    const half = this.skis ? this.skiInner(i - 1) + this.skiWidth(i - 1) : this.width(i - 1) / 2;
     const sunSide = (this.ty[i - 1] ?? 0) * SUN_X - (this.tx[i - 1] ?? 0) * SUN_Y < 0;
     const steep = Math.abs(this.ty[i - 1] ?? 0) >= Math.abs(this.tx[i - 1] ?? 0);
     // Spans run along x on a steep stretch and along y on a flat one, so turn the side into that axis.
     const along = steep ? (this.ty[i - 1] ?? 0) : -(this.tx[i - 1] ?? 0);
     const positive = along >= 0 === sunSide;
-    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY);
-    else this.span(fb, i, cam, -half - reach, -half + 1, GREY);
+    // Skis: only the line on the sun side casts it, outwards, so the gap between the two lines stays clean.
+    const w = this.skiWidth(i - 1);
+    const half = this.skis ? w / 2 : this.width(i - 1) / 2;
+    const off = this.skis
+      ? (SKI_GAP / 2 + (w - SKI_WIDTH) / 2) * (positive === along >= 0 ? -1 : 1)
+      : 0;
+    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY, off);
+    else this.span(fb, i, cam, -half - reach, -half + 1, GREY, off);
   }
 
   /**
    * Fill the segment ending at point i between two signed offsets from the centre, always along whole rows on a
-   * steep stretch and whole columns on a flat one. Rounding only the two ends gives clean, even edges.
+   * steep stretch and whole columns on a flat one. Rounding only the two ends gives clean, even edges. `side` moves
+   * the centre that far to one side of the path (perpendicular to it, positive to the left of travel), for a ski.
    */
   private span(
     fb: Framebuffer,
@@ -201,11 +199,12 @@ export class TrackPainter {
     lo: number,
     hi: number,
     color: number,
+    side = 0,
   ): void {
-    const ax = this.x[i - 1] ?? 0;
-    const ay = this.y[i - 1] ?? 0;
-    const bx = this.x[i] ?? 0;
-    const by = this.y[i] ?? 0;
+    const ax = (this.x[i - 1] ?? 0) - (this.ty[i - 1] ?? 0) * side;
+    const ay = (this.y[i - 1] ?? 0) + (this.tx[i - 1] ?? 0) * side;
+    const bx = (this.x[i] ?? 0) - (this.ty[i] ?? 0) * side;
+    const by = (this.y[i] ?? 0) + (this.tx[i] ?? 0) * side;
     if (Math.round(by) - cam < -8 || Math.round(ay) - cam > H + 8) return;
     const steep = Math.abs(this.ty[i - 1] ?? 0) >= Math.abs(this.tx[i - 1] ?? 0);
     for (const u of ALONG) {
