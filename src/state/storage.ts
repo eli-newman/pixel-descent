@@ -283,6 +283,7 @@ export class Store {
       if (raw.gear && typeof raw.gear === 'object') {
         if (typeof raw.gear.board === 'string') p.gear.board = raw.gear.board;
         if (typeof raw.gear.rider === 'string') p.gear.rider = raw.gear.rider;
+        if (raw.gear.kit === 'skis') p.gear.kit = 'skis';
       }
     }
     sanitiseGear(p);

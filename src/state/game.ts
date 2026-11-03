@@ -242,7 +242,7 @@ export class Game implements GameView {
 
   /** The result of this run, for the share card and tests. */
   cardData(): ResultCardData | null {
-    return this.result && toCard(this.result);
+    return this.result && toCard(this.result, this.progress.gear.kit === 'skis');
   }
 
   /** Render and share the result card; shows the outcome as a toast. */

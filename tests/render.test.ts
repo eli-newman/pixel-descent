@@ -42,7 +42,11 @@ function ride(game: Game, input: FakeInput): void {
   game.update(DT);
 }
 
-function capture(): { frames: Record<string, string>; spun: boolean; flipped: boolean } {
+function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
+  frames: Record<string, string>;
+  spun: boolean;
+  flipped: boolean;
+} {
   const { game, input } = makeGame(SEED);
   const scene = new SceneRenderer(new Framebuffer(W, H));
   const frames: Record<string, string> = {};
@@ -54,6 +58,7 @@ function capture(): { frames: Record<string, string>; spun: boolean; flipped: bo
   shot('title');
   for (const screen of ['scores', 'gear', 'goals'] as const) {
     game.press(screen);
+    if (screen === 'gear' && kit === 'skis') game.press('skis');
     game.update(DT);
     shot(`title-${screen}`);
     game.press('back');
@@ -145,7 +150,53 @@ describe('golden frames', () => {
         "spin": "03813f51",
         "start": "7ac9599c",
         "title": "223e00fc",
-        "title-gear": "f664c0b5",
+        "title-gear": "4d6b4c24",
+        "title-goals": "e9135c03",
+        "title-scores": "4c029d3b",
+      }
+    `);
+  });
+
+  it('draws the same run on skis', () => {
+    const { frames, spun, flipped } = capture('skis');
+    expect(spun).toBe(true);
+    expect(flipped).toBe(true);
+    const board = capture().frames;
+    // The title and menus behind the GEAR screen are the same; every frame with the rider in it is not.
+    const same = Object.keys(frames).filter((k) => frames[k] === board[k]);
+    expect(same.sort()).toEqual(['title', 'title-goals', 'title-scores']);
+    expect(frames).toMatchInlineSnapshot(`
+      {
+        "air": "8137a3d9",
+        "crash-hit": "a4aca877",
+        "crash-tumble": "eb3cb9dc",
+        "flip": "e0208984",
+        "over": "681e39f6",
+        "paused": "69e6ad19",
+        "ride-10s": "61c366fe",
+        "ride-12s": "70887d15",
+        "ride-14s": "8cfd4e73",
+        "ride-16s": "e14b6ebc",
+        "ride-18s": "5433db1c",
+        "ride-20s": "2bc297ed",
+        "ride-22s": "5db88f4a",
+        "ride-24s": "d125d607",
+        "ride-26s": "b92748a2",
+        "ride-28s": "d6fe48ab",
+        "ride-2s": "a6cf4a31",
+        "ride-30s": "ed1c8325",
+        "ride-32s": "a74ee5dc",
+        "ride-34s": "fdc50f57",
+        "ride-36s": "9e9658aa",
+        "ride-38s": "e78c9885",
+        "ride-40s": "21539f31",
+        "ride-4s": "dd3a5edb",
+        "ride-6s": "683cd5e3",
+        "ride-8s": "a9357236",
+        "spin": "a9c8eb70",
+        "start": "f51a0015",
+        "title": "223e00fc",
+        "title-gear": "09367c8f",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
       }

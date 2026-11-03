@@ -14,6 +14,8 @@ export interface ResultCardData {
   tricks: number;
   cause: 'obstacle' | 'bail';
   newBest: boolean;
+  /** Rode skis rather than a snowboard: the text says so. */
+  skis: boolean;
 }
 
 /** The card is drawn at this logical size and scaled up by CARD_SCALE: 1200 x 630, the usual link preview size. */
@@ -35,7 +37,7 @@ export function shareUrl(pageUrl: string, seed: string): string {
 }
 
 export function shareText(card: Readonly<ResultCardData>): string {
-  return `I scored ${card.score} in Powline (${card.dist}m) and wiped out. Beat it on ${card.daily ? "today's daily course" : 'this course'}:`;
+  return `I scored ${card.score} in Powline (${card.dist}m${card.skis ? ' on skis' : ''}) and wiped out. Beat it on ${card.daily ? "today's daily course" : 'this course'}:`;
 }
 
 function peaks(fb: Framebuffer, seed: number): void {
