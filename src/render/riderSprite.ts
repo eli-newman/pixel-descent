@@ -1,5 +1,5 @@
 import { BOARD_LEN, RIDER_SCALE as SC } from '../core/config';
-import type { RiderPose } from '../sim/pose';
+import { heelSide, type RiderPose } from '../sim/pose';
 import type { Framebuffer } from './framebuffer';
 
 type Pt = readonly [number, number];
@@ -239,8 +239,9 @@ function maskBoard(set: Mask, pose: Readonly<RiderPose>, board: number): void {
 /** The joints of the rider for one pose, in screen pixels. */
 interface Skeleton {
   n: Pt;
-  /** +1 heading right (heel side), -1 heading left (toe side). */
+  /** +1 heading right, -1 heading left. */
   mv: 1 | -1;
+  /** Back to the camera, on the heels: heading right riding regular, heading left riding switch. */
   heel: boolean;
   /** Straight downhill the rider is seen almost head on. */
   rear: boolean;
@@ -264,9 +265,10 @@ function solveSkeleton(pose: Readonly<RiderPose>, tuck: number): Skeleton {
   const FB = along(6 * SC);
   const crouch = tuck * 0.55;
   const stand = (4 + 3 * up) * SC * (1 - crouch);
-  // Toe side (heading left): chest to the camera, leaning into the turn, goggles visible.
-  // Heel side (heading right): back to the camera, leaning back over the heels with hips out.
-  const heel = mv > 0;
+  // Toe side (regular heading left): chest to the camera, leaning into the turn, goggles visible.
+  // Heel side (regular heading right): back to the camera, leaning back over the heels with hips out.
+  // Riding switch the other foot leads, so the same heading shows the other side of him.
+  const heel = heelSide(pose);
   const lean = (heel ? -2.5 : 3) * up;
   const hip: Pt = [M[0] - n[0] * (heel ? -1.5 : 1.5) * SC, M[1] - stand - 2 * SC];
   // In the tuck the shoulders drop and push forward along the board.

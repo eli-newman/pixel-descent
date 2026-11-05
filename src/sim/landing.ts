@@ -17,7 +17,7 @@ export interface LandEvent {
   type: 'land';
   quality: 'clean' | 'sloppy';
   pts: number;
-  /** Spins landed (0 or 1) and their degrees; `switch` is true on an odd number of half turns. */
+  /** Spins landed (0 or 1) and their degrees; `switch` is true when the rider rides away switch. */
   tricks: number;
   spin: number;
   switch: boolean;
@@ -29,6 +29,7 @@ export interface LandEvent {
  * Touch down. A clean landing pays for its spin and keeps the speed (a little less after an odd
  * number of half turns, which lands backwards), a sloppy one scrubs it, a bail returns null and the
  * caller crashes. Rotation counts too: a landing far from a half turn is a bail, a bit off is sloppy.
+ * Clean or sloppy, an odd number of half turns swaps the rider's stance (regular and switch).
  */
 export function touchDown(
   r: RiderState,
@@ -51,6 +52,8 @@ export function touchDown(
     breakCombo(score);
     return null;
   }
+  const backwards = (deg / 180) % 2 === 1;
+  if (backwards) r.stance = r.stance === 1 ? -1 : 1;
   if (off > SPIN_CLEAN || flipOff > FLIP_CLEAN || a > CLEAN_HX) {
     r.speed = Math.max(40, r.speed * 0.6);
     breakCombo(score);
@@ -60,11 +63,10 @@ export function touchDown(
       pts: 0,
       tricks: 0,
       spin: 0,
-      switch: false,
+      switch: r.stance === -1,
       flips: 0,
     };
   }
-  const backwards = (deg / 180) % 2 === 1;
   const flips = Math.abs(turns);
   let pts = deg > 0 ? addSpin(score, deg, mult) : 0;
   if (flips > 0) pts += addFlip(score, flips, deg, mult);
@@ -77,7 +79,7 @@ export function touchDown(
     pts,
     tricks: (deg > 0 ? 1 : 0) + flips,
     spin: deg,
-    switch: backwards,
+    switch: r.stance === -1,
     flips: turns,
   };
 }

@@ -299,6 +299,7 @@ function drawGear(fb: Framebuffer, g: GameView): void {
     nx: -Math.cos(a),
     ny: Math.sin(a),
     face: -1,
+    stance: 1,
     up: 1,
     ang: 62,
     steep: false,

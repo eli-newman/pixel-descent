@@ -6,11 +6,11 @@ The rules of the game as pure, deterministic code. Feed a seed and inputs at the
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `sim.ts`        | `Sim` class: one world step (`step(input, dt)`), emits `events` (crash, star, trick, ...). The hub of this folder.                                                             |
 | `rider.ts`      | `stepRider`: heading spring, braking, movement, slope walls. Also `launch`, `riderZ`, `headingY`, `headingAngle`.                                                              |
-| `riderState.ts` | `RiderState`, `Surface`, `Face`, `createRider`. Types and the starting state only.                                                                                             |
+| `riderState.ts` | `RiderState` (including `stance`: regular or switch), `Surface`, `Face`, `createRider`. Types and the starting state only.                                                     |
 | `speed.ts`      | The speed model: `cruiseSpeed`, `topSpeed`, tuck and scrub (`stepSpeed`), air time and flight distance. The spawner's only rider dependency, so it must stay exact arithmetic. |
 | `tricks.ts`     | Spins and flips: assisted and manual stepping, caps, `startTrick`/`startSnap`/`startFlip`, landing tolerances.                                                                 |
-| `pose.ts`       | `RiderPose` and `poseOf`: what the renderer needs to draw the rider.                                                                                                           |
-| `landing.ts`    | `touchDown`: judges a landing (clean, sloppy, bail), pays the score, returns the `LandEvent`.                                                                                  |
+| `pose.ts`       | `RiderPose` and `poseOf`: what the renderer needs to draw the rider, including the stance. `heelSide` says which side of the rider shows.                                      |
+| `landing.ts`    | `touchDown`: judges a landing (clean, sloppy, bail), swaps the stance after an odd number of half turns, pays the score, returns the `LandEvent`.                              |
 | `world.ts`      | Live object lists: adding spawned batches, culling, the surface under the rider, ramp crossing (`WorldLists`, `addBatch`, `cullAbove`, `surfaceAt`, `takeRamp`).               |
 | `collision.ts`  | Hitbox overlap tests and near-miss rules. `isPebble` / `PEBBLE_SIZE`: rocks below it never collide, and the renderer draws them flat by the same rule.                         |
 | `score.ts`      | Points, combos, near-miss rewards.                                                                                                                                             |
@@ -29,6 +29,7 @@ The rules of the game as pure, deterministic code. Feed a seed and inputs at the
 - `tests/e2e/course.spec.ts` proves the course guarantee in real Chromium, Firefox and WebKit. Any new spawner code runs under it, so a non-exact call in that path fails the suite.
 - `spawner.ts` imports `speed.ts`, never `rider.ts`, `tricks.ts` or `pose.ts`. Keep it that way: it is what keeps the course path exact.
 - Jumps are planned from the `config.ts` spacing (a lip every 1000-1300 px plus up to 100 px, about every 150 m). Their fairness rules, checked in `tests/spawner.test.ts`: a solid-free landing zone across the whole slope sized for top speed plus `LANDING_MARGIN`; a jump that would overlap a risk lane (with `LANE_JUMP_PAD`) is moved past the lane, never dropped; ice and drifts stay `JUMP_PATCH_PAD` plus their radius from every lip (`planPatches` plans ramps first so this does not depend on chunking); the gap between jumps is always longer than the longest landing zone; a kicker is never wider than the open path.
+- Stance: `RiderState.stance` is 1 regular or -1 switch, and every run starts regular. A clean or sloppy landing after an odd number of half turns swaps it (a bail does not). It changes only how the rider is drawn: steering, collisions and the board's track are the same either way, and the half-turn speed bonus (+10 instead of +16) still depends on the spin, not the stance. `LandEvent.switch` is true when the rider rides away switch. A spin keeps the takeoff stance in its pose all the way round, so the frame it ends on already shows the side he lands on.
 - Import each name from the file that defines it. There is no barrel file.
 
 ## Keeping docs in sync (mandatory)
