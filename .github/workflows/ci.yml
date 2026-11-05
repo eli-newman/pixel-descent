@@ -9,6 +9,12 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Playwright's image ships the browsers and their system libraries, so CI no longer downloads them from the
+    # Ubuntu mirrors (which once took more than 5 minutes). Keep its tag equal to the @playwright/test version in
+    # package-lock.json, or the e2e step cannot find its browsers.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --user 1001
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +27,4 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium firefox webkit
-        timeout-minutes: 5
       - run: npm run test:e2e
