@@ -150,7 +150,7 @@ describe('golden frames', () => {
         "spin": "7e8fec7f",
         "start": "1827df37",
         "title": "223e00fc",
-        "title-gear": "4d6b4c24",
+        "title-gear": "31f4dbb4",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
       }
@@ -196,7 +196,7 @@ describe('golden frames', () => {
         "spin": "e75c5927",
         "start": "e412232e",
         "title": "223e00fc",
-        "title-gear": "09367c8f",
+        "title-gear": "da556ec2",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
       }
