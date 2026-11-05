@@ -48,3 +48,6 @@ export const LEGACY_BEST_KEY = 'pixel-descent:best';
 export const RIDER_SCALE = 0.85;
 /** Board length in px: it runs from the rider's feet along the heading to the nose. Gameplay (the spin pivot) and drawing share it. */
 export const BOARD_LEN = Math.round(23 * RIDER_SCALE);
+
+/** A player's first runs label the slope ("CRASH" over a tree, "SLOWS" over a bush, "+30" over a star), so a new player learns what each thing does. Counted from `Stats.hintRuns`. */
+export const HINT_RUNS = 3;

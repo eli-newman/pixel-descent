@@ -127,7 +127,7 @@ export class SceneRenderer {
     }
   }
 
-  /** Ice is a bare, glinting oval; a snowdrift is a stippled mound with ripples. Neither looks like a bush. */
+  /** Ice is a bare, glinting oval with a dashed rim; a snowdrift is rows of little humps. Neither looks like an obstacle. */
   private drawPatch(p: DeepReadonly<Patch>, cam: number): void {
     const cy = p.y - cam;
     if (cy + p.ry < -2 || cy - p.ry > H + 2) return;
@@ -146,12 +146,14 @@ export class SceneRenderer {
           if (edge && (x + wy) % 3 !== 0) fb.put(x, y);
           else if (!edge && (x - wy + 4096) % 11 === p.variant && (x + wy) % 2 === 0) fb.put(x, y);
         } else {
-          // mound: solid crest on the upper rim, stippled body, ripple lines
-          const crest = dy <= -p.ry + 1 && Math.abs(dx) < hw;
-          const rim = edge && dy >= -p.ry * 0.2;
-          if (crest || rim) fb.put(x, y);
-          else if (!edge && (x + 2 * wy) % 5 === 0) fb.put(x, y);
-          else if (!edge && (dy + p.ry) % 7 === 4) fb.put(x, y);
+          // deep snow: staggered rows of little humps, open in between, so it reads as soft lumpy
+          // snow and never as a solid mound you could hit (or as the flat, glinting ice)
+          const row = Math.floor((dy + p.ry) / 4);
+          const ly = (dy + p.ry) % 4;
+          const lx = (dx + p.rx + row * 3 + p.variant) % 6;
+          const inner = Math.abs(dx) < hw - 1 && dy < p.ry;
+          const hump = (ly === 1 && lx >= 1 && lx <= 3) || (ly === 2 && (lx === 0 || lx === 4));
+          if (inner && hump) fb.put(x, y);
         }
       }
     }
@@ -270,24 +272,12 @@ export class SceneRenderer {
     fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, OFF);
   }
 
+  /** Lane stars are solid five-point stars, the one thing on the slope shaped like a reward. */
   private drawPickups(g: GameView, cam: number): void {
     for (const p of g.sim.pickups) {
-      const x = p.x;
       const y = p.y - cam;
-      if (y < -4 || y > H + 4) continue;
-      this.fb.put(x, y);
-      this.fb.put(x - 1, y);
-      this.fb.put(x + 1, y);
-      this.fb.put(x, y - 1);
-      this.fb.put(x, y + 1);
-      this.fb.put(x - 2, y);
-      this.fb.put(x + 2, y);
-      this.fb.put(x, y - 2);
-      this.fb.put(x, y + 2);
-      if (p.lane) {
-        // risk lane stars are bigger: a ring of dots around the star
-        for (const [dx, dy] of RING) this.fb.put(x + dx, y + dy);
-      }
+      if (y < -5 || y > H + 5) continue;
+      for (const [dx, dy] of STAR) this.fb.put(p.x + dx, y + dy);
     }
   }
 
@@ -358,16 +348,16 @@ const OUTLINE: ReadonlyArray<readonly [number, number]> = [
   [1, -1],
 ];
 
-const RING: ReadonlyArray<readonly [number, number]> = [
-  [-3, -1],
-  [-3, 1],
-  [3, -1],
-  [3, 1],
-  [-1, -3],
-  [1, -3],
-  [-1, 3],
-  [1, 3],
-];
+/** A 7x7 five-point star centred on the pickup: a tip, wide arms, then two legs. */
+const STAR: ReadonlyArray<readonly [number, number]> = [
+  '...#...',
+  '...#...',
+  '#######',
+  '.#####.',
+  '..###..',
+  '.##.##.',
+  '##...##',
+].flatMap((row, y) => [...row].flatMap((c, x) => (c === '#' ? [[x - 3, y - 3] as const] : [])));
 
 /** Height above the snow (px) of a sim's rider. */
 function zOf(sim: SimView): number {

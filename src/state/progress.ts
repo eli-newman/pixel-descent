@@ -30,6 +30,8 @@ export interface Stats {
   laneStars: number;
   tricks: number;
   dailies: number;
+  /** Finished runs since the slope labels were added. Saves from before them start at 0, so every player gets the labelled runs once. */
+  hintRuns: number;
 }
 
 export interface Gear {
@@ -56,6 +58,7 @@ export function createProgress(): Progress {
       laneStars: 0,
       tricks: 0,
       dailies: 0,
+      hintRuns: 0,
     },
     achievements: {},
     gear: { board: 'classic', rider: 'classic' },
@@ -162,6 +165,7 @@ function addStats(p: Progress, run: RunSummary): void {
   s.laneStars += run.laneStars;
   s.tricks += run.tricks;
   if (run.daily) s.dailies += 1;
+  s.hintRuns += 1;
 }
 
 /** Fold a finished run into the progress (mutates it) and report what it unlocked. */

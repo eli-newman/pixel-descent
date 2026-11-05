@@ -1,4 +1,5 @@
 import { Rng } from '../core/rng';
+import { isPebble } from '../sim/collision';
 import type { ObstacleKind } from '../sim/types';
 
 type Pt = readonly [number, number];
@@ -55,18 +56,40 @@ function makePine(h: number): Pt[] {
   return g.pts();
 }
 
+/**
+ * A shrub, not a stone: a row of round puffs that leave notches along a bumpy top, with dark leaf
+ * holes all over it. A bush slows you instead of stopping you, so it must never share a rock's smooth,
+ * cracked silhouette.
+ */
 function makeBush(): Pt[] {
   const g = new Grid();
-  const w = 9;
-  const h = 7;
-  for (let y = 0; y < h; y++) {
-    const k = Math.sqrt(1 - Math.pow((y - h) / h, 2));
-    const ww = Math.round(w * k);
-    for (let x = -ww; x <= ww; x++) g.put(x, y - h + 1);
+  const puffs: ReadonlyArray<readonly [number, number, number]> = [
+    [-5, -4, 3.3],
+    [0, -5, 3.4],
+    [5, -4, 3.3],
+  ];
+  const inBush = (x: number, y: number): boolean =>
+    y <= 0 &&
+    ((y >= -3 && Math.abs(x) <= (y === 0 ? 6 : 7)) ||
+      puffs.some(([cx, cy, r]) => (x - cx) ** 2 + (y - cy) ** 2 <= r * r));
+  for (let y = -10; y <= 0; y++) {
+    for (let x = -9; x <= 9; x++) {
+      if (!inBush(x, y)) continue;
+      const rim = !inBush(x - 1, y) || !inBush(x + 1, y) || !inBush(x, y - 1) || y === 0;
+      // leaves: staggered dark holes inside the outline, so it reads as foliage and not as stone
+      const hole = !rim && y % 2 !== 0 && (x + (y % 4 === -1 ? 0 : 2) + 16) % 4 === 0;
+      if (!hole) g.put(x, y);
+    }
   }
-  for (let y = -h + 3; y <= 0; y++) {
-    for (let x = -w; x <= w; x++) if (g.has(x, y) && (x + y) % 3 === 0 && x > 0) g.del(x, y);
-  }
+  return g.pts();
+}
+
+/** A pebble lies flat in the snow: a tiny stone two pixels tall. Pebbles never collide, so they must not look like a rock. */
+function makePebble(size: number): Pt[] {
+  const g = new Grid();
+  const hw = Math.max(1, Math.floor((size - 3) / 2));
+  for (let x = -hw; x <= hw; x++) g.put(x, 0);
+  for (let x = -hw + 1; x < hw; x++) g.put(x, -1);
   return g.pts();
 }
 
@@ -93,7 +116,7 @@ function makeRock(size: number, rng: Rng): Pt[] {
   const w = size;
   const h = Math.max(4, Math.round(size * 0.72));
   const poly: Array<[number, number]> = [];
-  const n = 9;
+  const n = 6;
   for (let i = 0; i < n; i++) {
     const a = Math.PI + (i * Math.PI) / (n - 1);
     const jr = 0.88 + rng.next() * 0.2;
@@ -134,6 +157,8 @@ export interface Sprite {
   pts: Int16Array;
   /** Flat x,y pairs of the cast shadow (light from the upper left), to be dithered when drawn. */
   shadow: Int16Array;
+  /** The highest row of the sprite (most negative y), where a label can sit above it. */
+  top: number;
 }
 
 function flatten(points: Iterable<Pt>): Int16Array {
@@ -174,10 +199,18 @@ export function getSprite(kind: ObstacleKind, size: number, variant: number): Sp
         pts = makeDead(size);
         break;
       case 'rock':
-        pts = makeRock(size, new Rng(size * 131 + variant * 17 + 5));
+        pts = isPebble(kind, size)
+          ? makePebble(size)
+          : makeRock(size, new Rng(size * 131 + variant * 17 + 5));
         break;
     }
-    sprite = { pts: flatten(pts), shadow: castShadow(pts) };
+    // A pebble lies flat, so it casts no shadow: only things that stand up out of the snow do.
+    const flat = isPebble(kind, size);
+    sprite = {
+      pts: flatten(pts),
+      shadow: flat ? new Int16Array(0) : castShadow(pts),
+      top: Math.min(0, ...pts.map(([, y]) => y)),
+    };
     cache.set(key, sprite);
   }
   return sprite;
