@@ -3,7 +3,7 @@ import type { Action, Input } from '../platform/input';
 import { randomSeedString } from '../core/rng';
 import type { SimInput } from '../sim/sim';
 import { menuButtons, type ButtonId, type Phase, type Screen } from './menu';
-import { BOARDS, cycleGear, RIDERS } from './progress';
+import { BOARDS, cycleGear, RIDERS, type Kit } from './progress';
 import type { Store } from './storage';
 
 /** What the controls can ask the game to do. */
@@ -153,9 +153,10 @@ export class Controls {
   }
 
   private cycleFocusedGear(dir: 1 | -1): void {
-    if (this.host.phase === 'title' && this.screen === 'gear') {
-      this.cycleGear(this.focus >= 3 ? 'rider' : 'board', dir);
-    }
+    if (this.host.phase !== 'title' || this.screen !== 'gear') return;
+    // Rows top to bottom: snowboard or skis, then the board look, then the rider look.
+    if (this.focus < 2) this.setKit(dir < 0 ? 'snowboard' : 'skis');
+    else this.cycleGear(this.focus >= 4 ? 'rider' : 'board', dir);
   }
 
   private startAction(): void {
@@ -203,6 +204,8 @@ export class Controls {
     hud: () => this.toggleSetting('bigHud'),
     autopause: () => this.toggleSetting('autoPause'),
     manual: () => this.toggleSetting('manualSpin'),
+    snowboard: () => this.setKit('snowboard'),
+    skis: () => this.setKit('skis'),
     boardPrev: () => this.cycleGear('board', -1),
     boardNext: () => this.cycleGear('board', 1),
     riderPrev: () => this.cycleGear('rider', -1),
@@ -250,6 +253,13 @@ export class Controls {
     const list = which === 'board' ? BOARDS : RIDERS;
     p.gear[which] = cycleGear(list, p.gear[which], p, dir);
     store.saveProgress();
+  }
+
+  private setKit(kit: Kit): void {
+    const { store, announce } = this.deps;
+    store.progress().gear.kit = kit;
+    store.saveProgress();
+    announce?.(kit === 'skis' ? 'Skis.' : 'Snowboard.');
   }
 
   private openScreen(screen: Screen): void {

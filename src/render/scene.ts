@@ -39,7 +39,7 @@ export class SceneRenderer {
       if (r.kind === 'cliff') this.drawCliff(r, cam);
       else this.drawRamp(r, cam);
     }
-    this.track.draw(fb, sim.trail, cam);
+    this.track.draw(fb, sim.trail, cam, g.progress.gear.kit === 'skis');
     this.drawLanded(g, cam);
     this.drawPickups(g, cam);
 
@@ -292,6 +292,7 @@ export class SceneRenderer {
         0,
         RIDERS.findIndex((b) => b.id === gear.rider),
       ),
+      skis: gear.kit === 'skis',
     };
   }
 
@@ -301,7 +302,7 @@ export class SceneRenderer {
     const sx = Math.round(r.x);
     const sy = Math.round(r.y - cam);
     if (sim.crashed) {
-      drawWipeout(this.fb, sx, sy + 10, sim.crashT, sim.crashFace);
+      drawWipeout(this.fb, sx, sy + 10, sim.crashT, sim.crashFace, g.progress.gear.kit === 'skis');
       return;
     }
     const z = Math.round(zOf(sim));
@@ -309,7 +310,7 @@ export class SceneRenderer {
     const straight = Math.max(0, 1 - Math.abs(r.hx) / 0.4);
     const poseTuck = Math.min(1, tuck * 1.7) * straight * (r.air ? 0.4 : 1);
     const pose = poseOf(r, sx, sy - z, poseTuck);
-    drawRider(this.fb, pose, { style: this.style(g), time: g.animT });
+    drawRider(this.fb, pose, { style: this.style(g), time: g.animT, brake: r.brake });
   }
 
   /** A shadow on the snow under a jumping rider: it shrinks and fades as the rider climbs. */

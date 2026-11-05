@@ -47,6 +47,10 @@ function labelOf(g: GameView, id: ButtonId): string {
       return 'ALL TIME';
     case 'tabDaily':
       return 'TODAY';
+    case 'snowboard':
+      return 'SNOWBOARD';
+    case 'skis':
+      return 'SKIS';
     case 'boardPrev':
     case 'riderPrev':
       return '<';
@@ -290,7 +294,8 @@ function gearRow(
 function drawGear(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'GEAR', CX, 12, WHITE, 2);
-  const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx };
+  const skis = g.progress.gear.kit === 'skis';
+  const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx, skis };
   // a rider doing a slow carve, shown big enough to see the details
   const a = (62 * Math.PI) / 180;
   const pose: RiderPose = {
@@ -307,10 +312,11 @@ function drawGear(fb: Framebuffer, g: GameView): void {
     pitch: 0,
   };
   drawRider(fb, pose, { style, time: g.animT });
-  drawButtons(fb, g);
+  drawButtons(fb, g, skis ? 'skis' : 'snowboard');
   const b = g.progress.gear.board;
   const r = g.progress.gear.rider;
-  gearRow(fb, g, 'BOARD', BOARDS, boardIndex(b), 150);
+  // The board looks are drawn on the skis too.
+  gearRow(fb, g, skis ? 'SKIS' : 'BOARD', BOARDS, boardIndex(b), 150);
   gearRow(fb, g, 'RIDER', RIDERS, riderIndex(r), 200);
   drawTextCentered(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
 }

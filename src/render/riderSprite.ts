@@ -6,13 +6,15 @@ type Pt = readonly [number, number];
 
 /** Looks the player can unlock: a board pattern and a headgear. Both are one-colour sprite swaps. */
 export interface RiderStyle {
-  /** 0 classic, 1 stripe, 2 dots, 3 twin tip. */
+  /** 0 classic, 1 stripe, 2 dots, 3 twin tip. On skis the same looks are drawn on the skis. */
   board: number;
   /** 0 helmet, 1 beanie, 2 scarf, 3 ears. */
   rider: number;
+  /** A skier with two skis and poles instead of a snowboarder. */
+  skis: boolean;
 }
 
-export const DEFAULT_STYLE: RiderStyle = { board: 0, rider: 0 };
+export const DEFAULT_STYLE: RiderStyle = { board: 0, rider: 0, skis: false };
 
 const GRID = 96;
 const HALF = GRID / 2;
@@ -164,6 +166,8 @@ export interface DrawOptions {
   style?: RiderStyle;
   /** Seconds, for the fluttering scarf. */
   time?: number;
+  /** 0..1, how far into a stop the rider is. Only the skier shows it (a hockey stop). */
+  brake?: number;
 }
 
 /**
@@ -178,6 +182,10 @@ export function drawRider(
   opts: Readonly<DrawOptions> = {},
 ): void {
   const style = opts.style ?? DEFAULT_STYLE;
+  if (style.skis) {
+    drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0);
+    return;
+  }
   // Mid-flip the rider tucks his limbs in; upright (or a full turn) changes nothing.
   const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
@@ -390,9 +398,17 @@ function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): 
 /**
  * A wipeout: the rider tumbles through the air, lands, and lies in the snow. Drawn as a small
  * stick figure rotated about its middle, in the same one-colour style as the riding pose.
- * `t` is seconds since the crash, `face` the side the rider was heading to.
+ * `t` is seconds since the crash, `face` the side the rider was heading to. A skier tumbles with
+ * crossed skis and his poles.
  */
-export function drawWipeout(fb: Framebuffer, x: number, y: number, t: number, face: 1 | -1): void {
+export function drawWipeout(
+  fb: Framebuffer,
+  x: number,
+  y: number,
+  t: number,
+  face: 1 | -1,
+  skis = false,
+): void {
   const AIR = 0.75;
   const p = Math.min(1, t / AIR);
   const ease = 1 - Math.pow(1 - p, 2);
@@ -414,12 +430,22 @@ export function drawWipeout(fb: Framebuffer, x: number, y: number, t: number, fa
     const B = tx(b[0], b[1]);
     set.line(A[0], A[1], B[0], B[1], th);
   };
-  seg([-9, 0], [9, 0], 2); // board
+  if (skis) {
+    // Two skis crossed under the boots, and the poles still in the hands.
+    seg([-9, 1], [9, -1], 1);
+    seg([-9, -2], [9, 0], 1);
+  } else {
+    seg([-9, 0], [9, 0], 2); // board
+  }
   seg([-3, -1], [0, -4], 1);
   seg([3, -1], [0, -4], 1); // legs
   seg([0, -4], [0, -11], 3); // torso
   seg([0, -10], [-4, -6], 1);
   seg([0, -10], [4, -13], 1); // flailing arms
+  if (skis) {
+    seg([-4, -6], [-10, -2], 1);
+    seg([4, -13], [11, -15], 1); // poles
+  }
   for (let j = 0; j < 3; j += 0.5) {
     for (let i = -2; i <= 1.5; i += 0.5) {
       const q = tx(i, -14 + j);
@@ -427,4 +453,285 @@ export function drawWipeout(fb: Framebuffer, x: number, y: number, t: number, fa
     }
   }
   set.stamp(fb);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The skier. Kept apart from the snowboarder above: it shares the mask, the helmet, headgear and
+// face cut, and the flip squash, nothing else. The skis start on the track head (the tail
+// position the sim records) and point along the heading, like the board.
+// ---------------------------------------------------------------------------------------------
+
+/** Skis are as long as the board, this far apart centre to centre, with the boots this far up from the tails. */
+const SKI_LEN = BOARD_LEN;
+const SKI_GAP = 4;
+const BOOT = 9;
+/** Share of their length the skis lose pointing straight down the hill. */
+const SKI_FORESHORTEN = 0.3;
+
+/**
+ * Skis pointing straight down or up the hill run along the line of sight, so they are drawn shorter than across the
+ * slope. Without it, two long straight lines under the boots read as the skier's legs.
+ */
+function reach(ny: number): number {
+  return 1 - SKI_FORESHORTEN * ny ** 4;
+}
+
+/** The joints of the skier for one pose, in screen pixels. Pairs are the two sides, near one first. */
+interface SkierSkeleton {
+  n: Pt;
+  /** Across the skis, from the far ski to the near one. */
+  p: Pt;
+  mv: 1 | -1;
+  /** Seen from the side (going across the slope), from behind (downhill) or from the front (uphill, mid spin). */
+  view: 'side' | 'back' | 'front';
+  hip: Pt;
+  sh: Pt;
+  head: Pt;
+  feet: readonly [Pt, Pt];
+  knees: readonly [Pt, Pt];
+  elbows: readonly [Pt, Pt];
+  hands: readonly [Pt, Pt];
+  /** Where each pole ends: in the snow, or pointing back past the skier in a tuck. */
+  tips: readonly [Pt, Pt];
+  /** Shoulders square to the camera: from behind and from the front. */
+  square: boolean;
+  /** From the side the far arm and pole hide behind the body. */
+  farArm: boolean;
+}
+
+function drawSkier(
+  fb: Framebuffer,
+  pose: Readonly<RiderPose>,
+  style: Readonly<RiderStyle>,
+  time: number,
+  brake: number,
+): void {
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
+  mask.reset(pose.x, pose.y - 10);
+  const b = solveSkier(pose, tuck, brake);
+  maskSkis(mask, pose, b, style.board);
+  maskSkierBody(mask, b);
+  // The helmet and face cut take the snowboarder's skeleton: from behind it is the back of the head.
+  const head: Skeleton = {
+    n: b.n,
+    mv: b.mv,
+    heel: b.view === 'back',
+    rear: b.view !== 'side',
+    hip: b.hip,
+    sh: b.sh,
+    head: b.head,
+    ff: b.feet[0],
+    fb: b.feet[1],
+    kf: b.knees[0],
+    kb: b.knees[1],
+  };
+  maskHelmet(mask, head);
+  headgear(mask, style.rider, b.head, b.mv, time);
+  cutFace(mask, head);
+  if (flipping) mask.squashY(flipScale(pose.pitch));
+  mask.stamp(fb);
+}
+
+function solveSkier(pose: Readonly<RiderPose>, tuck: number, brake: number): SkierSkeleton {
+  const { x: rx, y: ry, nx, ny, face: mv } = pose;
+  const n: Pt = [nx, ny];
+  // The near ski is the one lower on the screen.
+  const p: Pt = nx >= 0 ? [-ny, nx] : [ny, -nx];
+  // The same switch, with the same hysteresis, as the board's solid and outlined looks.
+  const view = !pose.steep ? 'side' : ny > 0 ? 'back' : 'front';
+  const half = SKI_GAP / 2;
+  const boot: Pt = [rx + nx * BOOT * reach(ny), ry + ny * BOOT * reach(ny)];
+  const feet: [Pt, Pt] = [
+    [boot[0] + p[0] * half, boot[1] + p[1] * half - 1],
+    [boot[0] - p[0] * half, boot[1] - p[1] * half - 1],
+  ];
+  // A stop sinks the hips, like the crouch of a tuck but upright.
+  const sink = Math.max(tuck * 0.55, brake * 0.3);
+  const stand = 5.5 * SC * (1 - sink);
+  if (view === 'side') return solveSkierSide(n, p, mv, boot, feet, stand, tuck, brake);
+  // Square on: legs to the two skis, poles out to each side.
+  const hip: Pt = [boot[0], boot[1] - stand - 2 * SC];
+  const sh: Pt = [hip[0], hip[1] - 6 * SC * (1 - 0.3 * tuck)];
+  const head: Pt = [sh[0], sh[1] - 4 * SC];
+  // Knees bow out a little, so the legs read apart from the straight skis below them.
+  const knee = (f: Pt): Pt => [
+    (hip[0] + f[0]) / 2 + Math.sign(f[0] - hip[0]) * 1.2,
+    (hip[1] + f[1]) / 2,
+  ];
+  const ground = Math.max(feet[0][1], feet[1][1]) + 1;
+  const arms = squareArms(sh, hip, ground, tuck, feet[0][0] < hip[0] ? -1 : 1);
+  return {
+    n,
+    p,
+    mv,
+    view,
+    hip,
+    sh,
+    head,
+    feet,
+    knees: [knee(feet[0]), knee(feet[1])],
+    ...arms,
+    square: true,
+    farArm: true,
+  };
+}
+
+/**
+ * Shoulders square to the camera: elbows out, poles planted wide of the skis, or tucked with the poles under the
+ * arms poking out behind. `near` is the side (-1 left, 1 right) of the first of each pair.
+ */
+function squareArms(
+  sh: Pt,
+  hip: Pt,
+  ground: number,
+  tuck: number,
+  near: -1 | 1,
+): Pick<SkierSkeleton, 'elbows' | 'hands' | 'tips'> {
+  const arm = (s: number): { elbow: Pt; hand: Pt; tip: Pt } => {
+    if (tuck > 0.45) {
+      const elbow: Pt = [sh[0] + s * 3, sh[1] + 2];
+      const hand: Pt = [hip[0] + s * 1.5, hip[1]];
+      return { elbow, hand, tip: [hip[0] + s * 5, hip[1] - 2] };
+    }
+    const elbow: Pt = [sh[0] + s * 4, sh[1] + 3];
+    const hand: Pt = [sh[0] + s * 5, sh[1] + 5];
+    return { elbow, hand, tip: [hand[0] + s * 3, ground] };
+  };
+  const a = arm(near);
+  const c = arm(-near);
+  return { elbows: [a.elbow, c.elbow], hands: [a.hand, c.hand], tips: [a.tip, c.tip] };
+}
+
+/** Across the slope: knees and shoulders lead the way, hips sit back over the boots. */
+function solveSkierSide(
+  n: Pt,
+  p: Pt,
+  mv: 1 | -1,
+  boot: Pt,
+  feet: readonly [Pt, Pt],
+  stand: number,
+  tuck: number,
+  brake: number,
+): SkierSkeleton {
+  // A hockey stop: the skis skid across the slope with the body upright over them.
+  const lean = brake > 0.5 ? 0.3 : 1.5 + 2.5 * tuck;
+  const hip: Pt = [boot[0] - mv * 1.2 * SC, boot[1] - stand - 2 * SC];
+  const sh: Pt = [hip[0] + mv * lean * SC, hip[1] - 6 * SC * (1 - 0.3 * tuck)];
+  const head: Pt = [sh[0] + mv * (1 + tuck) * SC, sh[1] - 4 * SC];
+  const knee = (f: Pt): Pt => [
+    (hip[0] + f[0]) / 2 + mv * (2 + 1.5 * tuck) * SC,
+    (hip[1] + f[1]) / 2 - 0.5,
+  ];
+  const ground = Math.max(feet[0][1], feet[1][1]) + 1;
+  const knees: [Pt, Pt] = [knee(feet[0]), knee(feet[1])];
+  let hands: [Pt, Pt];
+  let tips: [Pt, Pt];
+  if (tuck > 0.45) {
+    // Hands forward by the knees, poles tucked under the arms pointing back.
+    const h: Pt = [sh[0] + mv * 2 * SC, sh[1] + 4 * SC];
+    hands = [h, [h[0] - mv, h[1] - 1]];
+    tips = [
+      [h[0] - mv * 9 * SC, h[1] - 1.5 * SC],
+      [h[0] - mv * 9 * SC - mv, h[1] - 1.5 * SC - 1],
+    ];
+  } else {
+    // Hands out in front, poles trailing back to the snow.
+    const h: Pt = [sh[0] + mv * 3 * SC, sh[1] + 3 * SC];
+    hands = [h, [h[0] - mv * 1.5, h[1] - 1]];
+    tips = [
+      [h[0] - mv * 3 * SC, ground],
+      [h[0] - mv * 3 * SC - mv * 1.5, ground - 2],
+    ];
+  }
+  const mid = (h: Pt): Pt => [(sh[0] + h[0]) / 2, (sh[1] + 1 + h[1]) / 2];
+  const elbows: [Pt, Pt] = [mid(hands[0]), mid(hands[1])];
+  return {
+    n,
+    p,
+    mv,
+    view: 'side',
+    hip,
+    sh,
+    head,
+    feet,
+    knees,
+    elbows,
+    hands,
+    tips,
+    square: false,
+    farArm: false,
+  };
+}
+
+/** Two thin skis side by side, tips turned up. The board looks carry over to them. */
+function maskSkis(
+  set: Mask,
+  pose: Readonly<RiderPose>,
+  { n, p }: Readonly<SkierSkeleton>,
+  board: number,
+): void {
+  const half = SKI_GAP / 2;
+  const curl = 2 * (1 - pose.ang / 110);
+  const wide = pose.steep;
+  // Seen from behind, the tails hide behind the boots, so the skis start at the feet instead of running up the legs.
+  const from = wide ? Math.max(0, BOOT * reach(n[1]) - 1.5) : 0;
+  for (const s of [1, -1]) {
+    const tx = pose.x + p[0] * half * s;
+    const ty = pose.y + p[1] * half * s;
+    const len = SKI_LEN * reach(n[1]);
+    const out = p[0] * s >= 0 ? 1 : -1;
+    for (let u = from; u <= len; u += 0.5) {
+      const rise = Math.max(0, (u - len + 4) / 4) ** 2 * curl;
+      const tail = board === 3 ? Math.max(0, (3 - u) / 3) ** 2 * curl : 0;
+      const x = tx + n[0] * u;
+      const y = ty + n[1] * u - rise - tail;
+      set.add(x, y);
+      // Seen from behind the skis show their whole width, so they read as planks rather than more legs.
+      if (wide) set.add(x + out, y);
+    }
+    // Stripes and dots go along the outside edge: cut out of a wide ski, added beside a thin one (the near ski only,
+    // as the far one runs under the body).
+    if ((board !== 1 && board !== 2) || (!wide && s < 0)) continue;
+    for (let u = Math.max(3, Math.ceil(from)); u < len - 2; u++) {
+      // From the side a stripe is a solid band along the middle of the ski: dashes there look like jaggies.
+      if (board === 1 ? wide && u % 4 >= 2 : u % 4 !== 1) continue;
+      if (board === 1 && !wide && (u < 6 || u > len - 6)) continue;
+      const x = tx + n[0] * u;
+      const y = ty + n[1] * u;
+      if (wide) set.delete(x + out, y);
+      else set.add(x + p[0] * s, y + p[1] * s);
+    }
+  }
+}
+
+function maskSkierBody(set: Mask, b: Readonly<SkierSkeleton>): void {
+  const { hip, sh, feet, knees, hands, tips } = b;
+  for (let k = 1; k >= 0; k--) {
+    const f = feet[k];
+    const kn = knees[k];
+    if (!f || !kn) continue;
+    // Square on, two thin legs bowing out keep a gap between them, so they read apart from the skis.
+    const thin = b.square && b.view !== 'side';
+    const th = thin ? 1 : 2;
+    const top = thin ? hip[0] + Math.sign(f[0] - hip[0]) : hip[0];
+    set.line(top, hip[1], kn[0], kn[1], th);
+    set.line(kn[0], kn[1], f[0], f[1], th);
+  }
+  set.line(hip[0], hip[1], sh[0], sh[1], 3); // torso
+  if (b.square) set.line(sh[0] - 3, sh[1], sh[0] + 3, sh[1], 2); // shoulders
+  for (let k = b.farArm ? 1 : 0; k >= 0; k--) {
+    const e = b.elbows[k];
+    const h = hands[k];
+    const t = tips[k];
+    if (!e || !h || !t) continue;
+    const from: Pt = b.square ? [sh[0] + Math.sign(h[0] - sh[0]) * 3, sh[1]] : [sh[0], sh[1] + 1];
+    set.line(from[0], from[1], e[0], e[1], 1);
+    set.line(e[0], e[1], h[0], h[1], 1); // arm
+    set.line(h[0], h[1], t[0], t[1], 1); // pole
+    // The basket, a nub just above the tip on the outside, is what tells a pole from an arm.
+    const out = t[0] >= h[0] ? 1 : -1;
+    const up = t[1] >= h[1] ? -2 : 2;
+    set.add(t[0] + out, t[1] + up);
+  }
 }

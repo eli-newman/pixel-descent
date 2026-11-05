@@ -39,6 +39,14 @@ const BAND_SHADOW = 3;
 const BAND_SHADOW_SHARE = 0.4;
 /** The band has to be this wide before it has a shadow, so a barely open slide stays as clean as the line. */
 const BAND_SHADOW_FROM = 4;
+/**
+ * Skis leave two thin lines instead of one: this far apart centre to centre, each this wide on a straight and gaining
+ * this much (outwards, so the gap between them stays open) in the hardest turn, with a slightly shorter shadow.
+ */
+const SKI_GAP = 3;
+const SKI_WIDTH = 1;
+const SKI_SWELL = 1;
+const SKI_SHADOW = 2;
 /** Sub-steps along each recorded segment, close enough that no row or column is skipped. */
 const ALONG = [0, 0.34, 0.67];
 
@@ -55,10 +63,13 @@ export class TrackPainter {
   private tailX = new Float64Array(0);
   private tailY = new Float64Array(0);
   private nose = false;
+  private skis = false;
   private start = 0;
   private end = 0;
 
-  draw(fb: Framebuffer, t: TrailView, cam: number): void {
+  /** `skis` draws the two thin lines of a pair of skis instead of the board's one. */
+  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false): void {
+    this.skis = skis;
     this.reserve(t.count);
     let start = 0;
     for (let i = 1; i <= t.count; i++) {
@@ -136,8 +147,21 @@ export class TrackPainter {
   }
 
   private drawLine(fb: Framebuffer, i: number, cam: number): void {
+    if (this.skis) {
+      const w = this.skiWidth(i - 1);
+      // Each ski's line is centred on its own path, a real perpendicular away from the middle, so the pair stays
+      // evenly apart where the spans swap between rows and columns. It swells outwards, keeping the gap open.
+      const off = SKI_GAP / 2 + (w - SKI_WIDTH) / 2;
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, -off);
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, off);
+      return;
+    }
     const half = this.width(i - 1) / 2;
     this.span(fb, i, cam, -half, half, WHITE);
+  }
+
+  private skiWidth(i: number): number {
+    return SKI_WIDTH + (SKI_SWELL * this.depth(i)) / MAX_DEPTH;
   }
 
   /**
@@ -145,21 +169,28 @@ export class TrackPainter {
    * right. It grows out from under the line as a turn deepens.
    */
   private drawShadow(fb: Framebuffer, i: number, cam: number): void {
-    const reach = (SHADOW * this.depth(i - 1) * this.facing(i - 1)) / MAX_DEPTH;
+    const reach =
+      ((this.skis ? SKI_SHADOW : SHADOW) * this.depth(i - 1) * this.facing(i - 1)) / MAX_DEPTH;
     if (reach < 0.5) return;
-    const half = this.width(i - 1) / 2;
     const sunSide = (this.ty[i - 1] ?? 0) * SUN_X - (this.tx[i - 1] ?? 0) * SUN_Y < 0;
     const steep = Math.abs(this.ty[i - 1] ?? 0) >= Math.abs(this.tx[i - 1] ?? 0);
     // Spans run along x on a steep stretch and along y on a flat one, so turn the side into that axis.
     const along = steep ? (this.ty[i - 1] ?? 0) : -(this.tx[i - 1] ?? 0);
     const positive = along >= 0 === sunSide;
-    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY);
-    else this.span(fb, i, cam, -half - reach, -half + 1, GREY);
+    // Skis: only the line on the sun side casts it, outwards, so the gap between the two lines stays clean.
+    const w = this.skiWidth(i - 1);
+    const half = this.skis ? w / 2 : this.width(i - 1) / 2;
+    const off = this.skis
+      ? (SKI_GAP / 2 + (w - SKI_WIDTH) / 2) * (positive === along >= 0 ? -1 : 1)
+      : 0;
+    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY, off);
+    else this.span(fb, i, cam, -half - reach, -half + 1, GREY, off);
   }
 
   /**
    * Fill the segment ending at point i between two signed offsets from the centre, always along whole rows on a
-   * steep stretch and whole columns on a flat one. Rounding only the two ends gives clean, even edges.
+   * steep stretch and whole columns on a flat one. Rounding only the two ends gives clean, even edges. `side` moves
+   * the centre that far to one side of the path (perpendicular to it, positive to the left of travel), for a ski.
    */
   private span(
     fb: Framebuffer,
@@ -168,11 +199,12 @@ export class TrackPainter {
     lo: number,
     hi: number,
     color: number,
+    side = 0,
   ): void {
-    const ax = this.x[i - 1] ?? 0;
-    const ay = this.y[i - 1] ?? 0;
-    const bx = this.x[i] ?? 0;
-    const by = this.y[i] ?? 0;
+    const ax = (this.x[i - 1] ?? 0) - (this.ty[i - 1] ?? 0) * side;
+    const ay = (this.y[i - 1] ?? 0) + (this.tx[i - 1] ?? 0) * side;
+    const bx = (this.x[i] ?? 0) - (this.ty[i] ?? 0) * side;
+    const by = (this.y[i] ?? 0) + (this.tx[i] ?? 0) * side;
     if (Math.round(by) - cam < -8 || Math.round(ay) - cam > H + 8) return;
     const steep = Math.abs(this.ty[i - 1] ?? 0) >= Math.abs(this.tx[i - 1] ?? 0);
     for (const u of ALONG) {
@@ -277,15 +309,26 @@ export class TrackPainter {
     const along = Math.ceil(
       2 * Math.max(Math.hypot(tx1 - tx0, ty1 - ty0), Math.hypot(nx1 - nx0, ny1 - ny0)),
     );
+    // Skis scrape from the outside edge of one ski to the outside edge of the other, so the band takes in both lines.
+    const ext = this.skis ? SKI_GAP / 2 + SKI_WIDTH / 2 : 0;
     const across = Math.ceil(
-      2 * Math.max(Math.hypot(nx0 - tx0, ny0 - ty0), Math.hypot(nx1 - tx1, ny1 - ty1)),
+      2 * (Math.max(Math.hypot(nx0 - tx0, ny0 - ty0), Math.hypot(nx1 - tx1, ny1 - ty1)) + 2 * ext),
     );
     for (let u = 0; u <= along; u++) {
       const f = u / Math.max(1, along);
-      const fromX = tx0 + (tx1 - tx0) * f;
-      const fromY = ty0 + (ty1 - ty0) * f;
-      const toX = nx0 + (nx1 - nx0) * f;
-      const toY = ny0 + (ny1 - ny0) * f;
+      let fromX = tx0 + (tx1 - tx0) * f;
+      let fromY = ty0 + (ty1 - ty0) * f;
+      let toX = nx0 + (nx1 - nx0) * f;
+      let toY = ny0 + (ny1 - ny0) * f;
+      if (ext > 0) {
+        const d = Math.hypot(toX - fromX, toY - fromY) || 1;
+        const ux = ((toX - fromX) / d) * ext;
+        const uy = ((toY - fromY) / d) * ext;
+        fromX -= ux;
+        fromY -= uy;
+        toX += ux;
+        toY += uy;
+      }
       const len = Math.hypot(toX - fromX, toY - fromY);
       const reach = Math.min(BAND_SHADOW, Math.max(0, len - BAND_SHADOW_FROM) * BAND_SHADOW_SHARE);
       // The band is cut into the snow, so its edge nearest the sun casts the shadow across the floor.

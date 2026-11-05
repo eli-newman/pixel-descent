@@ -57,7 +57,7 @@ export function recordRun(store: Store, summary: RunSummary, day: string): RunRe
   };
 }
 
-export function toCard(res: RunResult): ResultCardData {
+export function toCard(res: RunResult, skis: boolean): ResultCardData {
   return {
     seed: res.summary.seed,
     daily: res.summary.daily,
@@ -68,5 +68,6 @@ export function toCard(res: RunResult): ResultCardData {
     tricks: res.summary.tricks,
     cause: res.summary.cause,
     newBest: res.newBest,
+    skis,
   };
 }

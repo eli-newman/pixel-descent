@@ -34,9 +34,14 @@ export interface Stats {
   hintRuns: number;
 }
 
+/** What the rider stands on. Both are open to everyone and only change the look: the rules are the same. */
+export type Kit = 'snowboard' | 'skis';
+
 export interface Gear {
   board: string;
   rider: string;
+  /** Saves from before skiing have no kit and ride a snowboard. */
+  kit: Kit;
 }
 
 export interface Progress {
@@ -61,7 +66,7 @@ export function createProgress(): Progress {
       hintRuns: 0,
     },
     achievements: {},
-    gear: { board: 'classic', rider: 'classic' },
+    gear: { board: 'classic', rider: 'classic', kit: 'snowboard' },
   };
 }
 
@@ -189,6 +194,7 @@ export function sanitiseGear(p: Progress): void {
   if (!board || !board.unlocked(p)) p.gear.board = 'classic';
   const rider = RIDERS.find((b) => b.id === p.gear.rider);
   if (!rider || !rider.unlocked(p)) p.gear.rider = 'classic';
+  if (p.gear.kit !== 'skis') p.gear.kit = 'snowboard';
 }
 
 /** Step to the next unlocked entry of a gear list. */
