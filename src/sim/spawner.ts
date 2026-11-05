@@ -1,4 +1,15 @@
-import { PX_PER_M, START_X, START_Y, W } from '../core/config';
+import {
+  CLIFF_CHANCE,
+  FIRST_JUMP_Y,
+  JUMP_GAP_MAX,
+  JUMP_GAP_MIN,
+  JUMP_JITTER,
+  KICKER_HALF,
+  PX_PER_M,
+  START_X,
+  START_Y,
+  W,
+} from '../core/config';
 import { detExp } from '../core/detMath';
 import { obstacleBox } from './collision';
 import { maxFlightPx, topSpeed } from './speed';
@@ -22,14 +33,15 @@ export const LANE_HALF = 6;
 const LANE_OFFSET = 20;
 const LANE_END_STRIP = 38;
 const LANE_STAR_STEP = 13;
-const RAMP_HALF = 13;
-/** Roughly two in five of the jumps are cliffs: a rock ledge across the whole slope that you drop off. */
-const CLIFF_CHANCE = 0.4;
 /** Chance per row of a tree or rock hugging the slope edge. */
 const SIDE_FOREST_CHANCE = 0.55;
 /** Extra solid-free ground after the furthest possible landing, so a rider has room to steer back to the path. */
 const LANDING_MARGIN = 110;
-const FIRST_RAMP_Y = START_Y + 900;
+const FIRST_RAMP_Y = START_Y + FIRST_JUMP_Y;
+/** Clear ground kept between a jump (lip or landing end) and a risk lane. */
+const LANE_JUMP_PAD = 60;
+/** Ice and drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
+const JUMP_PATCH_PAD = 40;
 const FIRST_LANE_Y = START_Y + 1500;
 const FIRST_PATCH_Y = START_Y + 800;
 
@@ -249,16 +261,37 @@ export class Spawner {
     return false;
   }
 
-  /** Plan kickers up to `limit`. Each gets a solid-free landing zone sized for the fastest rider at that distance. */
+  /** True when world y is within `pad` of a jump's lip. */
+  private nearJump(y: number, pad: number): boolean {
+    for (const r of this.ramps) if (Math.abs(r.y - y) < pad) return true;
+    return false;
+  }
+
+  /** The first lane that overlaps world y from `y0` to `y1`, if any. */
+  private laneOverlapping(y0: number, y1: number): Lane | null {
+    for (const l of this.lanes) if (l.y1 >= y0 && l.y0 <= y1) return l;
+    return null;
+  }
+
+  /**
+   * Plan jumps up to `limit`. Each gets a solid-free landing zone sized for the fastest rider at that
+   * distance. A jump never shares ground with a risk lane: it moves on past the lane rather than being
+   * dropped, so lanes do not thin out the jumps. The gap to the next jump is always longer than the
+   * longest landing zone, so a rider is back on the snow with time to line up before the next one.
+   */
   private planRamps(limit: number): void {
     while (this.nextRampY <= limit) {
-      const y = Math.round(this.nextRampY + this.rampRng.range(0, 150));
-      this.nextRampY = y + this.rampRng.range(1200, 1800);
-      const distM = (y - START_Y) / PX_PER_M;
+      let y = Math.round(this.nextRampY + this.rampRng.range(0, JUMP_JITTER));
       const cliff = this.rampRng.chance(CLIFF_CHANCE);
-      const landEnd = Math.round(y + maxFlightPx(topSpeed(distM), cliff) + LANDING_MARGIN);
-      this.planLanes(landEnd + 60);
-      if (this.nearLane(y, 60) || this.nearLane(landEnd, 60)) continue;
+      let landEnd = this.landEnd(y, cliff);
+      for (;;) {
+        this.planLanes(landEnd + LANE_JUMP_PAD);
+        const lane = this.laneOverlapping(y - LANE_JUMP_PAD, landEnd + LANE_JUMP_PAD);
+        if (!lane) break;
+        y = Math.round(lane.y1 + LANE_JUMP_PAD + 1);
+        landEnd = this.landEnd(y, cliff);
+      }
+      this.nextRampY = y + this.rampRng.range(JUMP_GAP_MIN, JUMP_GAP_MAX);
       const segs = cliff ? this.cliffSegs() : [];
       const seed = cliff ? this.rampRng.int(1, 100000) : 0;
       this.ramps.push({
@@ -266,13 +299,19 @@ export class Spawner {
         kind: cliff ? 'cliff' : 'kicker',
         x: cliff ? W / 2 : Math.round(this.pathCenter(y)),
         y,
-        half: cliff ? W / 2 : RAMP_HALF,
+        half: cliff ? W / 2 : KICKER_HALF,
         landEnd,
         used: false,
         seed,
         segs,
       });
     }
+  }
+
+  /** World y where the solid-free ground after a jump at `y` ends: the furthest landing at top speed, plus room to steer. */
+  private landEnd(y: number, cliff: boolean): number {
+    const distM = (y - START_Y) / PX_PER_M;
+    return Math.round(y + maxFlightPx(topSpeed(distM), cliff) + LANDING_MARGIN);
   }
 
   /**
@@ -312,6 +351,9 @@ export class Spawner {
       const variant = this.patchRng.int(0, 3);
       this.planLanes(y + ry + 80);
       if (this.nearLane(y, ry + 30)) continue;
+      // Keep the run-up and the lip of every jump clean: no ice or drift drawn over it or slowing the rider into it.
+      this.planRamps(y + ry + JUMP_PATCH_PAD);
+      if (this.nearJump(y, ry + JUMP_PATCH_PAD)) continue;
       const distM = (y - START_Y) / PX_PER_M;
       const centre = this.pathCenter(y);
       let x: number;

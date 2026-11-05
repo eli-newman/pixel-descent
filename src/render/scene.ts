@@ -13,6 +13,8 @@ import { TrackPainter } from './track';
 
 /** How tall a kicker is for its cast shadow, in pixels at the lip. */
 const RAMP_HEIGHT = 8;
+/** Rows of a kicker's face, from its back edge down to the lip. */
+const RAMP_ROWS = 17;
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
@@ -220,18 +222,23 @@ export class SceneRenderer {
     }
   }
 
-  /** A kicker seen from behind: a hatched wedge rising to a solid lip, with a shadow below it. */
+  /**
+   * A kicker seen from behind, as you ride up to it: an outlined trapezoid that widens toward a thick
+   * lip, with two arrows on its face pointing downhill (the way you ride over it) and a hard shadow
+   * past the lip. Nothing else on the hill has straight edges and arrows, so it never reads as a
+   * tree, rock, bush or drift, and the cliffs' warning chevrons point the other way.
+   */
   private drawRamp(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = r.y - cam;
-    if (ly < -14 || ly > H + 6) return;
+    if (ly < -RAMP_ROWS - 2 || ly > H + RAMP_HEIGHT + 2) return;
     const fb = this.fb;
-    const rows = 11;
+    const rows = RAMP_ROWS;
+    const halfAt = (i: number): number => Math.round(r.half * (0.55 + (0.45 * i) / (rows - 1)));
     // Cast shadow, the same rule as the tree sprites (castShadow): the jump rises toward the lip, a point at
     // height h lands 0.85h + 1 to the right and 0.28h + 1 down. Drawn first so the jump sits on top of it.
     for (let i = 0; i < rows; i++) {
-      const t = i / (rows - 1);
-      const hw = Math.round(r.half * (0.5 + 0.5 * t));
-      const h = 1 + (RAMP_HEIGHT - 1) * t;
+      const hw = halfAt(i);
+      const h = 1 + ((RAMP_HEIGHT - 1) * i) / (rows - 1);
       const wy = r.y - (rows - 1) + i;
       const sy = Math.round(wy + 1 + h * 0.28);
       for (let dx = -hw; dx <= hw; dx++) {
@@ -239,30 +246,28 @@ export class SceneRenderer {
         if ((sx + sy) % 2 === 0) fb.put(sx, sy - cam);
       }
     }
+    // the face: cleared to the snow, a solid outline with the back edge closed
     for (let i = 0; i < rows; i++) {
-      const t = i / (rows - 1);
-      const hw = Math.round(r.half * (0.5 + 0.5 * t));
+      const hw = halfAt(i);
       const y = ly - (rows - 1) + i;
-      fb.fillRect(r.x - hw - 1, y, hw * 2 + 3, 1, OFF);
+      fb.fillRect(r.x - hw, y, hw * 2 + 1, 1, OFF);
+      if (i === 0) fb.fillRect(r.x - hw, y, hw * 2 + 1, 1);
       fb.put(r.x - hw, y);
       fb.put(r.x + hw, y);
-      const wy = r.y - (rows - 1) + i;
-      for (let dx = -hw + 1; dx < hw; dx++) {
-        if ((r.x + dx + wy) % 3 === 0) fb.put(r.x + dx, y);
+    }
+    // two arrows on the face, two pixels thick, pointing down the hill
+    const arm = 5;
+    for (const top of [ly - rows + 4, ly - rows + 9]) {
+      for (let k = 0; k <= arm; k++) {
+        for (let t = 0; t < 2; t++) {
+          fb.put(r.x - arm + k, top + k + t);
+          fb.put(r.x + arm - k, top + k + t);
+        }
       }
     }
-    // the lip, two pixels thick, with a chevron mark above it
-    for (let dx = -r.half; dx <= r.half; dx++) {
-      fb.put(r.x + dx, ly);
-      fb.put(r.x + dx, ly + 1);
-    }
-    for (let k = 0; k < 3; k++) {
-      fb.put(r.x - k, ly - 5 + k);
-      fb.put(r.x + k, ly - 5 + k);
-    }
-    for (let dx = -r.half + 2; dx <= r.half; dx += 2) {
-      fb.put(r.x + dx, ly + 3);
-    }
+    // the lip: two pixels thick and a pixel wider than the face, then a black gap where the snow drops away
+    fb.fillRect(r.x - r.half - 1, ly, r.half * 2 + 3, 2);
+    fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, OFF);
   }
 
   private drawPickups(g: GameView, cam: number): void {
