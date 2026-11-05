@@ -534,12 +534,15 @@ function drawSkier(
 }
 
 function solveSkier(pose: Readonly<RiderPose>, tuck: number, brake: number): SkierSkeleton {
-  const { x: rx, y: ry, nx, ny, face: mv } = pose;
+  const { x: rx, y: ry, nx, ny, face } = pose;
   const n: Pt = [nx, ny];
+  // Riding switch a skier goes backwards: the body faces up the hill, the way the skis came from.
+  const regular = pose.stance === 1;
+  const mv: 1 | -1 = regular ? face : face === 1 ? -1 : 1;
   // The near ski is the one lower on the screen.
   const p: Pt = nx >= 0 ? [-ny, nx] : [ny, -nx];
   // The same switch, with the same hysteresis, as the board's solid and outlined looks.
-  const view = !pose.steep ? 'side' : ny > 0 ? 'back' : 'front';
+  const view = !pose.steep ? 'side' : ny > 0 === regular ? 'back' : 'front';
   const half = SKI_GAP / 2;
   const boot: Pt = [rx + nx * BOOT * reach(ny), ry + ny * BOOT * reach(ny)];
   const feet: [Pt, Pt] = [
@@ -673,6 +676,7 @@ function maskSkis(
 ): void {
   const half = SKI_GAP / 2;
   const curl = 2 * (1 - pose.ang / 110);
+  const regular = pose.stance === 1;
   const wide = pose.steep;
   // Seen from behind, the tails hide behind the boots, so the skis start at the feet instead of running up the legs.
   const from = wide ? Math.max(0, BOOT * reach(n[1]) - 1.5) : 0;
@@ -682,8 +686,10 @@ function maskSkis(
     const len = SKI_LEN * reach(n[1]);
     const out = p[0] * s >= 0 ? 1 : -1;
     for (let u = from; u <= len; u += 0.5) {
-      const rise = Math.max(0, (u - len + 4) / 4) ** 2 * curl;
-      const tail = board === 3 ? Math.max(0, (3 - u) / 3) ** 2 * curl : 0;
+      // The tip curls up at the front of the ski: the downhill end, or the uphill end riding switch (backwards).
+      const toTip = regular ? len - u : u;
+      const rise = Math.max(0, (4 - toTip) / 4) ** 2 * curl;
+      const tail = board === 3 ? Math.max(0, (3 - (len - toTip)) / 3) ** 2 * curl : 0;
       const x = tx + n[0] * u;
       const y = ty + n[1] * u - rise - tail;
       set.add(x, y);

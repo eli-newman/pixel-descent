@@ -98,10 +98,10 @@ describe('stance', () => {
 describe('stance on screen', () => {
   const W = 64;
   const H = 64;
-  function draw(r: Readonly<RiderState>, x = 32): Framebuffer {
+  function draw(r: Readonly<RiderState>, x = 32, skis = false): Framebuffer {
     const fb = new Framebuffer(W, H);
     fb.clear();
-    drawRider(fb, poseOf(r, x, 36, 0));
+    drawRider(fb, poseOf(r, x, 36, 0), skis ? { style: { board: 0, rider: 0, skis } } : undefined);
     return fb;
   }
   function differing(a: Framebuffer, b: Framebuffer, mirror = false): number {
@@ -131,6 +131,24 @@ describe('stance on screen', () => {
       const mirrored = draw(carving(-hx, 1), W - 1 - 20);
       const off = differing(sw, mirrored, true);
       if (off > 10) offenders.push(`switch at ${hx} is ${off} px off the mirrored regular pose`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('a switch skier rides backwards: turned up the hill, face to the camera when pointing straight down', () => {
+    const offenders: string[] = [];
+    // From the side the whole body turns round; square on only the head does (goggles instead of the back of the helmet).
+    for (const [hx, steep, least] of [
+      [0.3, false, 15],
+      [0.8, false, 15],
+      [-0.5, false, 15],
+      [0.02, true, 3],
+    ] as const) {
+      const sw = carving(hx, -1);
+      const regular = carving(hx, 1);
+      sw.steep = regular.steep = steep;
+      const off = differing(draw(sw, 32, true), draw(regular, 32, true));
+      if (off < least) offenders.push(`skier at ${hx} looks the same switch (${off} px apart)`);
     }
     expect(offenders).toEqual([]);
   });
