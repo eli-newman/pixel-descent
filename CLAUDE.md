@@ -1,6 +1,6 @@
 # Powline
 
-Black and white pixel-art downhill snowboard game (skis optional, a look only), with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
+Black and white pixel-art downhill snowboard game (skis optional, a look only), with one yellow UI accent and two greys for the track shadow, plus an optional colour mode (a look only, `render/palette.ts`). TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
 
 ## Commands
 

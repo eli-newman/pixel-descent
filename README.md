@@ -2,7 +2,7 @@
 
 Play at https://powline.vercel.app
 
-A one-colour, pixel-art downhill snowboard (or ski) game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
+A pixel-art downhill snowboard (or ski) game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track, or in colour: white snow, dark green pines with snow on them and brown trunks, dark grey and brown rocks with snow caps, grey cliffs and a grey track. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
 
 Carve down an endless mountain, dodge trees and rocks, graze bushes, grab risk-lane stars, hit kickers. **Go straight to go fast, carve to stay alive.**
 
@@ -43,6 +43,7 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 | Sound on / off     | M (sound is ON by default)     | SOUND button on the title and pause menus |
 | Big HUD, music     | H, U (music is OFF by default) | Pause menu                                |
 | Manual spin on/off | G (default OFF)                | MANUAL SPIN button, pause menu            |
+| Colour on / off    | Menus (default OFF)            | COLOR button on the title and pause menus |
 
 ## Mechanics
 

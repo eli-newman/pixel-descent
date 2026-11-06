@@ -21,6 +21,7 @@ Everything around the sim: which screen you are on, menus, lifetime progress and
 - Anything new that `render/` must read goes on `GameView` in `view.ts`, as data. Never put a mutating method on a view.
 - Retiring an achievement: delete it from `ACHIEVEMENTS`. Saves keep the old id, and `Game.achievementCount` only counts ids that still exist.
 - The GEAR screen's rows top to bottom are SNOWBOARD / SKIS (two buttons like the score tabs, the chosen one yellow), the board look, then the rider look. Left and right on the keyboard change the row the focus is on, so `cycleFocusedGear` maps focus 0-1, 2-3 and 4-5 to those rows: keep it in step with `GEAR` in `menu.ts`.
+- `Settings.color` (off by default, older saves load it off) switches the colour look. It is toggled by the `color` button on the title screen (beside DAILY) and in the pause menu, and is read only by `render/`.
 - Saved data lives under `SAVE_PREFIX` in `core/config.ts`. Changing the shape of stored data needs a migration or a version bump.
 - Adding a menu button: update `ButtonId` and `menuButtons` in `menu.ts`, add it to the `onButton` table in `controls.ts`, draw it in `render/ui.ts`. `onButton` and `onAction` are `Record`s, so a new id or action does not compile until it is handled.
 
