@@ -20,6 +20,11 @@ export interface RiderState {
   /** Speed along the heading in px/s. */
   speed: number;
   face: Face;
+  /**
+   * 1 riding regular, -1 riding switch (the other foot forward, facing the other way on the board).
+   * A landing after an odd number of half turns swaps it, and it stays until the next one does.
+   */
+  stance: Face;
   steep: boolean;
   /** True while in the air after a kicker. */
   air: boolean;
@@ -73,6 +78,7 @@ export function createRider(): RiderState {
     hv: 0,
     speed: 0,
     face: -1,
+    stance: 1,
     steep: true,
     air: false,
     airT: 0,

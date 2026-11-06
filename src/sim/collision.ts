@@ -1,4 +1,4 @@
-import type { Obstacle } from './types';
+import type { Obstacle, ObstacleKind } from './types';
 
 export interface Box {
   x0: number;
@@ -20,6 +20,13 @@ export const NEAR_MISS_PX = 5;
 
 export type Hit = 'none' | 'slow' | 'crash';
 
+/** Rocks smaller than this are pebbles: decoration you ride over. The renderer draws them flat so they never pass for a rock. */
+export const PEBBLE_SIZE = 9;
+
+export function isPebble(kind: ObstacleKind, size: number): boolean {
+  return kind === 'rock' && size < PEBBLE_SIZE;
+}
+
 export function riderCenter(r: Point): Point {
   return { x: r.x, y: r.y + RIDER_CENTER_DY };
 }
@@ -37,7 +44,7 @@ export function obstacleBox(o: Obstacle): Box | null {
     case 'dead':
       return { x0: o.x - 2, x1: o.x + 2, y0: o.y - 6, y1: o.y + 1 };
     case 'rock': {
-      if (o.size < 9) return null;
+      if (isPebble(o.kind, o.size)) return null;
       const w = Math.max(3, o.size / 2 - 1);
       const h = Math.round(o.size * 0.72);
       return { x0: o.x - w, x1: o.x + w, y0: o.y - h * 0.55, y1: o.y + 1 };

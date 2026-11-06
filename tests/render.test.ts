@@ -42,7 +42,11 @@ function ride(game: Game, input: FakeInput): void {
   game.update(DT);
 }
 
-function capture(): { frames: Record<string, string>; spun: boolean; flipped: boolean } {
+function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
+  frames: Record<string, string>;
+  spun: boolean;
+  flipped: boolean;
+} {
   const { game, input } = makeGame(SEED);
   const scene = new SceneRenderer(new Framebuffer(W, H));
   const frames: Record<string, string> = {};
@@ -54,6 +58,7 @@ function capture(): { frames: Record<string, string>; spun: boolean; flipped: bo
   shot('title');
   for (const screen of ['scores', 'gear', 'goals'] as const) {
     game.press(screen);
+    if (screen === 'gear' && kit === 'skis') game.press('skis');
     game.update(DT);
     shot(`title-${screen}`);
     game.press('back');
@@ -116,36 +121,82 @@ describe('golden frames', () => {
     ).toEqual([]);
     expect(frames).toMatchInlineSnapshot(`
       {
-        "air": "a12fe688",
-        "crash-hit": "c53dae9e",
-        "crash-tumble": "6a8a05e5",
-        "flip": "67489ec4",
-        "over": "6ced0156",
-        "paused": "47bd2d5a",
-        "ride-10s": "af1bc473",
-        "ride-12s": "cf2b7f6c",
-        "ride-14s": "b8fbbfcb",
-        "ride-16s": "c93bb8e4",
-        "ride-18s": "fe88b65d",
-        "ride-20s": "3395b614",
-        "ride-22s": "27ed3e32",
-        "ride-24s": "b3f1f187",
-        "ride-26s": "5bb13c66",
-        "ride-28s": "e97ac1ad",
-        "ride-2s": "72e36b99",
-        "ride-30s": "15dc7d2d",
-        "ride-32s": "ac53fe3b",
-        "ride-34s": "c4d125ff",
-        "ride-36s": "fef4d879",
-        "ride-38s": "22bde393",
-        "ride-40s": "7cb40d4a",
-        "ride-4s": "3f16aa05",
-        "ride-6s": "bcabbe59",
-        "ride-8s": "9f18132e",
-        "spin": "03813f51",
-        "start": "7ac9599c",
+        "air": "9e98e1a7",
+        "crash-hit": "cff3bfa7",
+        "crash-tumble": "d881381d",
+        "flip": "2c61f3fb",
+        "over": "ec7de2be",
+        "paused": "55d45f2e",
+        "ride-10s": "3cbdc99d",
+        "ride-12s": "ae267d16",
+        "ride-14s": "66653779",
+        "ride-16s": "a08123a7",
+        "ride-18s": "9655ba46",
+        "ride-20s": "d45ad7cd",
+        "ride-22s": "e554d18b",
+        "ride-24s": "f22b611e",
+        "ride-26s": "c9026001",
+        "ride-28s": "62085c76",
+        "ride-2s": "e7295cf0",
+        "ride-30s": "19bd9850",
+        "ride-32s": "e3448cdd",
+        "ride-34s": "03bd6779",
+        "ride-36s": "29df7002",
+        "ride-38s": "153acc8a",
+        "ride-40s": "76f4aa43",
+        "ride-4s": "8dabb2cb",
+        "ride-6s": "85032834",
+        "ride-8s": "9dc3af93",
+        "spin": "7e8fec7f",
+        "start": "1827df37",
         "title": "223e00fc",
-        "title-gear": "f664c0b5",
+        "title-gear": "31f4dbb4",
+        "title-goals": "e9135c03",
+        "title-scores": "4c029d3b",
+      }
+    `);
+  });
+
+  it('draws the same run on skis', () => {
+    const { frames, spun, flipped } = capture('skis');
+    expect(spun).toBe(true);
+    expect(flipped).toBe(true);
+    const board = capture().frames;
+    // The title and menus behind the GEAR screen are the same; every frame with the rider in it is not.
+    const same = Object.keys(frames).filter((k) => frames[k] === board[k]);
+    expect(same.sort()).toEqual(['title', 'title-goals', 'title-scores']);
+    expect(frames).toMatchInlineSnapshot(`
+      {
+        "air": "1682e937",
+        "crash-hit": "8196fdd3",
+        "crash-tumble": "5ebe67c5",
+        "flip": "8a5b5a23",
+        "over": "2590845e",
+        "paused": "04c41697",
+        "ride-10s": "ee969264",
+        "ride-12s": "e2390286",
+        "ride-14s": "220b6a58",
+        "ride-16s": "ed2a08b8",
+        "ride-18s": "f7e0247a",
+        "ride-20s": "53a76e95",
+        "ride-22s": "fd2c2466",
+        "ride-24s": "ed91d8ca",
+        "ride-26s": "3d8ddf5e",
+        "ride-28s": "aa25949e",
+        "ride-2s": "407514a0",
+        "ride-30s": "a7abf7b9",
+        "ride-32s": "fc0e941d",
+        "ride-34s": "62ee1bd9",
+        "ride-36s": "e1ae8c27",
+        "ride-38s": "9b5e189a",
+        "ride-40s": "f8f9fdc4",
+        "ride-4s": "0faf5e91",
+        "ride-6s": "6a31ef9c",
+        "ride-8s": "c4d50ff8",
+        "spin": "e75c5927",
+        "start": "e412232e",
+        "title": "223e00fc",
+        "title-gear": "da556ec2",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
       }

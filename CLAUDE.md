@@ -1,6 +1,6 @@
 # Powline
 
-Black and white pixel-art downhill snowboard game, with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
+Black and white pixel-art downhill snowboard game (skis optional, a look only), with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
 
 ## Commands
 
@@ -15,7 +15,7 @@ npm run build       # typecheck + vitest + vite build, so a deploy cannot ship f
 npm run format      # prettier
 ```
 
-Before calling any change done: `npm run check`, `npm run build` and `npm run test:e2e` must all pass. CI (`.github/workflows/ci.yml`) runs the same steps on every push and pull request to `main`. First-time e2e setup: `npx playwright install chromium`.
+Before calling any change done: `npm run check`, `npm run build` and `npm run test:e2e` must all pass. CI (`.github/workflows/ci.yml`) runs the same steps on every push and pull request to `main`, inside the official Playwright container (browsers preinstalled). When you bump `@playwright/test`, bump that image tag to the same version. First-time e2e setup: `npx playwright install chromium firefox webkit`.
 
 ## Hosting and deploy
 

@@ -13,6 +13,7 @@ import {
 } from '../state/progress';
 import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
+import { drawHints } from './hints';
 import { hudRect } from './layout';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
@@ -46,6 +47,10 @@ function labelOf(g: GameView, id: ButtonId): string {
       return 'ALL TIME';
     case 'tabDaily':
       return 'TODAY';
+    case 'snowboard':
+      return 'SNOWBOARD';
+    case 'skis':
+      return 'SKIS';
     case 'boardPrev':
     case 'riderPrev':
       return '<';
@@ -122,6 +127,7 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   const big = g.settings.bigHud;
   const rect = hudRect(big);
+  drawHints(fb, g);
   // A solid black block under the numbers: no snow flecks or flakes can touch the text.
   fb.fillRect(0, 0, rect.w, rect.h, OFF);
   fb.fillRect(rect.w, 0, 1, rect.h, OFF);
@@ -285,29 +291,65 @@ function gearRow(
   void idx;
 }
 
+/** Offscreen canvas for the GEAR preview, built once. */
+const PREVIEW = new Framebuffer(48, 48);
+/** Middle of the gap between the SNOWBOARD / SKIS buttons (bottom 56) and the first gear row (top 150). */
+const PREVIEW_MID_Y = 103;
+
+/** Bounds of the lit pixels, or null when nothing is lit. */
+function litBox(src: Framebuffer): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = src.w;
+  let y0 = src.h;
+  let x1 = -1;
+  let y1 = -1;
+  for (let y = 0; y < src.h; y++) {
+    for (let x = 0; x < src.w; x++) {
+      if (!src.isOn(x, y)) continue;
+      x0 = Math.min(x0, x);
+      x1 = Math.max(x1, x);
+      y0 = Math.min(y0, y);
+      y1 = Math.max(y1, y);
+    }
+  }
+  return x1 < 0 ? null : { x0, y0, x1, y1 };
+}
+
 function drawGear(fb: Framebuffer, g: GameView): void {
   panel(fb, 4, 316);
   drawTextCentered(fb, 'GEAR', CX, 12, WHITE, 2);
-  const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx };
-  // a rider doing a slow carve, shown big enough to see the details
+  const skis = g.progress.gear.kit === 'skis';
+  const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx, skis };
+  // A rider doing a slow carve, drawn at twice the scale and centred in the gap between the kit buttons and the rows.
   const a = (62 * Math.PI) / 180;
   const pose: RiderPose = {
-    x: CX + 8,
-    y: 86,
+    x: PREVIEW.w / 2 + 8,
+    y: PREVIEW.h / 2 + 4,
     nx: -Math.cos(a),
     ny: Math.sin(a),
     face: -1,
+    stance: 1,
     up: 1,
     ang: 62,
     steep: false,
     tuck: 0,
     pitch: 0,
   };
-  drawRider(fb, pose, { style, time: g.animT });
-  drawButtons(fb, g);
+  // Measured on a still frame, so animated headgear never nudges the whole preview.
+  PREVIEW.clear();
+  drawRider(PREVIEW, pose, { style, time: 0 });
+  const box = litBox(PREVIEW);
+  PREVIEW.clear();
+  drawRider(PREVIEW, pose, { style, time: g.animT });
+  if (box) {
+    const midX = Math.round((box.x0 + box.x1 + 1) / 2);
+    const midY = Math.round((box.y0 + box.y1 + 1) / 2);
+    fb.blitScaled(PREVIEW, CX - midX * 2, PREVIEW_MID_Y - midY * 2, 2);
+  }
+  drawButtons(fb, g, skis ? 'skis' : 'snowboard');
   const b = g.progress.gear.board;
   const r = g.progress.gear.rider;
-  gearRow(fb, g, 'BOARD', BOARDS, boardIndex(b), 150);
+  // The board looks are drawn on the skis too.
+  gearRow(fb, g, skis ? 'SKIS' : 'BOARD', BOARDS, boardIndex(b), 150);
   gearRow(fb, g, 'RIDER', RIDERS, riderIndex(r), 200);
   drawTextCentered(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
 }

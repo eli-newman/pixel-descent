@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { START_X, START_Y } from '../src/core/config';
+import { PX_PER_M, START_X, START_Y } from '../src/core/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/sim/collision';
 import { hashSeed } from '../src/core/rng';
 import { maxFlightPx, topSpeed } from '../src/sim/speed';
 import { Sim } from '../src/sim/sim';
 import { LANE_HALF, SAFE_LANE_END_Y, Spawner, pathHalfWidth } from '../src/sim/spawner';
-import { runBot } from './helpers/bot';
+import { botInput, runBot } from './helpers/bot';
 
 describe('spawner', () => {
   it('is deterministic for a seed', () => {
@@ -96,6 +96,69 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     const batch = s.advance(START_Y + 60000);
     expect(batch.ramps.some((r) => r.kind === 'cliff')).toBe(true);
     expect(batch.ramps.some((r) => r.kind === 'kicker')).toBe(true);
+  });
+
+  it('places a jump every 120 to 225 m on average, mostly kickers, the first one early', () => {
+    const offenders: string[] = [];
+    let kickers = 0;
+    let all = 0;
+    for (let i = 0; i < 60; i++) {
+      const s = new Spawner(hashSeed(`freq-${i}`));
+      const ramps = s.advance(START_Y + 5000 * PX_PER_M).ramps;
+      const perKm = ramps.length / 5;
+      if (perKm < 4.4 || perKm > 8.3) offenders.push(`freq-${i}: ${perKm} per km`);
+      const first = ramps[0];
+      if (!first || first.y > START_Y + 1000) offenders.push(`freq-${i}: first at ${first?.y}`);
+      kickers += ramps.filter((r) => r.kind === 'kicker').length;
+      all += ramps.length;
+    }
+    expect(offenders).toEqual([]);
+    expect(kickers / all).toBeGreaterThan(0.6);
+    expect(kickers / all).toBeLessThan(0.8);
+  });
+
+  it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of ice and drifts', () => {
+    const offenders: string[] = [];
+    for (const seed of seeds) {
+      const s = new Spawner(hashSeed(seed));
+      const batch = s.advance(START_Y + 60000);
+      batch.ramps.forEach((r, i) => {
+        const next = batch.ramps[i + 1];
+        // The next lip comes well after this landing zone ends, so a rider can line up again.
+        if (next && next.y - r.landEnd < 300)
+          offenders.push(`${seed} ${r.id}: next jump too close`);
+        for (const l of s.lanes) {
+          if (l.y1 >= r.y - 60 && l.y0 <= r.landEnd + 60)
+            offenders.push(`${seed} ${r.id}: on a lane`);
+        }
+        for (const p of batch.patches) {
+          if (Math.abs(p.y - r.y) < p.ry + 40)
+            offenders.push(`${seed} ${r.id}: patch ${p.id} at the lip`);
+        }
+        // A kicker sits inside the open path, so riding the path lines you up with it.
+        const distM = (r.y - START_Y) / PX_PER_M;
+        if (r.kind === 'kicker' && r.half > pathHalfWidth(distM) + 1) {
+          offenders.push(`${seed} ${r.id}: kicker wider than the path`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('lets a path-following bot hit about a jump every 250 m', () => {
+    let launches = 0;
+    let metres = 0;
+    for (const seed of seeds.slice(0, 6)) {
+      const sim = new Sim(seed);
+      sim.begin();
+      for (let i = 0; i < 120 * 90 && !sim.crashed; i++) {
+        sim.step(botInput(sim));
+        for (const e of sim.events) if (e.type === 'launch') launches++;
+      }
+      metres += sim.distM;
+    }
+    // Before jumps were made more frequent the same bot hit about 2.2 per 1000 m.
+    expect((launches / metres) * 1000).toBeGreaterThan(3.5);
   });
 
   it('gives every cliff its own look, open slope beside the rock, and sometimes just a side cliff', () => {
@@ -220,7 +283,8 @@ describe('mountain world is stable', () => {
     const fp = (seed: string): [number, number, number] => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
       // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
-      // ids started at 1,000,000, so those are put back here. The numbers themselves never change.
+      // ids started at 1,000,000, so those are put back here. Refreshed on purpose only when the course
+      // design changes (last: jumps every ~150 m instead of ~200 m, wider kickers), never to get green.
       const old = {
         obstacles: b.obstacles,
         pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
@@ -231,7 +295,7 @@ describe('mountain world is stable', () => {
       };
       return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
-    expect(fp('alpha')).toEqual([4040464968, 1058, 8]);
-    expect(fp('k3m9qa')).toEqual([3537220680, 1081, 8]);
+    expect(fp('alpha')).toEqual([4264322803, 977, 13]);
+    expect(fp('k3m9qa')).toEqual([2059284050, 941, 13]);
   });
 });

@@ -58,6 +58,19 @@ export class Framebuffer {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.put(x + i, y + j, color);
   }
 
+  /**
+   * Copy the lit pixels of `src` scaled up by a whole `scale`, its pixel (sx, sy) landing on (x + sx * scale, y + sy * scale).
+   * Unlit pixels are skipped, so what is underneath shows through.
+   */
+  blitScaled(src: Framebuffer, x: number, y: number, scale: number): void {
+    for (let sy = 0; sy < src.h; sy++) {
+      for (let sx = 0; sx < src.w; sx++) {
+        const c = src.get(sx, sy);
+        if (c !== OFF) this.fillRect(x + sx * scale, y + sy * scale, scale, scale, c);
+      }
+    }
+  }
+
   strokeRect(x: number, y: number, w: number, h: number, color: number = WHITE): void {
     for (let i = 0; i < w; i++) {
       this.put(x + i, y, color);

@@ -19,6 +19,7 @@ const card: ResultCardData = {
   tricks: 3,
   cause: 'obstacle',
   newBest: true,
+  skis: false,
 };
 
 describe('share card', () => {
@@ -56,5 +57,7 @@ describe('share card', () => {
     expect(shareText({ ...card, daily: true })).toContain('daily');
     expect(shareText(card)).not.toContain('k3m9qa');
     expect(shareText(card)).not.toContain('seed');
+    expect(shareText(card)).not.toContain('skis');
+    expect(shareText({ ...card, skis: true })).toContain('(567m on skis)');
   });
 });

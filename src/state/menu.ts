@@ -11,6 +11,8 @@ export type ButtonId =
   | 'back'
   | 'tabTop'
   | 'tabDaily'
+  | 'snowboard'
+  | 'skis'
   | 'boardPrev'
   | 'boardNext'
   | 'riderPrev'
@@ -59,6 +61,8 @@ const SCORES: UiButton[] = [
 ];
 
 const GEAR: UiButton[] = [
+  b('snowboard', 14, 34, 74, MIN_TOUCH),
+  b('skis', 92, 34, 74, MIN_TOUCH),
   b('boardPrev', 14, 164, 28, 24),
   b('boardNext', 138, 164, 28, 24),
   b('riderPrev', 14, 214, 28, 24),
