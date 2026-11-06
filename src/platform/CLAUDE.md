@@ -2,13 +2,14 @@
 
 The edge of the game: everything that talks to the browser. Keep browser APIs in this folder so `sim/` and `state/` stay testable.
 
-| File          | Job                                                                                                                     |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `input.ts`    | Keyboard, mouse, touch and swipe turned into `Action`s and taps, and a held-steer value. Cancels browser zoom gestures. |
-| `loop.ts`     | Fixed 120 Hz update with a requestAnimationFrame render.                                                                |
-| `viewport.ts` | Largest whole-number scale of the 180x320 canvas that fits, with safe-area margin.                                      |
-| `audio.ts`    | Procedural WebAudio (wind, carve hiss, rumble, pitch ladders, music).                                                   |
-| `shareDom.ts` | Web Share / clipboard / download flow for the result card.                                                              |
+| File           | Job                                                                                                                                                                                                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input.ts`     | Keyboard, mouse, touch and swipe turned into `Action`s and taps, and a held-steer value. Cancels browser zoom gestures.                                                                                                                                               |
+| `loop.ts`      | Fixed 120 Hz update with a requestAnimationFrame render.                                                                                                                                                                                                              |
+| `viewport.ts`  | Largest whole-number scale of the 180x320 canvas that fits, with safe-area margin.                                                                                                                                                                                    |
+| `audio.ts`     | Procedural WebAudio (wind, carve hiss, rumble, pitch ladders, music).                                                                                                                                                                                                 |
+| `shareDom.ts`  | Web Share / clipboard / download flow for the result card. Resolves to a `ShareOutcome`: the player's message and the `via` analytics reports.                                                                                                                        |
+| `analytics.ts` | Vercel Web Analytics without the npm package: `startWebAnalytics` queues a `beforeSend` (`cleanUrl`), adds the script tag and returns a `Tracker`; `analyticsConfig` reads Vercel's build-time paths; `trimProps` keeps the first `ANALYTICS_MAX_PROPS`; `noTracker`. |
 
 ## Rules
 
@@ -16,7 +17,9 @@ The edge of the game: everything that talks to the browser. Keep browser APIs in
 - `Game` never imports from here at runtime. It receives `Sfx` and `Input` as dependencies built in `main.ts`.
 - The page must never zoom, and a zoom must never resize the game. iOS Safari ignores `user-scalable=no`, so `input.ts` cancels pinches and the end of every touch outside a button (a double tap would otherwise zoom). `main.ts` sizes the game from `documentElement.clientWidth` and `clientHeight`, because `innerWidth` and `innerHeight` shrink while iOS Safari is zoomed. Desktop emulators do not show this: check it in the iOS Simulator or on a phone.
 - Touch gestures (`input.ts`): a finger holds its half of the screen only after `HOLD_MS` still (or `SWIPE_MS` of moving without a flick), never at once, because in the air even one step of hold commits a half turn and every swipe would start with a spin. A quick flick is vertical (a flip) unless its sideways part is more than `SWIPE_SLANT` times its vertical part, so a slanted thumb flick down is still the FRONTFLIP and only a clearly sideways one is a spin. A vertical flick (`FLIP_SWIPE_MIN` px within any `SWIPE_MS` of the touch) also counts after resting the thumb; a sideways one only within `SWIPE_MS` of touching, so a steering drag never spins. Swipe down sends `down`, which is flip 1, shown as FRONTFLIP (see the flip naming note in `src/sim/CLAUDE.md`). The hold is timed on the `now` clock passed to `Input` (`performance.now()` in the browser), flicks on event `timeStamp` differences, so the two clocks never mix.
-- Every browser API call that can throw (storage, vibrate, share, audio context) must be guarded.
+- Every browser API call that can throw (storage, vibrate, share, audio context, analytics) must be guarded.
+- Analytics never throws, never waits and never sees a seed: `cleanUrl` drops the hash and every query value but `utm_*` from every page view and event, a visit from a shared link is reported as `<dir>/from-share`, the queue stops at `MAX_QUEUE` while the script loads, and a script that fails to load (an ad blocker, a host that is not Vercel) turns tracking into a no-op. The Vercel docs limit event properties to flat strings, numbers and booleans, 255 characters each, and 2 per event on Pro (8 with Web Analytics Plus); Hobby has no custom events, only page views.
+- `vite.config.ts` bakes `__ANALYTICS__` into the bundle: null unless `VERCEL=1` (every Vercel build) or `VITE_ANALYTICS=1`. With `VITE_ANALYTICS=1 npm run dev` it loads Vercel's debug script, which logs to the console and sends nothing. `VERCEL_OBSERVABILITY_CLIENT_CONFIG`, when Vercel sets it, supplies the script and endpoint paths; otherwise `/_vercel/insights/script.js`.
 
 ## Keeping docs in sync (mandatory)
 

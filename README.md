@@ -25,6 +25,17 @@ Players never see a seed: every run is just a new course. The game over SHARE li
 
 The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/powline/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Crawlers need an absolute `og:image` URL, so the `og:image`, `twitter:image` and `og:url` tags in `index.html` point at https://powline.vercel.app: update them if the address changes.
 
+## Privacy
+
+Powline counts visits and a few game events with [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy), which sets no cookies and stores nothing on your device, so there is no consent banner. What it sends:
+
+- a page view (page, referring site, country, browser, OS and device type, as Vercel collects them); a visit from a shared link is reported as the page `/from-share`,
+- **Run Start**: which run of this visit it is (1, 2, 3, 4-5, 6-10, 11+) and the setup (board or skis, mono or color, normal or daily),
+- **Run End**: the distance and the score, each in a coarse band (for example 250-499 m),
+- **Share**: which way the share went (Web Share with the image or the link, clipboard, download, cancelled).
+
+Never sent: seeds, share links, exact scores, names, saved data, or any identifier. The address sent drops every query value except `utm_*` campaign tags. Analytics only runs in builds made by Vercel (`VERCEL=1`) or with `VITE_ANALYTICS=1`, so `npm run dev`, the tests and copies of `dist/` on other hosts load nothing. If the script is blocked, the game does not notice.
+
 ## Controls
 
 | Action             | Keyboard                       | Touch                                     |
@@ -102,6 +113,7 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 - `src/render/` - `framebuffer.ts` (integer pixel buffer), `sprites.ts`, `riderSprite.ts` (snowboarder and skier, tuck, flip squash and tuck, wipeout, unlockable looks), `backdrop.ts`, `track.ts` (the track: one clean line for the board or two thin lines for skis, swelling gently in turns, with a soft grey shadow and a little powder), `scene.ts` (world), `font.ts` and `ui.ts` (3x5 pixel font, HUD, menus), `layout.ts`.
 - `src/render/share.ts`, `src/platform/shareDom.ts` - the 1200x630 result card (pure drawing, plus canvas export) and the Web Share / clipboard / download flow.
 - `src/platform/loop.ts` - fixed 120 Hz timestep with a requestAnimationFrame render. `src/platform/viewport.ts` - largest whole-number scale of the 180x320 canvas that fits the window.
+- `src/platform/analytics.ts`, `src/state/telemetry.ts` - Vercel Web Analytics without the npm package (the script tag, a URL cleaner, a never-throwing tracker) and the anonymous run events in coarse bands.
 - `src/main.ts` - wiring. In dev builds `window.__game`, `window.__input` and `window.__store` are exposed for debugging.
 
 ## Removed features

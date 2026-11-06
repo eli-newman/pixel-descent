@@ -4,11 +4,11 @@ Source root. `main.ts` is the only entry (loaded by `index.html`), `style.css` s
 
 See the root `CLAUDE.md` for the layer diagram and dependency rules, and each subfolder's `CLAUDE.md` for its files.
 
-| Path                                          | Job                                                                                                                                                                              |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `main.ts`                                     | Builds `Store`, `Sfx`, `Input`, `Game`, `Framebuffer`, `SceneRenderer`, `Loop` once; wires resize, pause button, auto-pause; exposes `__game`, `__input`, `__store` in dev only. |
-| `style.css`                                   | Page layout, pause button, safe-area probe.                                                                                                                                      |
-| `core/` `sim/` `state/` `platform/` `render/` | See their own `CLAUDE.md`.                                                                                                                                                       |
+| Path                                          | Job                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `main.ts`                                     | Builds `Store`, `Sfx`, `Input`, analytics, `Game`, `Framebuffer`, `SceneRenderer`, `Loop` once; wires resize, pause button, auto-pause, the share event; exposes `__game`, `__input`, `__store` in dev only. Analytics starts only when `__ANALYTICS__` (set in `vite.config.ts`) is not null, after the seed has left the address bar. |
+| `style.css`                                   | Page layout, pause button, safe-area probe.                                                                                                                                                                                                                                                                                             |
+| `core/` `sim/` `state/` `platform/` `render/` | See their own `CLAUDE.md`.                                                                                                                                                                                                                                                                                                              |
 
 ## Keeping docs in sync (mandatory)
 

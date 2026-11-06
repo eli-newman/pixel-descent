@@ -23,6 +23,8 @@ Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, l
 
 The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
 
+Vercel Web Analytics is enabled on the project (turned on with `vercel api "/web/insights/toggle?projectId=..." -X POST -F value=true`; the dashboard's Analytics tab does the same). The team is on Hobby: page views only (50,000 events a month), no custom events. Run Start, Run End and Share show up after an upgrade to Pro (2 properties per event, `ANALYTICS_MAX_PROPS`) or Pro with Web Analytics Plus (8). See `src/platform/CLAUDE.md` and the README privacy note.
+
 ## Dependencies
 
 `package.json` overrides `minimatch` to `^11.0.3` because the versions eslint and typescript-eslint ask for are flagged by `npm audit` (GHSA-g3hv-75wg-m249). Drop the override once they require a patched version themselves.
