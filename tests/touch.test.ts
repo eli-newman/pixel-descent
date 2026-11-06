@@ -4,6 +4,7 @@ import { Input } from '../src/platform/input';
 import { launch } from '../src/sim/rider';
 import { flipName } from '../src/sim/score';
 import { Sim, type SimEvent } from '../src/sim/sim';
+import { makeGame } from './helpers/fakes';
 
 type Pt = { id: number; x: number; y: number; t: number };
 
@@ -273,6 +274,194 @@ describe('touch gestures', () => {
     clock.t = 200;
     expect(input.brake()).toBe(false);
     expect(input.steer()).toBe(-1);
+    input.dispose();
+  });
+});
+
+/**
+ * A real Game on real touch input, launched off a cliff. `script(ms, t)` fires pointer events at
+ * `ms` milliseconds after takeoff. Returns the landing, how far the rider spun, the grab the game
+ * sent the sim on each step, and the toasts seen.
+ */
+function grabJump(script: (ms: number, t: ReturnType<typeof touchInput>) => void): {
+  land: Extract<SimEvent, { type: 'land' }> | null;
+  spun: number;
+  grabbed: boolean[];
+  toasts: string[];
+} {
+  const clock = { t: 0 };
+  const t = touchInput(clock);
+  const { game } = makeGame('grab-touch', { input: t.input });
+  t.input.push('start');
+  for (let i = 0; i < 6; i++) game.update(STEP);
+  const r = game.sim.rider;
+  r.speed = 150;
+  r.hx = 0;
+  r.hv = 0;
+  launch(r, true);
+  const step = game.sim.step.bind(game.sim);
+  const grabbed: boolean[] = [];
+  game.sim.step = (input, dt) => {
+    grabbed.push(input.grab === true);
+    step(input, dt);
+  };
+  let land: Extract<SimEvent, { type: 'land' }> | null = null;
+  let spun = 0;
+  const toasts: string[] = [];
+  for (let i = 0; i < 3000 && !land && !game.sim.crashed; i++) {
+    clock.t = Math.round(i * STEP * 1000);
+    script(clock.t, t);
+    game.update(STEP);
+    spun = Math.max(spun, Math.abs(r.spin));
+    for (const e of game.sim.events) if (e.type === 'land') land = e;
+    const text = game.toasts[0]?.text;
+    if (text && toasts[toasts.length - 1] !== text) toasts.push(text);
+  }
+  t.input.dispose();
+  return { land, spun, grabbed, toasts };
+}
+
+/** A pointer script: each event fires once, on the first frame at or after its time. */
+function timeline(events: Array<[number, (t: ReturnType<typeof touchInput>) => void]>) {
+  let next = 0;
+  return (ms: number, t: ReturnType<typeof touchInput>): void => {
+    while (next < events.length && (events[next]?.[0] ?? 0) <= ms) events[next++]?.[1](t);
+  };
+}
+
+describe('grabs on touch and keys', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('in the air a quick tap grabs, the next tap lets go, and neither spins', () => {
+    const res = grabJump(
+      timeline([
+        [100, (t) => t.down({ id: 1, x: 300, y: 400, t: 100 })],
+        [220, (t) => t.up({ id: 1, x: 300, y: 400, t: 220 })],
+        [750, (t) => t.down({ id: 2, x: 100, y: 400, t: 750 })],
+        [850, (t) => t.up({ id: 2, x: 100, y: 400, t: 850 })],
+      ]),
+    );
+    expect(res.spun).toBe(0);
+    expect(res.land?.quality).toBe('clean');
+    // Held from the first tap's lift (220 ms) to the second touch landing (750 ms).
+    expect(res.land?.grab).toBeGreaterThan(0.5);
+    expect(res.land?.grab).toBeLessThan(0.55);
+    expect(res.toasts).toContain('GRAB!');
+    expect(res.toasts.some((s) => /^GRAB \+\d+$/.test(s))).toBe(true);
+  });
+
+  it('a tap that is never let go lands STILL GRABBING, and the grab is dropped on the snow', () => {
+    const res = grabJump(
+      timeline([
+        [100, (t) => t.down({ id: 1, x: 300, y: 400, t: 100 })],
+        [180, (t) => t.up({ id: 1, x: 300, y: 400, t: 180 })],
+      ]),
+    );
+    expect(res.spun).toBe(0);
+    expect(res.land?.quality).toBe('sloppy');
+    expect(res.land?.held).toBe(true);
+    expect(res.toasts).toContain('STILL GRABBING');
+    expect(res.grabbed[res.grabbed.length - 1]).toBe(true);
+  });
+
+  it('a swipe down in the air is still only the flip, and holding a side still only spins', () => {
+    const swipe = flick(280, 400, 4, 60, 140, 100);
+    const last = swipe[swipe.length - 1] ?? { id: 1, x: 284, y: 460, t: 240 };
+    const flipJump = grabJump(
+      timeline([
+        [100, (t) => t.down({ id: 1, x: 280, y: 400, t: 100 })],
+        ...swipe.map((p): [number, (t: ReturnType<typeof touchInput>) => void] => [
+          p.t,
+          (t) => t.move(p),
+        ]),
+        [last.t + 10, (t) => t.up({ ...last, t: last.t + 10 })],
+      ]),
+    );
+    expect(flipJump.land?.flips).toBe(1);
+    expect(flipJump.land?.grab).toBe(0);
+    expect(flipJump.grabbed.some(Boolean)).toBe(false);
+    const spinJump = grabJump(
+      timeline([
+        [100, (t) => t.down({ id: 1, x: 300, y: 400, t: 100 })],
+        [500, (t) => t.up({ id: 1, x: 300, y: 400, t: 500 })],
+      ]),
+    );
+    expect(spinJump.spun).toBeGreaterThan(0);
+    expect(spinJump.grabbed.some(Boolean)).toBe(false);
+  });
+
+  it('in the air a still touch waits out the tap window before it holds its side', () => {
+    const clock = { t: 0 };
+    const { input, down, up } = touchInput(clock);
+    input.setAir(true);
+    down({ id: 1, x: 300, y: 300, t: 0 });
+    clock.t = 120;
+    expect(input.steer()).toBe(0);
+    up({ id: 1, x: 300, y: 300, t: 120 });
+    expect(input.grab()).toBe(true);
+    // The next touch lets go the moment it lands, and lifting it quickly does not grab again.
+    clock.t = 400;
+    down({ id: 2, x: 100, y: 300, t: 400 });
+    expect(input.grab()).toBe(false);
+    up({ id: 2, x: 100, y: 300, t: 450 });
+    expect(input.grab()).toBe(false);
+    // Held past the window it is a spin, not a grab.
+    clock.t = 1000;
+    down({ id: 3, x: 300, y: 300, t: 1000 });
+    clock.t = 1170;
+    expect(input.steer()).toBe(1);
+    up({ id: 3, x: 300, y: 300, t: 1200 });
+    expect(input.grab()).toBe(false);
+    // A grab is dropped on the snow.
+    down({ id: 4, x: 300, y: 300, t: 1300 });
+    up({ id: 4, x: 300, y: 300, t: 1350 });
+    expect(input.grab()).toBe(true);
+    input.setAir(false);
+    expect(input.grab()).toBe(false);
+    expect(actions(input)).toEqual([]);
+    input.dispose();
+  });
+
+  it('on the snow a tap is not a grab, and two fingers or a drag never are', () => {
+    const clock = { t: 0 };
+    const { input, down, move, up } = touchInput(clock);
+    down({ id: 1, x: 300, y: 300, t: 0 });
+    up({ id: 1, x: 300, y: 300, t: 60 });
+    expect(input.grab()).toBe(false);
+    input.setAir(true);
+    clock.t = 100;
+    down({ id: 1, x: 100, y: 300, t: 100 });
+    down({ id: 2, x: 300, y: 300, t: 110 });
+    up({ id: 1, x: 100, y: 300, t: 150 });
+    up({ id: 2, x: 300, y: 300, t: 160 });
+    clock.t = 300;
+    down({ id: 3, x: 100, y: 300, t: 300 });
+    move({ id: 3, x: 115, y: 302, t: 360 });
+    up({ id: 3, x: 115, y: 302, t: 400 });
+    expect(input.grab()).toBe(false);
+    input.dispose();
+  });
+
+  it('X or Shift held is a grab on the keyboard', () => {
+    const { input } = touchInput();
+    const key = (type: string, code: string): void => {
+      window.dispatchEvent(
+        Object.defineProperties(new Event(type, { cancelable: true }), {
+          code: { value: code },
+          repeat: { value: false },
+          ctrlKey: { value: false },
+          metaKey: { value: false },
+          altKey: { value: false },
+        }),
+      );
+    };
+    expect(input.grab()).toBe(false);
+    for (const code of ['KeyX', 'ShiftLeft', 'ShiftRight']) {
+      key('keydown', code);
+      expect(input.grab()).toBe(true);
+      key('keyup', code);
+      expect(input.grab()).toBe(false);
+    }
     input.dispose();
   });
 });

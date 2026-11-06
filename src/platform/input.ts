@@ -8,7 +8,6 @@ export type Action =
   | 'hud'
   | 'music'
   | 'manual'
-  | 'grab'
   | 'up'
   | 'down'
   | 'left'
@@ -61,8 +60,9 @@ const SWIPE_SLANT = 1.25;
  */
 const HOLD_MS = 80;
 /**
- * In the air a still touch released within TAP_MS is a tap, which grabs (or lets go of) the board.
- * So that a tap never also spins, a new still touch in the air holds its side only after TAP_MS.
+ * In the air a still touch released within TAP_MS is a tap, which grabs the board, and the next touch
+ * lets go the moment it lands. So that a tap never also spins, a new still touch in the air holds its
+ * side only after TAP_MS.
  */
 const TAP_MS = 160;
 
@@ -95,6 +95,10 @@ export class Input {
   private readonly cleanup: Array<() => void> = [];
   /** Set by the game each step: the rider is airborne, so a quick tap is a grab. */
   private air = false;
+  /** A touch grab is on: a tap in the air set it, and the next touch, or the snow, clears it. */
+  private tapGrab = false;
+  /** This touch let go of a grab when it landed, so lifting it does not grab again. */
+  private letGo = false;
   /** True once a touch has been seen: the game shows touch hints. */
   usingTouch = false;
   /** Set by the game so taps can be reported in logical (180x320) coordinates. */
@@ -145,15 +149,17 @@ export class Input {
     return up === down ? 0 : up ? -1 : 1;
   }
 
-  /** True while a grab key (X, Shift) is held. A touch grab is a tap, sent as the `grab` action. */
+  /** True while a grab key (X, Shift) is held, or from a tap in the air until the next touch. */
   grab(): boolean {
+    if (this.tapGrab) return true;
     for (const code of this.keys) if (GRAB.has(code)) return true;
     return false;
   }
 
-  /** Tell input whether the rider is in the air, where a quick tap grabs instead of holding a side. */
+  /** Tell input whether the rider is in the air, where a quick tap grabs instead of holding a side. Landing drops a touch grab. */
   setAir(on: boolean): void {
     this.air = on;
+    if (!on) this.tapGrab = false;
   }
 
   /** True while a left key and a right key are held together, or two fingers are down. */
@@ -185,6 +191,7 @@ export class Input {
     this.pointerSteer = 0;
     this.holdSide = 0;
     this.dragging = false;
+    this.tapGrab = false;
     this.touches.clear();
   }
 
@@ -232,6 +239,9 @@ export class Input {
     }
     const p = this.logical(e.clientX, e.clientY);
     this.queue.push({ kind: 'tap', x: p.x, y: p.y });
+    // Any touch lets go of a touch grab at once: waiting for it to lift would land the rider still grabbing.
+    const letGo = this.tapGrab;
+    this.tapGrab = false;
     if (this.pointerId !== null) return;
     this.pointerId = e.pointerId;
     this.pointerX0 = e.clientX;
@@ -240,6 +250,7 @@ export class Input {
     this.swiped = false;
     this.dragging = false;
     this.moved = false;
+    this.letGo = letGo;
     this.trail.length = 0;
     this.trail.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
     // The side is held only once this is clearly not a flick: see HOLD_MS.
@@ -304,9 +315,10 @@ export class Input {
     const alone = this.touches.size <= 1;
     this.touches.delete(e.pointerId);
     if (e.pointerId !== this.pointerId) return;
-    // A quick still tap in the air, before the touch held its side, grabs the board (or lets go).
+    // A quick still tap in the air, before the touch held its side, grabs the board.
     const still = !this.moved && !this.swiped && !this.dragging && this.holdSide !== 0;
-    if (this.air && alone && still && this.now() - this.holdT0 < TAP_MS) this.push('grab');
+    const quick = this.now() - this.holdT0 < TAP_MS;
+    if (this.air && alone && still && quick && !this.letGo) this.tapGrab = true;
     this.pointerId = null;
     this.pointerSteer = 0;
     this.holdSide = 0;

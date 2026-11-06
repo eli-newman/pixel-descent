@@ -1,5 +1,5 @@
 import { H, W } from '../core/config';
-import type { DeepReadonly, GameView, SimView } from '../state/view';
+import type { DeepReadonly, GameView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
 import type { Obstacle, Patch, Ramp } from '../sim/types';
@@ -10,7 +10,7 @@ import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getColorSprite, getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
-import { hudRect, type Rect } from './layout';
+import { hudRect, riderZ, type Rect } from './layout';
 import { TrackPainter } from './track';
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
@@ -338,7 +338,7 @@ export class SceneRenderer {
       );
       return;
     }
-    const z = Math.round(zOf(sim));
+    const z = Math.round(riderZ(sim));
     if (r.air) this.drawShadow(sx, sy + 8, z);
     const straight = Math.max(0, 1 - Math.abs(r.hx) / 0.4);
     const poseTuck = Math.min(1, tuck * 1.7) * straight * (r.air ? 0.4 : 1);
@@ -399,9 +399,3 @@ const STAR: ReadonlyArray<readonly [number, number]> = [
 ].flatMap((row, y) => [...row].flatMap((c, x) => (c === '#' ? [[x - 3, y - 3] as const] : [])));
 
 /** Height above the snow (px) of a sim's rider. */
-function zOf(sim: SimView): number {
-  const r = sim.rider;
-  if (!r.air || r.airDur <= 0) return 0;
-  const u = Math.min(1, r.airT / r.airDur);
-  return 4 * r.airH * u * (1 - u);
-}
