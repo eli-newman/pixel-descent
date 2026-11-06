@@ -151,3 +151,39 @@ export function breakCombo(s: ScoreState): void {
 export function totalScore(s: ScoreState): number {
   return Math.floor(s.distPoints) + s.starPoints + s.nearMissPoints + s.trickPoints;
 }
+
+/** Grab points at the moment the hold starts to count (GRAB_MIN in `tricks.ts`), and how many more each further second held adds. */
+export const GRAB_BASE = 20;
+export const GRAB_PER_S = 100;
+/** A grab landed with a spin or flip in the same jump pays this share of the spin and flip points again on top. */
+export const GRAB_COMBO = 0.5;
+
+/**
+ * A grab landed clean pays for how long it was held (at a speed multiplier of 1): GRAB_BASE once it
+ * counts, plus GRAB_PER_S for every second after that. `held` and `min` are seconds; under `min` it
+ * pays nothing.
+ */
+export function grabPoints(held: number, min: number): number {
+  if (held < min) return 0;
+  return Math.round(GRAB_BASE + GRAB_PER_S * (held - min));
+}
+
+/**
+ * Score a grab held `held` seconds (it counts as one trick) and, if it was landed with a rotation
+ * worth `rotationPts` (spin plus flip points at a multiplier of 1), the style bonus on top. Returns
+ * the points for the grab and the bonus (the rotation itself is paid by `addSpin` and `addFlip`).
+ */
+export function addGrab(
+  s: ScoreState,
+  held: number,
+  min: number,
+  rotationPts: number,
+  mult: number,
+): number {
+  const base = grabPoints(held, min);
+  if (base <= 0) return 0;
+  s.tricks += 1;
+  const pts = Math.round((base + rotationPts * GRAB_COMBO) * mult);
+  s.trickPoints += pts;
+  return pts;
+}

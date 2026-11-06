@@ -8,6 +8,7 @@ export type Action =
   | 'hud'
   | 'music'
   | 'manual'
+  | 'grab'
   | 'up'
   | 'down'
   | 'left'
@@ -20,6 +21,7 @@ const LEFT = new Set(['ArrowLeft', 'KeyA']);
 const RIGHT = new Set(['ArrowRight', 'KeyD']);
 const FLIP_UP = new Set(['ArrowUp', 'KeyW']);
 const FLIP_DOWN = new Set(['ArrowDown', 'KeyS']);
+const GRAB = new Set(['KeyX', 'ShiftLeft', 'ShiftRight']);
 const ACTION_KEYS: Record<string, Action> = {
   Space: 'start',
   Enter: 'start',
@@ -58,6 +60,11 @@ const SWIPE_SLANT = 1.25;
  * with a spin: in the air one step of hold commits a half turn, so a swipe down came out as a 180.
  */
 const HOLD_MS = 80;
+/**
+ * In the air a still touch released within TAP_MS is a tap, which grabs (or lets go of) the board.
+ * So that a tap never also spins, a new still touch in the air holds its side only after TAP_MS.
+ */
+const TAP_MS = 160;
 
 function preventDefault(e: Event): void {
   e.preventDefault();
@@ -86,6 +93,8 @@ export class Input {
   /** Fingers currently down (touch only): two or more is the brake. */
   private readonly touches = new Set<number>();
   private readonly cleanup: Array<() => void> = [];
+  /** Set by the game each step: the rider is airborne, so a quick tap is a grab. */
+  private air = false;
   /** True once a touch has been seen: the game shows touch hints. */
   usingTouch = false;
   /** Set by the game so taps can be reported in logical (180x320) coordinates. */
@@ -134,6 +143,17 @@ export class Input {
       if (FLIP_DOWN.has(code)) down = true;
     }
     return up === down ? 0 : up ? -1 : 1;
+  }
+
+  /** True while a grab key (X, Shift) is held. A touch grab is a tap, sent as the `grab` action. */
+  grab(): boolean {
+    for (const code of this.keys) if (GRAB.has(code)) return true;
+    return false;
+  }
+
+  /** Tell input whether the rider is in the air, where a quick tap grabs instead of holding a side. */
+  setAir(on: boolean): void {
+    this.air = on;
   }
 
   /** True while a left key and a right key are held together, or two fingers are down. */
@@ -191,7 +211,7 @@ export class Input {
   private readonly onKeyDown = (e: KeyboardEvent): void => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const action = ACTION_KEYS[e.code];
-    if (action || LEFT.has(e.code) || RIGHT.has(e.code)) e.preventDefault();
+    if (action || LEFT.has(e.code) || RIGHT.has(e.code) || GRAB.has(e.code)) e.preventDefault();
     if (!e.repeat) {
       if (action) this.push(action);
       if (LEFT.has(e.code)) this.push('left');
@@ -233,7 +253,7 @@ export class Input {
   private settleHold(): void {
     if (this.holdSide === 0) return;
     const t = this.now() - this.holdT0;
-    if (t < (this.moved ? SWIPE_MS : HOLD_MS)) return;
+    if (t < (this.moved ? SWIPE_MS : this.air ? TAP_MS : HOLD_MS)) return;
     this.pointerSteer = this.holdSide;
     this.holdSide = 0;
   }
@@ -281,8 +301,12 @@ export class Input {
   };
 
   private readonly onPointerUp = (e: PointerEvent): void => {
+    const alone = this.touches.size <= 1;
     this.touches.delete(e.pointerId);
     if (e.pointerId !== this.pointerId) return;
+    // A quick still tap in the air, before the touch held its side, grabs the board (or lets go).
+    const still = !this.moved && !this.swiped && !this.dragging && this.holdSide !== 0;
+    if (this.air && alone && still && this.now() - this.holdT0 < TAP_MS) this.push('grab');
     this.pointerId = null;
     this.pointerSteer = 0;
     this.holdSide = 0;

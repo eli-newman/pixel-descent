@@ -13,6 +13,8 @@ export interface ControlsHost {
   readonly today: string;
   /** The game over panel has been up long enough to accept a restart. */
   readonly overReady: boolean;
+  /** The rider is in the air: a touch tap grabs. */
+  readonly airborne: boolean;
   begin(): void;
   newRun(seed: string, play?: boolean): void;
   togglePause(): void;
@@ -37,8 +39,10 @@ export class Controls {
   private trickQueued = false;
   /** A flip pressed since the last step (a fast tap or a touch button): 1 back, -1 front. */
   private flipQueued: -1 | 0 | 1 = 0;
+  /** A touch grab: a tap in the air grabs and the next tap lets go. Dropped once the rider is down. */
+  private grabLatched = false;
   /** The input of the latest step. A crashed rider keeps tumbling on it. */
-  readonly simInput: SimInput = { steer: 0, trick: false, brake: false, flip: 0 };
+  readonly simInput: SimInput = { steer: 0, trick: false, brake: false, flip: 0, grab: false };
 
   constructor(
     private readonly host: ControlsHost,
@@ -53,6 +57,7 @@ export class Controls {
   reset(): void {
     this.trickQueued = false;
     this.flipQueued = 0;
+    this.grabLatched = false;
     this.screen = 'main';
     this.resetFocus();
   }
@@ -72,6 +77,10 @@ export class Controls {
     this.trickQueued = false;
     si.flip = this.flipQueued !== 0 ? this.flipQueued : input.flip();
     this.flipQueued = 0;
+    const air = this.host.airborne;
+    input.setAir(air);
+    if (!air) this.grabLatched = false;
+    si.grab = input.grab() || this.grabLatched;
     return si;
   }
 
@@ -128,6 +137,9 @@ export class Controls {
     pause: () => this.host.togglePause(),
     trick: () => {
       if (this.playing) this.trickQueued = true;
+    },
+    grab: () => {
+      if (this.playing && this.host.airborne) this.grabLatched = !this.grabLatched;
     },
     up: () => this.flipOrFocus(-1, -1),
     down: () => this.flipOrFocus(1, 1),

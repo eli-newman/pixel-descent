@@ -337,6 +337,7 @@ function drawGear(fb: Framebuffer, g: GameView): void {
     steep: false,
     tuck: 0,
     pitch: 0,
+    grab: false,
   };
   // Measured on a still frame, so animated headgear never nudges the whole preview.
   PREVIEW.clear();

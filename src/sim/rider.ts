@@ -1,7 +1,16 @@
 import { EDGE, MAX_SPEED, W } from '../core/config';
 import type { RiderState } from './riderState';
 import { airTime, clamp01, CLIFF_AIR, MAX_HX, MIN_SPEED, stepSpeed, type SpeedEnv } from './speed';
-import { holdSpin, resetFlip, resetManualSpin, SPIN_STEER, stepPitch, stepSpin } from './tricks';
+import {
+  holdSpin,
+  resetFlip,
+  resetGrab,
+  resetManualSpin,
+  SPIN_STEER,
+  stepGrab,
+  stepPitch,
+  stepSpin,
+} from './tricks';
 
 const STIFFNESS = 85;
 const DAMPING = 13;
@@ -30,6 +39,7 @@ export function launch(r: RiderState, cliff = false): void {
   r.spinDone = 0;
   resetManualSpin(r);
   resetFlip(r);
+  resetGrab(r);
 }
 
 /** Height above the snow in px (a parabola over the jump). */
@@ -46,6 +56,8 @@ export interface StepEnv extends SpeedEnv {
   manual?: boolean;
   /** Left and right held together. */
   brake?: boolean;
+  /** Grab held: in the air the rider holds the board. */
+  grab?: boolean;
 }
 
 /**
@@ -58,6 +70,7 @@ export interface StepEnv extends SpeedEnv {
  */
 export function stepRider(r: RiderState, steer: number, dt: number, env: StepEnv): void {
   r.spinDone = 0;
+  r.grabDone = false;
   r.landed = false;
   const ice = env.surface.ice && !r.air;
   const stiff = STIFFNESS * (r.air ? 0.5 : ice ? 0.38 : 1);
@@ -93,6 +106,7 @@ export function stepRider(r: RiderState, steer: number, dt: number, env: StepEnv
     r.airT += dt;
     stepSpin(r, steer, manual, dt);
     stepPitch(r, env.flip ?? 0, manual, dt);
+    stepGrab(r, env.grab === true, dt);
     if (r.airT >= r.airDur) r.landed = true;
   }
 

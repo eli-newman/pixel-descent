@@ -133,6 +133,11 @@ export class Game implements GameView {
     return this.animT - this.overAt > RESTART_GUARD;
   }
 
+  /** The rider is in the air (for the touch grab). */
+  get airborne(): boolean {
+    return this.sim.rider.air;
+  }
+
   /** Short headline for the game over screen. */
   get crashWord(): string {
     return this.sim.crashCause === 'bail' ? 'BAILED' : 'WIPEOUT';

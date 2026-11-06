@@ -7,6 +7,8 @@ export class FakeInput {
   steerValue = 0;
   brakeValue = false;
   flipValue: -1 | 0 | 1 = 0;
+  grabValue = false;
+  air = false;
   usingTouch = false;
   private queue: InputItem[] = [];
   steer(): number {
@@ -17,6 +19,12 @@ export class FakeInput {
   }
   flip(): -1 | 0 | 1 {
     return this.flipValue;
+  }
+  grab(): boolean {
+    return this.grabValue;
+  }
+  setAir(on: boolean): void {
+    this.air = on;
   }
   drain(): InputItem[] {
     const q = this.queue;
@@ -32,6 +40,7 @@ export class FakeInput {
   releaseAll(): void {
     this.steerValue = 0;
     this.brakeValue = false;
+    this.grabValue = false;
   }
 }
 

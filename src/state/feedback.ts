@@ -78,6 +78,10 @@ export class Feedback {
         this.showToast(`${flipName(e.deg / 360)}!`, 0.9, true);
         sfx.trick(1 + 2 * Math.abs(e.deg / 360));
         break;
+      case 'grab':
+        this.showToast('GRAB!', 0.9, true);
+        sfx.trick(1);
+        break;
       case 'land':
         this.reactToLanding(e);
         break;
@@ -93,16 +97,12 @@ export class Feedback {
   private reactToLanding(e: LandEvent): void {
     const sfx = this.sfx;
     if (e.quality !== 'clean') {
-      this.showToast('SLOPPY LANDING', 1.1, false);
+      this.showToast(e.held ? 'STILL GRABBING' : 'SLOPPY LANDING', 1.1, false);
       sfx.land(false);
       return;
     }
     const name =
-      e.flips !== 0
-        ? `${e.spin > 0 ? `${e.spin} ` : ''}${flipName(e.flips)}`
-        : e.switch
-          ? 'SWITCH LANDING'
-          : 'CLEAN LANDING';
+      e.flips !== 0 || e.grab > 0 ? trickName(e) : e.switch ? 'SWITCH LANDING' : 'CLEAN LANDING';
     if (e.flips !== 0 && e.spin > 0) sfx.trick(6);
     this.showToast(e.pts > 0 ? `${name} +${e.pts}` : name, 1.1, true);
     sfx.land(true);
@@ -112,4 +112,13 @@ export class Feedback {
   private addHitStop(seconds: number): void {
     this.hitStop = Math.max(this.hitStop, seconds);
   }
+}
+
+/** The landed tricks in one name: "360 BACKFLIP", "GRAB", "360 GRAB", "540 FRONTFLIP GRAB". */
+function trickName(e: Readonly<LandEvent>): string {
+  const parts: string[] = [];
+  if (e.spin > 0) parts.push(`${e.spin}`);
+  if (e.flips !== 0) parts.push(flipName(e.flips));
+  if (e.grab > 0) parts.push('GRAB');
+  return parts.join(' ');
 }
