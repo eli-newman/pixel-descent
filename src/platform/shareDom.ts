@@ -53,12 +53,21 @@ async function copy(text: string): Promise<boolean> {
   }
 }
 
+/** Which way a share went, for analytics: the Web Share sheet with the image or the link only, or the fallback. */
+export type ShareVia =
+  'web-share-image' | 'web-share-link' | 'cancelled' | 'clipboard' | 'download';
+
+export interface ShareOutcome {
+  /** Short message for the player. */
+  message: string;
+  via: ShareVia;
+}
+
 /**
  * Share a result: the Web Share API with the card image when the browser supports sharing files,
  * otherwise the link alone; with no Web Share at all the link is copied and the image downloaded.
- * Resolves to a short message for the player.
  */
-export async function shareResult(card: ResultCardData, pageUrl: string): Promise<string> {
+export async function shareResult(card: ResultCardData, pageUrl: string): Promise<ShareOutcome> {
   const url = shareUrl(pageUrl, card.seed);
   const text = shareText(card);
   const blob = await toBlob(cardCanvas(card));
@@ -67,16 +76,20 @@ export async function shareResult(card: ResultCardData, pageUrl: string): Promis
     try {
       if (file && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], text, url, title: 'Powline' });
-      } else {
-        await navigator.share({ text, url, title: 'Powline' });
+        return { message: 'SHARED', via: 'web-share-image' };
       }
-      return 'SHARED';
+      await navigator.share({ text, url, title: 'Powline' });
+      return { message: 'SHARED', via: 'web-share-link' };
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return 'SHARE CANCELLED';
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        return { message: 'SHARE CANCELLED', via: 'cancelled' };
+      }
       // fall through to copy and download
     }
   }
   const copied = await copy(`${text} ${url}`);
   if (blob) download(blob, `powline-${card.score}.png`);
-  return copied ? 'LINK COPIED, IMAGE SAVED' : 'IMAGE SAVED';
+  return copied
+    ? { message: 'LINK COPIED, IMAGE SAVED', via: 'clipboard' }
+    : { message: 'IMAGE SAVED', via: 'download' };
 }

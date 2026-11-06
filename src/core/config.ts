@@ -51,3 +51,9 @@ export const BOARD_LEN = Math.round(23 * RIDER_SCALE);
 
 /** A player's first runs label the slope ("CRASH" over a tree, "SLOWS" over a bush, "+30" over a star), so a new player learns what each thing does. Counted from `Stats.hintRuns`. */
 export const HINT_RUNS = 3;
+
+/**
+ * Properties sent with each analytics event, most important first. Vercel Web Analytics allows 2 on Pro and 8 on
+ * Pro with the Web Analytics Plus add-on (Hobby has no custom events at all). Raise it to 8 after buying Plus.
+ */
+export const ANALYTICS_MAX_PROPS = 2;

@@ -1,4 +1,5 @@
 import type { Sfx } from '../platform/audio';
+import type { Tracker } from '../platform/analytics';
 import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
 import { BrakeSpray, Particles } from './effects';
 import type { Input } from '../platform/input';
@@ -11,6 +12,7 @@ import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './ru
 import { Sim } from '../sim/sim';
 import type { ResultCardData } from '../render/share';
 import type { ScoreEntry, Store } from './storage';
+import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
 import type { GameView } from './view';
 
 export interface GameDeps {
@@ -25,6 +27,8 @@ export interface GameDeps {
   now?: () => Date;
   /** Cosmetic randomness only (particles). Never feeds the sim. */
   rand?: () => number;
+  /** Anonymous analytics (see `state/telemetry.ts`). Fire and forget: never throws, never waits. */
+  analytics?: Tracker;
 }
 
 /** Ignore restart presses for this long after the game over panel appears. */
@@ -47,6 +51,8 @@ export class Game implements GameView {
   private readonly feedback: Feedback;
   private readonly spray = new BrakeSpray();
   private sharing = false;
+  /** Runs started since the page loaded, for the second-run rate. Never stored. */
+  private runsStarted = 0;
 
   constructor(
     private readonly deps: GameDeps,
@@ -173,6 +179,13 @@ export class Game implements GameView {
     this.deps.input.releaseAll();
     this.deps.sfx.start();
     this.deps.announce?.('Run started.');
+    this.runsStarted++;
+    this.deps.analytics?.track(runStartEvent(this.runsStarted, this.runSetup()));
+  }
+
+  /** How this run is played, for analytics. */
+  private runSetup(): RunSetup {
+    return { kit: this.progress.gear.kit, color: this.settings.color, daily: this.daily };
   }
 
   update(dt: number): void {
@@ -280,6 +293,7 @@ export class Game implements GameView {
     const day = dayString(this.deps.now?.() ?? new Date());
     const res = recordRun(this.deps.store, summary, day);
     this.result = res;
+    this.deps.analytics?.track(runEndEvent(res.dist, res.score, this.runsStarted, this.runSetup()));
     this.deps.announce?.(
       `${this.crashWord}. ${res.dist} metres, score ${res.score}${res.newBest ? ', a new best' : ''}.`,
     );
