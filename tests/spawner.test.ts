@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PX_PER_M, START_X, START_Y } from '../src/core/config';
+import {
+  FIRST_JUMP_Y,
+  JUMP_GAP_MIN,
+  LINE_RUNUP_MIN,
+  PX_PER_M,
+  START_X,
+  START_Y,
+} from '../src/core/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/sim/collision';
 import { hashSeed } from '../src/core/rng';
 import { maxFlightPx, topSpeed } from '../src/sim/speed';
@@ -79,8 +86,10 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         expect(r.landEnd - r.y).toBeGreaterThanOrEqual(
           maxFlightPx(topSpeed(distM), r.kind === 'cliff') + 109,
         );
-        if (r.kind === 'kicker') expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
-        else expect(r.half).toBeGreaterThanOrEqual(90);
+        // A jump, or the first kicker of a line, sits on the open path; the rest of a line lines up with it.
+        if (r.kind === 'kicker') {
+          if (r.lineIdx === 0) expect(Math.abs(r.x - s.pathCenter(r.y))).toBeLessThan(1);
+        } else expect(r.half).toBeGreaterThanOrEqual(90);
         // Plain filter, one expect: expect is far too slow per ramp per obstacle.
         const inZone = batch.obstacles.filter(
           (o) => obstacleBox(o) && !(o.y < r.y - 14 || o.y > r.landEnd),
@@ -98,23 +107,29 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(batch.ramps.some((r) => r.kind === 'kicker')).toBe(true);
   });
 
-  it('places a jump every 120 to 225 m on average, mostly kickers, the first one early', () => {
+  it('places a jump every 70 to 105 m on average, mostly kickers, the first one early', () => {
     const offenders: string[] = [];
     let kickers = 0;
     let all = 0;
     for (let i = 0; i < 60; i++) {
       const s = new Spawner(hashSeed(`freq-${i}`));
       const ramps = s.advance(START_Y + 5000 * PX_PER_M).ramps;
-      const perKm = ramps.length / 5;
-      if (perKm < 4.4 || perKm > 8.3) offenders.push(`freq-${i}: ${perKm} per km`);
+      const mPerJump = 5000 / ramps.length;
+      if (mPerJump < 70 || mPerJump > 105) offenders.push(`freq-${i}: a jump every ${mPerJump} m`);
+      // A line counts once: the next jump after it is planned from its end.
+      const features = ramps.filter((r) => r.lineIdx === 0).length;
+      const mPerFeature = 5000 / features;
+      if (mPerFeature < 85 || mPerFeature > 135)
+        offenders.push(`freq-${i}: a jump or line every ${mPerFeature} m`);
       const first = ramps[0];
-      if (!first || first.y > START_Y + 1000) offenders.push(`freq-${i}: first at ${first?.y}`);
+      if (!first || first.y > START_Y + FIRST_JUMP_Y + 40)
+        offenders.push(`freq-${i}: first at ${first?.y}`);
       kickers += ramps.filter((r) => r.kind === 'kicker').length;
       all += ramps.length;
     }
     expect(offenders).toEqual([]);
-    expect(kickers / all).toBeGreaterThan(0.6);
-    expect(kickers / all).toBeLessThan(0.8);
+    expect(kickers / all).toBeGreaterThan(0.7);
+    expect(kickers / all).toBeLessThan(0.9);
   });
 
   it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of ice and drifts', () => {
@@ -124,9 +139,20 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
       const batch = s.advance(START_Y + 60000);
       batch.ramps.forEach((r, i) => {
         const next = batch.ramps[i + 1];
-        // The next lip comes well after this landing zone ends, so a rider can line up again.
-        if (next && next.y - r.landEnd < 300)
+        const zone = maxFlightPx(topSpeed((r.y - START_Y) / PX_PER_M), r.kind === 'cliff') + 109;
+        if (next && next.line !== 0 && next.line === r.line) {
+          // Inside a line: past the top-speed landing zone there is still a clear run-up to the next lip,
+          // and the kickers match, so the line reads as one thing.
+          if (next.y - (r.y + zone) < LINE_RUNUP_MIN)
+            offenders.push(`${seed} ${r.id}: no run-up to the next line kicker`);
+          if (next.x !== r.x || next.half !== r.half || next.lineIdx !== r.lineIdx + 1)
+            offenders.push(`${seed} ${r.id}: line kickers do not match`);
+        } else if (next && next.y - r.landEnd < JUMP_GAP_MIN) {
+          // The next lip comes well after this landing zone ends, so a rider can line up again.
           offenders.push(`${seed} ${r.id}: next jump too close`);
+        }
+        // The gap to the next lip is always longer than this jump's landing zone.
+        if (next && next.y - r.y <= zone) offenders.push(`${seed} ${r.id}: gap shorter than zone`);
         for (const l of s.lanes) {
           if (l.y1 >= r.y - 60 && l.y0 <= r.landEnd + 60)
             offenders.push(`${seed} ${r.id}: on a lane`);
@@ -134,6 +160,9 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         for (const p of batch.patches) {
           if (Math.abs(p.y - r.y) < p.ry + 40)
             offenders.push(`${seed} ${r.id}: patch ${p.id} at the lip`);
+          // A line's run-ups are plain snow too, so ice or a drift never breaks it.
+          if (r.lineIdx < r.lineLen - 1 && p.y + p.ry > r.y && p.y - p.ry < r.landEnd)
+            offenders.push(`${seed} ${r.id}: patch ${p.id} inside a line`);
         }
         // A kicker sits inside the open path, so riding the path lines you up with it.
         const distM = (r.y - START_Y) / PX_PER_M;
@@ -145,9 +174,10 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('lets a path-following bot hit about a jump every 250 m', () => {
+  it('lets a path-following bot take off about every 4 s, every 110 m or so', () => {
     let launches = 0;
     let metres = 0;
+    let seconds = 0;
     for (const seed of seeds.slice(0, 6)) {
       const sim = new Sim(seed);
       sim.begin();
@@ -156,9 +186,11 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         for (const e of sim.events) if (e.type === 'launch') launches++;
       }
       metres += sim.distM;
+      seconds += sim.runTime;
     }
-    // Before jumps were made more frequent the same bot hit about 2.2 per 1000 m.
-    expect((launches / metres) * 1000).toBeGreaterThan(3.5);
+    // Before jump lines and the shorter gaps the same bot took off every 6.6 s, about every 250 m.
+    expect(seconds / launches).toBeLessThan(4.5);
+    expect(metres / launches).toBeLessThan(150);
   });
 
   it('gives every cliff its own look, open slope beside the rock, and sometimes just a side cliff', () => {
@@ -284,7 +316,7 @@ describe('mountain world is stable', () => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
       // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
       // ids started at 1,000,000, so those are put back here. Refreshed on purpose only when the course
-      // design changes (last: jumps every ~150 m instead of ~200 m, wider kickers), never to get green.
+      // design changes (last: a jump every ~85 m instead of ~150 m, jump lines, lanes fitted between jumps), never to get green.
       const old = {
         obstacles: b.obstacles,
         pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
@@ -295,7 +327,7 @@ describe('mountain world is stable', () => {
       };
       return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
-    expect(fp('alpha')).toEqual([4264322803, 977, 13]);
-    expect(fp('k3m9qa')).toEqual([2059284050, 941, 13]);
+    expect(fp('alpha')).toEqual([2402853442, 726, 28]);
+    expect(fp('k3m9qa')).toEqual([1247566756, 674, 31]);
   });
 });

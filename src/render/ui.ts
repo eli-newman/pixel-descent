@@ -150,6 +150,10 @@ function drawHud(fb: Framebuffer, g: GameView): void {
     const x = Math.round(CX - textWidth(toast.text) / 2);
     const ty = big ? 66 : 52;
     drawTextHalo(fb, toast.text, x, ty, toast.hot ? YELLOW : WHITE);
+    if (toast.sub) {
+      const sx = Math.round(CX - textWidth(toast.sub) / 2);
+      drawTextHalo(fb, toast.sub, sx, ty + 8, toast.hot ? YELLOW : WHITE);
+    }
   }
 }
 
