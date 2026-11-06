@@ -28,18 +28,6 @@ export interface Palette {
   /** Fill inside the ice rim, or null for none (the snow shows through). */
   readonly iceFill: number | null;
   readonly drift: number;
-  /** Kicker: outline, lip and arrows, and the face inside the outline. */
-  readonly kicker: number;
-  readonly kickerFace: number;
-  /** Cliffs: the rock face, its strata and joints, the snow cap, the shadow at the foot and the warning chevron. */
-  readonly cliffFace: number;
-  readonly cliffLine: number;
-  readonly cliffSnow: number;
-  readonly cliffShadow: number;
-  readonly chevron: number;
-  /** Colour only: grit in the cliff face. */
-  readonly cliffSpeckLight: number;
-  readonly cliffSpeckDark: number;
   /** The rider: body, board or skis, and the one pixel halo that keeps them readable on anything. */
   readonly riderBody: number;
   readonly riderBoard: number;
@@ -63,15 +51,6 @@ export const MONO: Palette = {
   iceGlint: WHITE,
   iceFill: null,
   drift: WHITE,
-  kicker: WHITE,
-  kickerFace: OFF,
-  cliffFace: OFF,
-  cliffLine: WHITE,
-  cliffSnow: WHITE,
-  cliffShadow: WHITE,
-  chevron: WHITE,
-  cliffSpeckLight: WHITE,
-  cliffSpeckDark: OFF,
   riderBody: WHITE,
   riderBoard: WHITE,
   riderHalo: OFF,
@@ -83,22 +62,32 @@ export const C = {
   snow: pack(0xf7, 0xf9, 0xfc),
   fleck: pack(0xdc, 0xe4, 0xee),
   shadow: pack(0xc3, 0xcf, 0xdd),
-  track: pack(0xa3, 0xab, 0xb6),
-  trackShadow: pack(0x80, 0x89, 0x95),
-  trackBand: pack(0xb9, 0xc1, 0xcb),
+  // the track: a light groove pressed into the snow, with a cool blue shadow on its sunward wall
+  track: pack(0xdc, 0xe4, 0xee),
+  trackShadow: pack(0xa8, 0xbc, 0xd4),
+  trackBand: pack(0xc4, 0xd2, 0xe2),
   powder: pack(0xc9, 0xd2, 0xdc),
   spray: pack(0xb3, 0xc0, 0xcf),
   star: pack(0xe8, 0xa3, 0x17),
   ice: pack(0xc6, 0xe6, 0xf5),
   iceRim: pack(0x6f, 0xb3, 0xd6),
   drift: pack(0xa9, 0xb9, 0xcc),
-  kicker: pack(0x2f, 0x5d, 0x9e),
-  kickerFace: pack(0xdd, 0xe9, 0xf6),
-  cliffFace: pack(0x7b, 0x80, 0x88),
-  cliffLine: pack(0x4b, 0x50, 0x57),
-  cliffLight: pack(0x96, 0x9b, 0xa3),
-  cliffDark: pack(0x66, 0x6b, 0x73),
-  cliffShadow: pack(0x9c, 0xa6, 0xb3),
+  // packed snow on a kicker, lit to shaded, and its orange marker poles
+  snowLit: pack(0xfb, 0xfd, 0xff),
+  snowMid: pack(0xe6, 0xee, 0xf6),
+  snowShade: pack(0xc9, 0xd6, 0xe4),
+  snowEdge: pack(0xa9, 0xbb, 0xcf),
+  snowDeep: pack(0x8c, 0xa1, 0xba),
+  pole: pack(0xe8, 0x6a, 0x10),
+  poleTip: pack(0xa8, 0x4a, 0x0c),
+  // cliff rock from the sunlit top of a rib down to the deepest gully, and the shadow below it
+  rockHi: pack(0x9a, 0xa0, 0xa8),
+  rockLit: pack(0x82, 0x88, 0x90),
+  rockMid: pack(0x6c, 0x72, 0x7a),
+  rockLow: pack(0x56, 0x5b, 0x62),
+  rockDeep: pack(0x3e, 0x42, 0x48),
+  shadowNear: pack(0xa9, 0xb7, 0xc8),
+  shadowSoft: pack(0xc6, 0xd1, 0xde),
   chevron: pack(0xd9, 0x47, 0x2b),
   pine: pack(0x1e, 0x55, 0x30),
   pineShade: pack(0x13, 0x3d, 0x22),
@@ -142,15 +131,6 @@ export const COLOR: Palette = {
   iceGlint: C.white,
   iceFill: C.ice,
   drift: C.drift,
-  kicker: C.kicker,
-  kickerFace: C.kickerFace,
-  cliffFace: C.cliffFace,
-  cliffLine: C.cliffLine,
-  cliffSnow: C.white,
-  cliffShadow: C.cliffShadow,
-  chevron: C.chevron,
-  cliffSpeckLight: C.cliffLight,
-  cliffSpeckDark: C.cliffDark,
   riderBody: C.riderBody,
   riderBoard: C.riderBoard,
   riderHalo: C.riderHalo,

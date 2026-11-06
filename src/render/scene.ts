@@ -4,18 +4,14 @@ import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
 import type { Obstacle, Patch, Ramp } from '../sim/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
-import type { Framebuffer } from './framebuffer';
+import { OFF, type Framebuffer } from './framebuffer';
+import { drawColorCliff, drawColorKicker, RAMP_HEIGHT, RAMP_ROWS, rampHalfAt } from './terrain';
 import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getColorSprite, getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
 import { hudRect, type Rect } from './layout';
 import { TrackPainter } from './track';
-
-/** How tall a kicker is for its cast shadow, in pixels at the lip. */
-const RAMP_HEIGHT = 8;
-/** Rows of a kicker's face, from its back edge down to the lip. */
-const RAMP_ROWS = 17;
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
@@ -190,15 +186,18 @@ export class SceneRenderer {
   private drawCliff(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = Math.round(r.y - cam);
     if (ly < -40 || ly > H + 12) return;
+    if (this.pal.color) {
+      drawColorCliff(this.fb, r, ly);
+      return;
+    }
     const fb = this.fb;
-    const pal = this.pal;
     const sd = r.seed * 7;
     const BLOCK = 10;
     for (let x = 0; x < W; x++) {
       const seg = r.segs.find((c) => x >= c.x0 && x < c.x1);
       if (!seg) {
         // open slope: plain snow like the rest of the hill, so nothing shimmers between the rock
-        for (let y = ly - 4; y <= ly + 34; y++) fb.put(x, y, pal.snow);
+        for (let y = ly - 4; y <= ly + 34; y++) fb.erase(x, y);
         continue;
       }
       const blk = Math.floor(x / BLOCK);
@@ -212,15 +211,11 @@ export class SceneRenderer {
         Math.round((16 + Math.floor(hash2(blk + sd, 2) * 4) * 4) * (edge >= 12 ? 1 : endScale)),
       );
       const foot = lip + faceH;
-      for (let y = lip - 4; y <= foot + 5; y++)
-        fb.put(x, y, y > lip + 1 && y < foot ? pal.cliffFace : pal.snow);
+      for (let y = lip - 4; y <= foot + 5; y++) fb.erase(x, y);
       // snow cap
-      fb.put(x, lip, pal.cliffSnow);
-      fb.put(x, lip + 1, pal.cliffSnow);
-      const deep = hash2(Math.floor(x / 2) + sd, 8) > 0.55;
-      if (deep) fb.put(x, lip - 1, pal.cliffSnow);
-      // colour only: a dark edge above the cap, so the white snow does not melt into the slope behind it
-      if (pal.color) fb.put(x, deep ? lip - 2 : lip - 1, pal.cliffLine);
+      fb.put(x, lip);
+      fb.put(x, lip + 1);
+      if (hash2(Math.floor(x / 2) + sd, 8) > 0.55) fb.put(x, lip - 1);
       // side walls of the chunk and of each block step
       const stepEdge = x % BLOCK === 0 && hash2(blk + sd, 2) !== hash2(blk - 1 + sd, 2);
       const wall = edge === 0 || (stepEdge && hash2(blk + sd, 6) > 0.4);
@@ -232,29 +227,20 @@ export class SceneRenderer {
         const joint =
           d % 5 !== 2 &&
           (x + Math.floor(d / 5) * 4 + Math.floor(hash2(sd, Math.floor(d / 5)) * 9)) % 13 === 0;
-        if (wall || strata || joint) fb.put(x, y, pal.cliffLine);
-        else if (pal.color) {
-          // colour only: grit in the stone, lighter on top of each stratum and darker under it
-          const grit = hash2(x * 3 + sd, y * 5 + 1);
-          if (grit > 0.86) fb.put(x, y, pal.cliffSpeckLight);
-          else if (grit < 0.1 || d % 5 === 3) fb.put(x, y, pal.cliffSpeckDark);
-          // snow caught on the ledges
-          if (d % 5 === 1 && d > 2 && hash2(Math.floor(x / 3) + sd, d) > 0.6)
-            fb.put(x, y, pal.cliffSnow);
-        }
+        if (wall || strata || joint) fb.put(x, y);
       }
       // flat foot and a hard shadow under it
-      fb.put(x, foot, pal.cliffLine);
-      fb.put(x, foot + 1, pal.cliffLine);
-      if ((x + foot) % 2 === 0) fb.put(x, foot + 2, pal.cliffShadow);
-      if (x % 2 === 0 && hash2(x + sd, 9) > 0.35) fb.put(x, foot + 3, pal.cliffShadow);
+      fb.put(x, foot);
+      fb.put(x, foot + 1);
+      if ((x + foot) % 2 === 0) fb.put(x, foot + 2);
+      if (x % 2 === 0 && hash2(x + sd, 9) > 0.35) fb.put(x, foot + 3);
     }
     // a warning chevron above each chunk of rock
     for (const c of r.segs) {
       const cx = Math.round((c.x0 + c.x1) / 2);
       for (let k = 0; k < 4; k++) {
-        fb.put(cx - k, ly + c.dy - 10 + k, pal.chevron);
-        fb.put(cx + k, ly + c.dy - 10 + k, pal.chevron);
+        fb.put(cx - k, ly + c.dy - 10 + k);
+        fb.put(cx + k, ly + c.dy - 10 + k);
       }
     }
   }
@@ -268,10 +254,13 @@ export class SceneRenderer {
   private drawRamp(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = r.y - cam;
     if (ly < -RAMP_ROWS - 2 || ly > H + RAMP_HEIGHT + 2) return;
+    if (this.pal.color) {
+      drawColorKicker(this.fb, r, cam);
+      return;
+    }
     const fb = this.fb;
-    const pal = this.pal;
     const rows = RAMP_ROWS;
-    const halfAt = (i: number): number => Math.round(r.half * (0.55 + (0.45 * i) / (rows - 1)));
+    const halfAt = (i: number): number => rampHalfAt(r.half, i);
     // Cast shadow, the same rule as the tree sprites (castShadow): the jump rises toward the lip, a point at
     // height h lands 0.85h + 1 to the right and 0.28h + 1 down. Drawn first so the jump sits on top of it.
     for (let i = 0; i < rows; i++) {
@@ -281,31 +270,31 @@ export class SceneRenderer {
       const sy = Math.round(wy + 1 + h * 0.28);
       for (let dx = -hw; dx <= hw; dx++) {
         const sx = Math.round(r.x + dx + h * 0.85 + 1);
-        if ((sx + sy) % 2 === 0) fb.put(sx, sy - cam, pal.shadow);
+        if ((sx + sy) % 2 === 0) fb.put(sx, sy - cam);
       }
     }
     // the face: cleared to the snow, a solid outline with the back edge closed
     for (let i = 0; i < rows; i++) {
       const hw = halfAt(i);
       const y = ly - (rows - 1) + i;
-      fb.fillRect(r.x - hw, y, hw * 2 + 1, 1, pal.kickerFace);
-      if (i === 0) fb.fillRect(r.x - hw, y, hw * 2 + 1, 1, pal.kicker);
-      fb.put(r.x - hw, y, pal.kicker);
-      fb.put(r.x + hw, y, pal.kicker);
+      fb.fillRect(r.x - hw, y, hw * 2 + 1, 1, OFF);
+      if (i === 0) fb.fillRect(r.x - hw, y, hw * 2 + 1, 1);
+      fb.put(r.x - hw, y);
+      fb.put(r.x + hw, y);
     }
     // two arrows on the face, two pixels thick, pointing down the hill
     const arm = 5;
     for (const top of [ly - rows + 4, ly - rows + 9]) {
       for (let k = 0; k <= arm; k++) {
         for (let t = 0; t < 2; t++) {
-          fb.put(r.x - arm + k, top + k + t, pal.kicker);
-          fb.put(r.x + arm - k, top + k + t, pal.kicker);
+          fb.put(r.x - arm + k, top + k + t);
+          fb.put(r.x + arm - k, top + k + t);
         }
       }
     }
     // the lip: two pixels thick and a pixel wider than the face, then a black gap where the snow drops away
-    fb.fillRect(r.x - r.half - 1, ly, r.half * 2 + 3, 2, pal.kicker);
-    fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, pal.snow);
+    fb.fillRect(r.x - r.half - 1, ly, r.half * 2 + 3, 2);
+    fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, OFF);
   }
 
   /** Lane stars are solid five-point stars, the one thing on the slope shaped like a reward. */

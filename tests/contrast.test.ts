@@ -101,12 +101,14 @@ describe('high contrast', () => {
     expect(allowed.has(rgb(SOFT_GREY).join())).toBe(false);
   });
 
-  it('keeps the colour slope readable: the track, the rider and every hazard stand out from the snow', () => {
+  it('keeps the colour slope readable: a soft track you can still see, and every hazard and jump marker stands out', () => {
     const snow = rgb(COLOR.snow);
-    expect(ratio(rgb(COLOR.track), snow)).toBeGreaterThanOrEqual(2);
-    expect(ratio(rgb(COLOR.trackShadow), snow)).toBeGreaterThan(ratio(rgb(COLOR.track), snow));
+    // The track is snow pressed down, so it stays close to the snow, but its shadow wall always shows.
+    expect(ratio(rgb(COLOR.track), snow)).toBeGreaterThanOrEqual(1.15);
+    expect(ratio(rgb(COLOR.track), snow)).toBeLessThan(1.6);
+    expect(ratio(rgb(COLOR.trackShadow), snow)).toBeGreaterThanOrEqual(1.6);
     expect(ratio(rgb(COLOR.riderHalo), snow)).toBeGreaterThanOrEqual(7);
-    for (const c of [C.pine, C.rockGrey, C.rockBrown, C.bark, C.cliffFace, C.kicker]) {
+    for (const c of [C.pine, C.rockGrey, C.rockBrown, C.bark, C.rockMid, C.pole, C.chevron]) {
       expect(ratio(rgb(c), snow)).toBeGreaterThanOrEqual(3);
     }
   });
