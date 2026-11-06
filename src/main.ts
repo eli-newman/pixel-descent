@@ -51,13 +51,14 @@ if (fromShare) {
 }
 
 // Anonymous page views and run events (README, Privacy). Started after the seed has left the address bar.
-const analytics = __ANALYTICS__
+const analyticsBuild = __ANALYTICS__;
+const analytics = analyticsBuild
   ? startWebAnalytics(
       window,
       document,
-      __ANALYTICS__.debug
+      analyticsBuild.debug
         ? { scriptSrc: DEBUG_SCRIPT }
-        : analyticsConfig(__ANALYTICS__.vercelConfig),
+        : analyticsConfig(analyticsBuild.vercelConfig),
       fromShare,
     )
   : noTracker;

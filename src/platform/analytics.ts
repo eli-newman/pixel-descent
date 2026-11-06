@@ -40,9 +40,14 @@ export const FROM_SHARE_PATH = 'from-share';
 /** Events queued while the script loads. If it never loads (offline, blocked) nothing grows past this. */
 export const MAX_QUEUE = 50;
 
+/** A path on this site, with or without the leading slash: no scheme, no `//` host, no `..`. */
+const SITE_PATH = /^\/?[\w-]+(\/[\w-]+)*(\.js)?$/;
+
 /**
  * Parse `VERCEL_OBSERVABILITY_CLIENT_CONFIG` (JSON with an `analytics` key, set by Vercel at build time).
- * Anything missing or malformed falls back to the default script path.
+ * Vercel gives the paths without a leading slash (`"76b40da1c7a41f39/script.js"`, a per-project path that ad
+ * blockers do not know); they live at the site root, so they are made root-relative, as `@vercel/analytics` does.
+ * Anything missing, malformed or on another origin falls back to the default script path.
  */
 export function analyticsConfig(json: string | undefined): AnalyticsConfig {
   const out: AnalyticsConfig = { scriptSrc: DEFAULT_SCRIPT };
@@ -53,7 +58,8 @@ export function analyticsConfig(json: string | undefined): AnalyticsConfig {
     if (!a || typeof a !== 'object') return out;
     const get = (k: string): string | undefined => {
       const v: unknown = (a as Record<string, unknown>)[k];
-      return typeof v === 'string' && v.startsWith('/') ? v : undefined;
+      if (typeof v !== 'string' || !SITE_PATH.test(v)) return undefined;
+      return v.startsWith('/') ? v : `/${v}`;
     };
     const script = get('scriptSrc');
     const view = get('viewEndpoint');

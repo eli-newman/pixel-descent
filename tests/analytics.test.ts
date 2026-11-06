@@ -146,8 +146,28 @@ describe('analyticsConfig', () => {
   it('reads the paths Vercel passes at build time, and falls back to the default script', () => {
     expect(analyticsConfig(undefined)).toEqual({ scriptSrc: DEFAULT_SCRIPT });
     expect(analyticsConfig('{oops')).toEqual({ scriptSrc: DEFAULT_SCRIPT });
-    expect(analyticsConfig('{"analytics":{"scriptSrc":"https://evil.example/x.js"}}')).toEqual({
-      scriptSrc: DEFAULT_SCRIPT,
+    for (const bad of ['https://evil.example/x.js', '//evil.example/x.js', '../x.js', 'a b.js']) {
+      expect(analyticsConfig(JSON.stringify({ analytics: { scriptSrc: bad } }))).toEqual({
+        scriptSrc: DEFAULT_SCRIPT,
+      });
+    }
+    // The shape Vercel really sends (seen in a preview build): paths without the leading slash.
+    expect(
+      analyticsConfig(
+        JSON.stringify({
+          analytics: {
+            scriptSrc: '76b40da1c7a41f39/script.js',
+            viewEndpoint: '76b40da1c7a41f39/view',
+            eventEndpoint: '76b40da1c7a41f39/event',
+            sessionEndpoint: '76b40da1c7a41f39/session',
+          },
+          speedInsights: { scriptSrc: '7d6cb9d1e2893893/script.js' },
+        }),
+      ),
+    ).toEqual({
+      scriptSrc: '/76b40da1c7a41f39/script.js',
+      viewEndpoint: '/76b40da1c7a41f39/view',
+      eventEndpoint: '/76b40da1c7a41f39/event',
     });
     expect(
       analyticsConfig(
