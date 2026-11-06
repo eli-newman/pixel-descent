@@ -204,6 +204,7 @@ export class Controls {
     hud: () => this.toggleSetting('bigHud'),
     autopause: () => this.toggleSetting('autoPause'),
     manual: () => this.toggleSetting('manualSpin'),
+    color: () => this.toggleSetting('color'),
     snowboard: () => this.setKit('snowboard'),
     skis: () => this.setKit('skis'),
     boardPrev: () => this.cycleGear('board', -1),
@@ -231,7 +232,7 @@ export class Controls {
     announce?.(muted ? 'Sound off.' : 'Sound on.');
   }
 
-  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause' | 'manualSpin'): void {
+  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause' | 'manualSpin' | 'color'): void {
     const { store, sfx, announce } = this.deps;
     const next = !store.settings()[key];
     store.saveSettings({ [key]: next });

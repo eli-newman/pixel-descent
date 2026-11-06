@@ -1,6 +1,6 @@
 const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
 
-function pack(r: number, g: number, b: number): number {
+export function pack(r: number, g: number, b: number): number {
   return LITTLE_ENDIAN
     ? ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0
     : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;

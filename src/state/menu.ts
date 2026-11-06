@@ -8,6 +8,7 @@ export type ButtonId =
   | 'gear'
   | 'goals'
   | 'sound'
+  | 'color'
   | 'back'
   | 'tabTop'
   | 'tabDaily'
@@ -47,7 +48,8 @@ function b(id: ButtonId, x: number, y: number, w: number, h: number, accent = fa
 
 const TITLE: UiButton[] = [
   b('play', 14, 172, 152, 26, true),
-  b('daily', 14, 202, 152, MIN_TOUCH),
+  b('daily', 14, 202, 74, MIN_TOUCH),
+  b('color', 92, 202, 74, MIN_TOUCH),
   b('scores', 14, 228, 74, MIN_TOUCH),
   b('gear', 92, 228, 74, MIN_TOUCH),
   b('goals', 14, 254, 74, MIN_TOUCH),
@@ -81,6 +83,7 @@ const PAUSE: UiButton[] = [
   b('hud', 14, 152, 74, MIN_TOUCH),
   b('autopause', 92, 152, 74, MIN_TOUCH),
   b('manual', 14, 178, 152, MIN_TOUCH),
+  b('color', 14, 204, 152, MIN_TOUCH),
 ];
 
 /** Top of the game over panel. The camera keeps the crash site above this line. */

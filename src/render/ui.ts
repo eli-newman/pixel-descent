@@ -15,6 +15,7 @@ import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { drawHints } from './hints';
 import { hudRect } from './layout';
+import { paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
 
@@ -71,6 +72,8 @@ function labelOf(g: GameView, id: ButtonId): string {
       return `AUTO PAUSE ${on(g.settings.autoPause)}`;
     case 'manual':
       return `MANUAL SPIN ${on(g.settings.manualSpin)}`;
+    case 'color':
+      return `COLOR ${on(g.settings.color)}`;
     case 'again':
       return 'NEW RUN';
     case 'retry':
@@ -319,6 +322,7 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   drawTextCentered(fb, 'GEAR', CX, 12, WHITE, 2);
   const skis = g.progress.gear.kit === 'skis';
   const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx, skis };
+  const palette = paletteFor(g.settings.color);
   // A rider doing a slow carve, drawn at twice the scale and centred in the gap between the kit buttons and the rows.
   const a = (62 * Math.PI) / 180;
   const pose: RiderPose = {
@@ -336,10 +340,10 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   };
   // Measured on a still frame, so animated headgear never nudges the whole preview.
   PREVIEW.clear();
-  drawRider(PREVIEW, pose, { style, time: 0 });
+  drawRider(PREVIEW, pose, { style, time: 0, palette });
   const box = litBox(PREVIEW);
   PREVIEW.clear();
-  drawRider(PREVIEW, pose, { style, time: g.animT });
+  drawRider(PREVIEW, pose, { style, time: g.animT, palette });
   if (box) {
     const midX = Math.round((box.x0 + box.x1 + 1) / 2);
     const midY = Math.round((box.y0 + box.y1 + 1) / 2);
@@ -396,14 +400,14 @@ function drawGoals(fb: Framebuffer, g: GameView): void {
 }
 
 function drawPause(fb: Framebuffer, g: GameView): void {
-  panel(fb, 50, 228);
+  panel(fb, 50, 254);
   drawTextCentered(fb, 'PAUSED', CX, 56, WHITE, 2);
   drawButtons(fb, g);
   // The spin mode is fixed for a run, so a change made here waits for the next one.
   if (g.settings.manualSpin !== (g.sim.opts.manualSpin === true)) {
-    drawTextCentered(fb, 'SPIN MODE STARTS NEXT RUN', CX, 206, YELLOW);
+    drawTextCentered(fb, 'SPIN MODE STARTS NEXT RUN', CX, 232, YELLOW);
   }
-  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 216, YELLOW);
+  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 242, YELLOW);
 }
 
 function drawOver(fb: Framebuffer, g: GameView): void {

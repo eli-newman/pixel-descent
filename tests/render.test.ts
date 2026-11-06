@@ -42,7 +42,10 @@ function ride(game: Game, input: FakeInput): void {
   game.update(DT);
 }
 
-function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
+function capture(
+  kit: 'snowboard' | 'skis' = 'snowboard',
+  color = false,
+): {
   frames: Record<string, string>;
   spun: boolean;
   flipped: boolean;
@@ -54,6 +57,7 @@ function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
     frames[name] = hash(draw(game, scene));
   };
 
+  if (color) game.press('color');
   game.update(DT);
   shot('title');
   for (const screen of ['scores', 'gear', 'goals'] as const) {
@@ -126,7 +130,7 @@ describe('golden frames', () => {
         "crash-tumble": "d881381d",
         "flip": "2c61f3fb",
         "over": "ec7de2be",
-        "paused": "55d45f2e",
+        "paused": "d3573bd6",
         "ride-10s": "3cbdc99d",
         "ride-12s": "ae267d16",
         "ride-14s": "66653779",
@@ -149,7 +153,7 @@ describe('golden frames', () => {
         "ride-8s": "9dc3af93",
         "spin": "7e8fec7f",
         "start": "1827df37",
-        "title": "223e00fc",
+        "title": "ff24492c",
         "title-gear": "31f4dbb4",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
@@ -172,7 +176,7 @@ describe('golden frames', () => {
         "crash-tumble": "5ebe67c5",
         "flip": "8a5b5a23",
         "over": "2590845e",
-        "paused": "04c41697",
+        "paused": "c6d6c83f",
         "ride-10s": "ee969264",
         "ride-12s": "e2390286",
         "ride-14s": "220b6a58",
@@ -195,7 +199,7 @@ describe('golden frames', () => {
         "ride-8s": "c4d50ff8",
         "spin": "e75c5927",
         "start": "e412232e",
-        "title": "223e00fc",
+        "title": "ff24492c",
         "title-gear": "da556ec2",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
@@ -205,5 +209,49 @@ describe('golden frames', () => {
 
   it('is repeatable', () => {
     expect(capture().frames).toEqual(capture().frames);
+  });
+
+  it('draws the same run in colour, with every frame different from black and white', () => {
+    const { frames, spun, flipped } = capture('snowboard', true);
+    expect(spun).toBe(true);
+    expect(flipped).toBe(true);
+    const mono = capture().frames;
+    expect(Object.keys(frames).filter((k) => frames[k] === mono[k])).toEqual([]);
+    expect(frames).toMatchInlineSnapshot(`
+      {
+        "air": "d557559f",
+        "crash-hit": "d1dbf4b0",
+        "crash-tumble": "a5763506",
+        "flip": "4018cf6e",
+        "over": "47eef0a6",
+        "paused": "194203d3",
+        "ride-10s": "6e9b5fbb",
+        "ride-12s": "a324ee40",
+        "ride-14s": "253bf75f",
+        "ride-16s": "c4860214",
+        "ride-18s": "2e9927ff",
+        "ride-20s": "356f2aaf",
+        "ride-22s": "916f609e",
+        "ride-24s": "7138816a",
+        "ride-26s": "2ad38b87",
+        "ride-28s": "f650c480",
+        "ride-2s": "d98ea048",
+        "ride-30s": "9a45237c",
+        "ride-32s": "5edb6d4d",
+        "ride-34s": "4a3cc520",
+        "ride-36s": "ac3981e3",
+        "ride-38s": "f9ca3363",
+        "ride-40s": "a27c02f2",
+        "ride-4s": "4575a36b",
+        "ride-6s": "87ac4238",
+        "ride-8s": "43ef8ed6",
+        "spin": "0866e1a0",
+        "start": "d1d16f9a",
+        "title": "95f24633",
+        "title-gear": "30bb93e8",
+        "title-goals": "fea8c3d3",
+        "title-scores": "7e5089ef",
+      }
+    `);
   });
 });

@@ -1,7 +1,8 @@
 import { BOARD_LEN, H } from '../core/config';
 import { hash2 } from '../core/rng';
 import type { TrailView } from '../state/view';
-import { GREY, SOFT_GREY, WHITE, type Framebuffer } from './framebuffer';
+import type { Framebuffer } from './framebuffer';
+import { MONO, type Palette } from './palette';
 
 /** Past this gap between recorded points the rider was in the air, so the track breaks instead of joining up. */
 const GAP = 6;
@@ -66,10 +67,12 @@ export class TrackPainter {
   private skis = false;
   private start = 0;
   private end = 0;
+  private pal: Palette = MONO;
 
   /** `skis` draws the two thin lines of a pair of skis instead of the board's one. */
-  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false): void {
+  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false, pal: Palette = MONO): void {
     this.skis = skis;
+    this.pal = pal;
     this.reserve(t.count);
     let start = 0;
     for (let i = 1; i <= t.count; i++) {
@@ -152,12 +155,12 @@ export class TrackPainter {
       // Each ski's line is centred on its own path, a real perpendicular away from the middle, so the pair stays
       // evenly apart where the spans swap between rows and columns. It swells outwards, keeping the gap open.
       const off = SKI_GAP / 2 + (w - SKI_WIDTH) / 2;
-      this.span(fb, i, cam, -w / 2, w / 2, WHITE, -off);
-      this.span(fb, i, cam, -w / 2, w / 2, WHITE, off);
+      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, -off);
+      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, off);
       return;
     }
     const half = this.width(i - 1) / 2;
-    this.span(fb, i, cam, -half, half, WHITE);
+    this.span(fb, i, cam, -half, half, this.pal.track);
   }
 
   private skiWidth(i: number): number {
@@ -183,8 +186,8 @@ export class TrackPainter {
     const off = this.skis
       ? (SKI_GAP / 2 + (w - SKI_WIDTH) / 2) * (positive === along >= 0 ? -1 : 1)
       : 0;
-    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY, off);
-    else this.span(fb, i, cam, -half - reach, -half + 1, GREY, off);
+    if (positive) this.span(fb, i, cam, half - 1, half + reach, this.pal.trackShadow, off);
+    else this.span(fb, i, cam, -half - reach, -half + 1, this.pal.trackShadow, off);
   }
 
   /**
@@ -247,7 +250,7 @@ export class TrackPainter {
       const lands = BASE_WIDTH / 2 + SWELL + 2 + hash2(iy, ix + grain * 17) * 4 * depth;
       const x = Math.round((this.x[i] ?? 0) + dx * lands * thrown);
       const y = Math.round((this.y[i] ?? 0) + dy * lands * thrown);
-      if (y - cam >= -8 && y - cam <= H + 8) fb.put(x, y - cam);
+      if (y - cam >= -8 && y - cam <= H + 8) fb.put(x, y - cam, this.pal.powder);
     }
   }
 
@@ -336,7 +339,7 @@ export class TrackPainter {
       for (let v = 0; v <= across; v++) {
         const g = v / Math.max(1, across);
         const fromRim = (noseSunward ? 1 - g : g) * len;
-        const color = fromRim < reach ? SOFT_GREY : WHITE;
+        const color = fromRim < reach ? this.pal.trackSoft : this.pal.track;
         fb.put(
           Math.round(fromX + (toX - fromX) * g),
           Math.round(fromY + (toY - fromY) * g) - cam,
