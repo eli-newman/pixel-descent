@@ -100,7 +100,7 @@ Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top
 - An all-time top 10, a top 10 for today's daily course and your best score are kept in `localStorage`. Your best counts across every course.
 - Achievements and challenges (50 close calls, 1000 m without lane stars, 10 tricks, 25 lane stars) unlock boards and riders on the GEAR screen: stripe, dots and twin tip boards, beanie, scarf and ears riders.
 - **Skis**: the top of the GEAR screen picks SNOWBOARD or SKIS (open to everyone, remembered between visits, a snowboard by default). Skiing is a look, not a different game: the speed, steering, tricks, landings and scores are exactly the same, so the same course and inputs give the same run. The skier has two skis and poles, brakes with a hockey stop, and leaves two thin parallel lines in the snow instead of the board's one. Board looks carry over to the skis (stripes, dots, twin tips) and rider looks to the skier. The share text says "on skis".
-- The game has one calm look on every device, so phone and desktop match: no screen shake, zoom punches, snowfall, speed lines, panel slide or blinking. Braking throws up a light spray.
+- The game has one calm look on every device, so phone and desktop match: no screen shake, zoom punches, snowfall, speed lines, panel slide or blinking. Braking throws up a light spray, and a hard carve at speed throws a cloud of powder out of the turn that hangs behind you and thins away.
 - Toasts and the combo meter sit near the top of the screen; while a high jump carries the rider up through them they move lower down, so they never hide the trick they name.
 
 ## Architecture

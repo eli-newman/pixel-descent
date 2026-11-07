@@ -1,7 +1,7 @@
 import type { Sfx } from '../platform/audio';
 import type { Tracker } from '../platform/analytics';
 import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
-import { BrakeSpray, Particles } from './effects';
+import { BrakeSpray, CarveCloud, Particles, Puffs } from './effects';
 import type { Input } from '../platform/input';
 import { Controls } from './controls';
 import { Feedback, type Toast } from './feedback';
@@ -42,6 +42,7 @@ export class Game implements GameView {
   result: RunResult | null = null;
 
   readonly particles = new Particles(512);
+  readonly puffs = new Puffs();
   private camY = 0;
   private camOff = RIDER_SCREEN_Y;
   /** Seconds the world has been animating (stops while paused). */
@@ -50,6 +51,7 @@ export class Game implements GameView {
   private readonly controls: Controls;
   private readonly feedback: Feedback;
   private readonly spray = new BrakeSpray();
+  private readonly cloud = new CarveCloud();
   private sharing = false;
   /** Runs started since the page loaded, for the second-run rate. Never stored. */
   private runsStarted = 0;
@@ -167,8 +169,10 @@ export class Game implements GameView {
     this.seed = seed;
     this.sim = new Sim(seed, { manualSpin: this.settings.manualSpin });
     this.particles.clear();
+    this.puffs.clear();
     this.feedback.reset();
     this.spray.reset();
+    this.cloud.reset();
     this.camOff = RIDER_SCREEN_Y;
     this.camY = this.sim.rider.y - this.camOff;
     this.result = null;
@@ -212,6 +216,7 @@ export class Game implements GameView {
       }
       if (this.phase !== 'paused') {
         this.particles.step(dt);
+        this.puffs.step(dt);
         this.feedback.stepToasts(dt);
       }
     }
@@ -281,7 +286,9 @@ export class Game implements GameView {
     const sim = this.sim;
     sim.step(this.controls.readSimInput());
     for (const e of sim.events) this.feedback.react(e, this.animT);
-    this.spray.step(sim.rider, this.particles, this.deps.rand ?? Math.random);
+    const rand = this.deps.rand ?? Math.random;
+    this.spray.step(sim.rider, this.particles, rand);
+    this.cloud.step(sim.rider, this.puffs, this.particles, rand);
     if (sim.crashed) this.phase = 'crashed';
   }
 

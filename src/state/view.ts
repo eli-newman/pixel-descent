@@ -24,6 +24,15 @@ export interface ParticlesView {
   readonly landedY: ArrayLike<number>;
 }
 
+/** Powder clouds: centre, radius and how full each disc is. */
+export interface PuffsView {
+  readonly count: number;
+  readonly x: ArrayLike<number>;
+  readonly y: ArrayLike<number>;
+  readonly r: ArrayLike<number>;
+  readonly fill: ArrayLike<number>;
+}
+
 /** The parts of the sim that get drawn. */
 export type SimView = DeepReadonly<
   Pick<
@@ -57,6 +66,7 @@ export interface GameView {
   readonly focus: number;
   readonly focusVisible: boolean;
   readonly particles: ParticlesView;
+  readonly puffs: PuffsView;
   readonly toasts: readonly Readonly<Toast>[];
   readonly camYi: number;
   readonly animT: number;

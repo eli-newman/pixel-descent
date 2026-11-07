@@ -73,6 +73,7 @@ export class SceneRenderer {
       if (!o || o.y > feetY) break;
       this.drawObstacle(g, o, cam);
     }
+    this.drawPuffs(g, cam);
     this.drawRiderAndEffects(g, cam, tuck);
     for (; i < obs.length; i++) {
       const o = obs[i];
@@ -379,6 +380,40 @@ export class SceneRenderer {
     for (let i = 0; i < p.count; i++) this.fb.put(p.x[i] ?? 0, (p.y[i] ?? 0) - cam, this.pal.spray);
   }
 
+  /**
+   * Powder clouds behind the rider. Each disc is dithered against the world grid (a 4x4 ordered pattern), so
+   * a thinning cloud loses pixels in a fixed order instead of flickering. The shadow side (lower right) and the
+   * densest middle of a fresh puff are drawn in the deeper spray tone, which gives the cloud its volume.
+   */
+  private drawPuffs(g: GameView, cam: number): void {
+    const p = g.puffs;
+    for (let i = 0; i < p.count; i++) {
+      const cx = p.x[i] ?? 0;
+      const cy = p.y[i] ?? 0;
+      const r = p.r[i] ?? 0;
+      const fill = p.fill[i] ?? 0;
+      const x0 = Math.floor(cx - r);
+      const x1 = Math.ceil(cx + r);
+      const y0 = Math.floor(cy - r);
+      const y1 = Math.ceil(cy + r);
+      for (let wy = y0; wy <= y1; wy++) {
+        for (let wx = x0; wx <= x1; wx++) {
+          const dx = wx - cx;
+          const dy = wy - cy;
+          const d = Math.sqrt(dx * dx + dy * dy) / Math.max(1, r);
+          if (d > 1) continue;
+          // fuller in the middle, soft at the rim
+          const local = fill * (1.15 - d * 0.75);
+          const level = BAYER[(wy & 3) * 4 + (wx & 3)] ?? 0;
+          if (local * 16 <= level) continue;
+          // Lit from the left like everything else: the lower right of each puff is its shadow side.
+          const shade = dx + dy > r * 0.25 || local > 0.8;
+          this.fb.put(wx, wy - cam, shade ? this.pal.spray : this.pal.powder);
+        }
+      }
+    }
+  }
+
   /** Spray that has come down. Drawn under everything standing on the snow. */
   private drawLanded(g: GameView, cam: number): void {
     const p = g.particles;
@@ -387,6 +422,9 @@ export class SceneRenderer {
     }
   }
 }
+
+/** A 4x4 ordered dither: the order pixels drop out of a thinning cloud. */
+const BAYER: readonly number[] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 const OUTLINE: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
