@@ -8,9 +8,12 @@ export interface Toast {
   max: number;
   /** Yellow for good news, white for plain information. */
   hot: boolean;
+  /** A second, smaller line under the text (a jump line building up), in the same colour. */
+  sub?: string;
 }
 
 type LandEvent = Extract<SimEvent, { type: 'land' }>;
+type LineEvent = Extract<SimEvent, { type: 'line' }>;
 
 /** How a run feels: turns sim events into sound, toasts, haptics and hit-stop. */
 export class Feedback {
@@ -81,6 +84,9 @@ export class Feedback {
       case 'land':
         this.reactToLanding(e);
         break;
+      case 'line':
+        this.reactToLine(e);
+        break;
       case 'crash':
         this.addHitStop(0.06);
         sfx.crash();
@@ -107,6 +113,27 @@ export class Feedback {
     this.showToast(e.pts > 0 ? `${name} +${e.pts}` : name, 1.1, true);
     sfx.land(true);
     this.buzz(18);
+  }
+
+  /**
+   * A jump line comes right after its landing, so it goes under the landing's toast: "LINE X1.5" while it
+   * builds, "LINE BROKEN" under a sloppy landing. A clean line takes the top line itself, with the
+   * landing under it. Riding past a kicker of a live line says "LINE MISSED".
+   */
+  private reactToLine(e: LineEvent): void {
+    const t = this.toasts[0];
+    if (e.broken === 'skip' || !t) {
+      this.showToast(e.broken ? 'LINE MISSED' : `LINE X${e.mult}`, 1.1, e.broken === null);
+      return;
+    }
+    if (e.bonus > 0) {
+      this.showToast(`LINE CLEAN +${e.bonus}`, 1.6, true);
+      const top = this.toasts[0];
+      if (top) top.sub = t.text;
+      return;
+    }
+    t.sub = e.broken === 'sloppy' ? 'LINE BROKEN' : `LINE X${e.mult}`;
+    t.ttl = t.max = Math.max(t.max, 1.3);
   }
 
   private addHitStop(seconds: number): void {

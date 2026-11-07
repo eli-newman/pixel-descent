@@ -25,3 +25,18 @@ export function runBot(
   for (let i = 0; i < maxSteps && !sim.crashed && sim.distM < metres; i++) sim.step(pick(sim));
   return sim;
 }
+
+/**
+ * A rider who takes every kicker: aim at the next unused kicker coming up, else follow the open path.
+ * Rides jump lines straight down their kickers and then steers back to the path.
+ */
+export function kickerBotInput(sim: Sim): SimInput {
+  const r = sim.rider;
+  if (r.air) return { steer: 0, trick: false };
+  const look = 14 + r.speed * 0.2;
+  const next = sim.ramps.find((k) => k.kind === 'kicker' && !k.used && k.y > r.y + 8);
+  const tx = next && next.y - r.y < look + 90 ? next.x : sim.spawner.pathCenter(r.y + 8 + look);
+  const err = tx - r.x;
+  const steer = Math.max(-1, Math.min(1, err / (look * 0.55) - r.hv * 0.04));
+  return { steer, trick: false };
+}

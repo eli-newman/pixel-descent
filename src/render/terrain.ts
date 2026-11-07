@@ -15,6 +15,30 @@ export function rampHalfAt(half: number, i: number): number {
   return Math.round(half * (0.55 + (0.45 * i) / (RAMP_ROWS - 1)));
 }
 
+/** Size of a jump line pip and the step from one to the next, in px. */
+const PIP = 3;
+const PIP_STEP = 5;
+
+/**
+ * The pips over a kicker in a jump line, one per kicker in the line, in a row just uphill of its back
+ * edge: filled up to this kicker's place in the line, hollow after it, so "2 of 3" reads at a glance and
+ * every kicker of a line looks related. Empty for a kicker that is not in a line. Screen y.
+ */
+export function linePips(
+  r: DeepReadonly<Ramp>,
+  cam: number,
+): { x: number; y: number; size: number; filled: boolean }[] {
+  if (r.lineLen < 2) return [];
+  const x0 = Math.round(r.x - (PIP_STEP * r.lineLen - (PIP_STEP - PIP)) / 2);
+  const y = r.y - cam - RAMP_ROWS - 4;
+  return Array.from({ length: r.lineLen }, (_, k) => ({
+    x: x0 + k * PIP_STEP,
+    y,
+    size: PIP,
+    filled: k <= r.lineIdx,
+  }));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Colour mode only: the jumps and cliffs drawn the way they look on a real slope. The black and white
 // versions stay in scene.ts. Every texture here is keyed to world coordinates (or to the cliff's own
@@ -68,6 +92,11 @@ export function drawColorKicker(fb: Framebuffer, r: DeepReadonly<Ramp>, cam: num
     const x = r.x + s * (r.half + 2);
     for (let y = ly - 6; y <= ly; y++) fb.put(x, y, y < ly - 4 ? C.poleTip : C.pole);
     fb.put(x + 1, ly + 1, C.snowShade);
+  }
+  // a jump line's pips, in the poles' orange
+  for (const p of linePips(r, cam)) {
+    if (p.filled) fb.fillRect(p.x, p.y, p.size, p.size, C.pole);
+    else fb.strokeRect(p.x, p.y, p.size, p.size, C.poleTip);
   }
 }
 

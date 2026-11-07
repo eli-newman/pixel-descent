@@ -20,14 +20,34 @@ export const PX_PER_M = 8;
 export const EDGE = 7;
 
 /**
- * Jumps (kickers and cliffs): the first one's distance below the start, and the gap from one jump's lip
- * to the next before a random extra of up to JUMP_JITTER. In px (8 per metre). The mean of about 1200 px
- * puts a jump every 150 m, every 4 to 5 s at speed, so tricks are a regular part of a run.
+ * Jumps (kickers and cliffs): the first one's distance below the start, and the clear ground from the end
+ * of one jump's landing zone (or the end of a whole jump line) to the next lip, before a random extra of
+ * up to JUMP_JITTER. In px (8 per metre). A landing zone is 250-370 px, so a jump comes about every
+ * 75 m early on and every 90 m at speed: every 3 to 4 s at cruising speed, so the middle of a run never
+ * goes quiet. The 300 px floor keeps a rider well clear of one landing before the next run-up.
  */
-export const FIRST_JUMP_Y = 600;
-export const JUMP_GAP_MIN = 1000;
-export const JUMP_GAP_MAX = 1300;
-export const JUMP_JITTER = 100;
+export const FIRST_JUMP_Y = 360;
+export const JUMP_GAP_MIN = 300;
+export const JUMP_GAP_MAX = 380;
+export const JUMP_JITTER = 40;
+/**
+ * Jump lines: two or three kickers in a row, aligned and the same width, each lip a short run-up after
+ * the previous one's landing zone. The chance that a kicker starts a line grows from LINE_CHANCE_START
+ * to LINE_CHANCE_END with distance (LINE_CHANCE_M sets how fast), and no line comes before LINE_START_M.
+ * LINE_THREE_CHANCE is the share of lines with three kickers.
+ */
+export const LINE_START_M = 150;
+export const LINE_CHANCE_START = 0.2;
+export const LINE_CHANCE_END = 0.45;
+export const LINE_CHANCE_M = 1500;
+export const LINE_THREE_CHANCE = 0.4;
+/** Clear snow between a line kicker's landing zone (sized for top speed) and the next lip, in px. */
+export const LINE_RUNUP_MIN = 50;
+export const LINE_RUNUP_MAX = 80;
+/** Trick points of each clean landing in a line are multiplied by these, by its place in the line. */
+export const LINE_MULTS = [1, 1.5, 2] as const;
+/** Landing every kicker of a line clean pays this per kicker, times the speed multiplier. */
+export const LINE_BONUS = 30;
 /** Share of jumps that are cliffs instead of kickers. A cliff clears far more landing ground, so most jumps are kickers. */
 export const CLIFF_CHANCE = 0.3;
 /** Half width of a kicker in px. Wide enough to hit without lining up to the pixel, still inside the open path. */

@@ -5,7 +5,14 @@ import { poseOf } from '../sim/pose';
 import type { Obstacle, Patch, Ramp } from '../sim/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
 import { OFF, type Framebuffer } from './framebuffer';
-import { drawColorCliff, drawColorKicker, RAMP_HEIGHT, RAMP_ROWS, rampHalfAt } from './terrain';
+import {
+  drawColorCliff,
+  drawColorKicker,
+  linePips,
+  RAMP_HEIGHT,
+  RAMP_ROWS,
+  rampHalfAt,
+} from './terrain';
 import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getColorSprite, getSprite } from './sprites';
@@ -295,6 +302,11 @@ export class SceneRenderer {
     // the lip: two pixels thick and a pixel wider than the face, then a black gap where the snow drops away
     fb.fillRect(r.x - r.half - 1, ly, r.half * 2 + 3, 2);
     fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, OFF);
+    // a jump line's pips: filled up to this kicker, hollow after it
+    for (const p of linePips(r, cam)) {
+      if (p.filled) fb.fillRect(p.x, p.y, p.size, p.size);
+      else fb.strokeRect(p.x, p.y, p.size, p.size);
+    }
   }
 
   /** Lane stars are solid five-point stars, the one thing on the slope shaped like a reward. */

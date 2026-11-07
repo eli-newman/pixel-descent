@@ -39,8 +39,15 @@ export interface Ramp {
   y: number;
   /** Half the width of the kicker. */
   half: number;
-  /** Solid obstacles are kept out of the landing zone between y and landEnd. */
+  /**
+   * Solid obstacles are kept out of the landing zone between y and landEnd. In a jump line every kicker
+   * but the last clears the slope right up to the next lip, so its landEnd is that lip's y.
+   */
   landEnd: number;
+  /** Jump lines: the id of the line's first kicker (0 when the jump is not in a line), its place in the line from 0, and how many kickers the line has (1 when not in a line). */
+  line: number;
+  lineIdx: number;
+  lineLen: number;
   used: boolean;
   /** Cliffs only: makes each one look different. */
   seed: number;

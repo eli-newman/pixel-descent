@@ -126,13 +126,17 @@ describe('sim', () => {
       sim.begin();
       play(sim, 5);
       const r = sim.rider;
-      sim.ramps.push({
+      // Ramps are kept in order of y, and this one comes before any the spawner made.
+      sim.ramps.unshift({
         id: 999,
         kind: 'cliff',
         x: 90,
         y: r.y + 30,
         half: 90,
         landEnd: r.y + 900,
+        line: 0,
+        lineIdx: 0,
+        lineLen: 1,
         used: false,
         seed: 1,
         segs: [{ x0: r.x + gapOffset - 20, x1: r.x + gapOffset + 20, dy: 0 }],

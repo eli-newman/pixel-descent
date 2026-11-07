@@ -5,6 +5,13 @@ import {
   JUMP_GAP_MIN,
   JUMP_JITTER,
   KICKER_HALF,
+  LINE_CHANCE_END,
+  LINE_CHANCE_M,
+  LINE_CHANCE_START,
+  LINE_RUNUP_MAX,
+  LINE_RUNUP_MIN,
+  LINE_START_M,
+  LINE_THREE_CHANCE,
   PX_PER_M,
   START_X,
   START_Y,
@@ -42,6 +49,14 @@ const FIRST_RAMP_Y = START_Y + FIRST_JUMP_Y;
 const LANE_JUMP_PAD = 60;
 /** Ice and drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
 const JUMP_PATCH_PAD = 40;
+/**
+ * After the last kicker of a line the clear ground runs on until a rider who landed on the line's x can
+ * be back inside the open path: steering in over LINE_TURN_IN px, then moving LINE_RETURN_SLOPE px
+ * sideways per px downhill, with LINE_RETURN_BODY px of the path's half width kept for his body.
+ */
+const LINE_TURN_IN = 40;
+const LINE_RETURN_SLOPE = 0.5;
+const LINE_RETURN_BODY = 10;
 const FIRST_LANE_Y = START_Y + 1500;
 const FIRST_PATCH_Y = START_Y + 800;
 
@@ -58,6 +73,15 @@ export function pathHalfWidth(distM: number): number {
 /** Chance of an obstacle in a row, rising with distance. */
 export function density(distM: number): number {
   return 0.34 + 0.4 * (1 - detExp(-distM / 1500));
+}
+
+/** Chance that a kicker at a distance starts a jump line. 0 before LINE_START_M, then rising gently. */
+export function lineChance(distM: number): number {
+  if (distM < LINE_START_M) return 0;
+  return (
+    LINE_CHANCE_START +
+    (LINE_CHANCE_END - LINE_CHANCE_START) * (1 - detExp(-(distM - LINE_START_M) / LINE_CHANCE_M))
+  );
 }
 
 function bandLength(i: number): number {
@@ -95,6 +119,13 @@ export interface Lane {
   side: -1 | 1;
 }
 
+/** A risk lane drawn from the lane stream but not placed yet. */
+interface PendingLane {
+  y0: number;
+  len: number;
+  prefer: 1 | -1;
+}
+
 /**
  * Deterministic, endless course generator. Every kind of feature draws from its own seeded stream
  * in a fixed order, so the world is identical for a given seed no matter how `advance` is chunked.
@@ -119,8 +150,10 @@ export class Spawner {
   private nextRampId = 1;
   private nextPatchId = 1;
   private nextRampY = FIRST_RAMP_Y;
+  /** Where the clear ground of the last planned jump ends. Nothing new is planned above it. */
+  private clearEnd = FIRST_ROW_Y;
+  private pendingLane: PendingLane;
   private nextPatchY = FIRST_PATCH_Y;
-  private nextLaneY = FIRST_LANE_Y;
   private nextLaneStarLane = 0;
   private nextRampOut = 0;
   private nextPatchOut = 0;
@@ -140,6 +173,7 @@ export class Spawner {
     this.patchRng = new Rng(seed ^ 0x51ed270b);
     this.laneRng = new Rng(seed ^ 0x6c8e9cf5);
     this.hugRng = new Rng(seed ^ 0x3c6ef372);
+    this.pendingLane = this.drawLane(FIRST_LANE_Y);
   }
 
   /** Centre x of the guaranteed open path at world y. */
@@ -201,8 +235,7 @@ export class Spawner {
       ramps: [],
       patches: [],
     };
-    this.planLanes(toY + 60);
-    this.planRamps(toY + 60);
+    this.planFeatures(toY + 60);
     this.planPatches(toY + 60);
     while (this.nextY < toY) {
       this.spawnRow(this.nextY, batch);
@@ -229,18 +262,6 @@ export class Spawner {
     return batch;
   }
 
-  /** Plan risk lanes up to world y `limit`. Depends only on the lane stream and the path, never on other features. */
-  private planLanes(limit: number): void {
-    while (this.nextLaneY <= limit) {
-      const y0 = Math.round(this.nextLaneY + this.laneRng.range(0, 200));
-      const len = Math.round(this.laneRng.range(210, 270));
-      const prefer = this.laneRng.chance(0.5) ? 1 : -1;
-      this.nextLaneY = y0 + len + this.laneRng.range(1000, 1600);
-      const side = this.laneSide(y0, y0 + len, prefer);
-      if (side) this.lanes.push({ y0, y1: y0 + len, side });
-    }
-  }
-
   /** A side with room for the whole lane (and the strips leading to it), or null if there is none. */
   private laneSide(y0: number, y1: number, prefer: 1 | -1): (1 | -1) | null {
     const sides: Array<1 | -1> = prefer === 1 ? [1, -1] : [-1, 1];
@@ -261,50 +282,123 @@ export class Spawner {
     return false;
   }
 
-  /** True when world y is within `pad` of a jump's lip. */
+  /** True when world y is within `pad` of a jump's lip, or of the run-ups between the kickers of a line. */
   private nearJump(y: number, pad: number): boolean {
-    for (const r of this.ramps) if (Math.abs(r.y - y) < pad) return true;
+    for (const r of this.ramps) {
+      if (Math.abs(r.y - y) < pad) return true;
+      if (r.lineIdx < r.lineLen - 1 && y > r.y - pad && y < r.landEnd + pad) return true;
+    }
     return false;
   }
 
-  /** The first lane that overlaps world y from `y0` to `y1`, if any. */
-  private laneOverlapping(y0: number, y1: number): Lane | null {
-    for (const l of this.lanes) if (l.y1 >= y0 && l.y0 <= y1) return l;
-    return null;
+  /**
+   * Plan jumps and risk lanes until nothing new can start above `limit`. They are planned together, in
+   * order down the slope, so they take turns and never share ground. Each jump gets a solid-free landing
+   * zone sized for the fastest rider at that distance, and its lip is at least JUMP_GAP_MIN past the clear
+   * ground of the last jump, so a rider is back on the snow with time to line up. A risk lane that falls
+   * due is fitted into the gap before the next jump, LANE_JUMP_PAD clear of both jumps; if the gap is too
+   * short the jump moves down past the lane. Neither is dropped for the other.
+   *
+   * Some kickers start a jump line: two or three kickers on the same x, the same width, each lip a short
+   * run-up past the previous one's top-speed landing zone. The whole line, run-ups included, is clear
+   * across the slope, so the later kickers may sit off the open path, and the clear ground after the
+   * last one runs on until a rider can steer back into the path (`lineReturnEnd`).
+   */
+  private planFeatures(limit: number): void {
+    while (this.clearEnd <= limit) {
+      let y = Math.round(this.nextRampY + this.rampRng.range(0, JUMP_JITTER));
+      const cliff = this.rampRng.chance(CLIFF_CHANCE);
+      const lineRoll = this.rampRng.next();
+      const threeRoll = this.rampRng.next();
+      const distM = (y - START_Y) / PX_PER_M;
+      const count =
+        cliff || lineRoll >= lineChance(distM) ? 1 : threeRoll < LINE_THREE_CHANCE ? 3 : 2;
+      const runups: number[] = [];
+      for (let k = 1; k < count; k++)
+        runups.push(Math.round(this.rampRng.range(LINE_RUNUP_MIN, LINE_RUNUP_MAX)));
+      let lips = this.lineLips(y, cliff, runups);
+      let end = this.featureEnd(lips, cliff);
+      const lane = this.pendingLane;
+      if (lane.y0 <= end + LANE_JUMP_PAD) {
+        // As late as fits before this jump, never closer than LANE_JUMP_PAD to the last one.
+        const y0 = Math.max(
+          this.clearEnd + LANE_JUMP_PAD + 1,
+          Math.min(lane.y0, y - LANE_JUMP_PAD - lane.len - 1),
+        );
+        const y1 = y0 + lane.len;
+        const side = this.laneSide(y0, y1, lane.prefer);
+        if (side) {
+          this.lanes.push({ y0, y1, side });
+          if (y < y1 + LANE_JUMP_PAD + 1) {
+            y = y1 + LANE_JUMP_PAD + 1;
+            lips = this.lineLips(y, cliff, runups);
+            end = this.featureEnd(lips, cliff);
+          }
+        }
+        this.pendingLane = this.drawLane(y1 + this.laneRng.range(1000, 1600));
+      }
+      this.clearEnd = end;
+      this.nextRampY = end + this.rampRng.range(JUMP_GAP_MIN, JUMP_GAP_MAX);
+      const segs = cliff ? this.cliffSegs() : [];
+      const seed = cliff ? this.rampRng.int(1, 100000) : 0;
+      const x = cliff ? W / 2 : Math.round(this.pathCenter(y));
+      const line = count > 1 ? this.nextRampId : 0;
+      lips.forEach((ly, k) => {
+        this.ramps.push({
+          id: this.nextRampId++,
+          kind: cliff ? 'cliff' : 'kicker',
+          x,
+          y: ly,
+          half: cliff ? W / 2 : KICKER_HALF,
+          landEnd: k < lips.length - 1 ? (lips[k + 1] ?? end) : end,
+          line,
+          lineIdx: k,
+          lineLen: count,
+          used: false,
+          seed,
+          segs,
+        });
+      });
+    }
+  }
+
+  /** The next risk lane's wanted start (up to 200 px past `from`), length and preferred side, from the lane stream. */
+  private drawLane(from: number): PendingLane {
+    const y0 = Math.round(from + this.laneRng.range(0, 200));
+    const len = Math.round(this.laneRng.range(210, 270));
+    const prefer = this.laneRng.chance(0.5) ? 1 : -1;
+    return { y0, len, prefer };
+  }
+
+  /** Lips of a jump (one) or a line (one per kicker), the first at `y`: each a run-up past the last one's landing zone. */
+  private lineLips(y: number, cliff: boolean, runups: readonly number[]): number[] {
+    const lips = [y];
+    for (const r of runups) lips.push(this.landEnd(lips[lips.length - 1] ?? y, cliff) + r);
+    return lips;
+  }
+
+  /** Where the clear ground after a jump or a whole line ends. */
+  private featureEnd(lips: readonly number[], cliff: boolean): number {
+    const last = lips[lips.length - 1] ?? 0;
+    const end = this.landEnd(last, cliff);
+    if (lips.length === 1) return end;
+    return this.lineReturnEnd(Math.round(this.pathCenter(lips[0] ?? 0)), end);
   }
 
   /**
-   * Plan jumps up to `limit`. Each gets a solid-free landing zone sized for the fastest rider at that
-   * distance. A jump never shares ground with a risk lane: it moves on past the lane rather than being
-   * dropped, so lanes do not thin out the jumps. The gap to the next jump is always longer than the
-   * longest landing zone, so a rider is back on the snow with time to line up before the next one.
+   * End of the clear ground after a line ridden at `x` whose last landing zone ends at `landEnd`: the
+   * first y where a rider who touched down at the far end of the landing, on the line's x, can be back
+   * inside the open path. Exact arithmetic only, like the rest of the course.
    */
-  private planRamps(limit: number): void {
-    while (this.nextRampY <= limit) {
-      let y = Math.round(this.nextRampY + this.rampRng.range(0, JUMP_JITTER));
-      const cliff = this.rampRng.chance(CLIFF_CHANCE);
-      let landEnd = this.landEnd(y, cliff);
-      for (;;) {
-        this.planLanes(landEnd + LANE_JUMP_PAD);
-        const lane = this.laneOverlapping(y - LANE_JUMP_PAD, landEnd + LANE_JUMP_PAD);
-        if (!lane) break;
-        y = Math.round(lane.y1 + LANE_JUMP_PAD + 1);
-        landEnd = this.landEnd(y, cliff);
-      }
-      this.nextRampY = y + this.rampRng.range(JUMP_GAP_MIN, JUMP_GAP_MAX);
-      const segs = cliff ? this.cliffSegs() : [];
-      const seed = cliff ? this.rampRng.int(1, 100000) : 0;
-      this.ramps.push({
-        id: this.nextRampId++,
-        kind: cliff ? 'cliff' : 'kicker',
-        x: cliff ? W / 2 : Math.round(this.pathCenter(y)),
-        y,
-        half: cliff ? W / 2 : KICKER_HALF,
-        landEnd,
-        used: false,
-        seed,
-        segs,
-      });
+  private lineReturnEnd(x: number, landEnd: number): number {
+    const touch = landEnd - LANDING_MARGIN;
+    for (let y = landEnd; ; y += 8) {
+      const distM = (y - START_Y) / PX_PER_M;
+      const reach =
+        pathHalfWidth(distM) -
+        LINE_RETURN_BODY +
+        LINE_RETURN_SLOPE * Math.max(0, y - touch - LINE_TURN_IN);
+      if (Math.abs(this.pathCenter(y) - x) <= reach) return y;
     }
   }
 
@@ -349,10 +443,9 @@ export class Spawner {
       const side = this.patchRng.chance(0.5) ? 1 : -1;
       const slack = this.patchRng.range(0, 24);
       const variant = this.patchRng.int(0, 3);
-      this.planLanes(y + ry + 80);
+      this.planFeatures(y + ry + 80);
       if (this.nearLane(y, ry + 30)) continue;
       // Keep the run-up and the lip of every jump clean: no ice or drift drawn over it or slowing the rider into it.
-      this.planRamps(y + ry + JUMP_PATCH_PAD);
       if (this.nearJump(y, ry + JUMP_PATCH_PAD)) continue;
       const distM = (y - START_Y) / PX_PER_M;
       const centre = this.pathCenter(y);
