@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 /** Logical position of the PLAY button on the 180x320 canvas (see TITLE in src/state/menu.ts). */
 const PLAY = { x: 90, y: 185 };

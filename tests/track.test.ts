@@ -3,6 +3,7 @@ import { H, W } from '../src/core/config';
 import { Framebuffer, GREY, SOFT_GREY, WHITE } from '../src/render/framebuffer';
 import { TrackPainter } from '../src/render/track';
 import { Trail } from '../src/sim/trail';
+import { POWDER, PROBE } from './helpers/probe';
 
 /** Record a path the way the sim does: a point every 1.5px of travel. */
 function trailFrom(path: (y: number) => number, from = 10, to = 310): Trail {
@@ -13,8 +14,14 @@ function trailFrom(path: (y: number) => number, from = 10, to = 310): Trail {
 
 function paint(t: Trail, cam = 0): Framebuffer {
   const fb = new Framebuffer(W, H);
-  new TrackPainter().draw(fb, t, cam);
+  new TrackPainter().draw(fb, t, cam, false, PROBE);
   return fb;
+}
+
+/** The line or powder: anything the track lit. */
+function lit(fb: Framebuffer, x: number, y: number): boolean {
+  const c = fb.get(x, y);
+  return c === WHITE || c === POWDER;
 }
 
 /** Pixels of a colour in each row. */
@@ -31,11 +38,29 @@ function rowCounts(fb: Framebuffer, color: number): number[] {
 const scurve = (y: number): number => 90 + Math.sin(y / 32) * 34;
 
 describe('the board track', () => {
-  it('is an unbroken thin line with no shadow or powder on a straight', () => {
+  it('is an unbroken thin line with no shadow on a straight, with powder spilled along both sides', () => {
     const fb = paint(trailFrom(() => 90.2));
     const white = rowCounts(fb, WHITE).slice(10, 311);
     expect(white.filter((n) => n < 1 || n > 2)).toEqual([]);
     expect(rowCounts(fb, GREY).reduce((a, b) => a + b, 0)).toBe(0);
+    let left = 0;
+    let right = 0;
+    for (let y = 10; y < 290; y++) {
+      for (let x = 0; x < W; x++) {
+        if (fb.get(x, y) !== POWDER) continue;
+        if (x < 90) left++;
+        else right++;
+      }
+    }
+    // Well spread: a grain or more every few rows on each side, and never far from the line.
+    expect(left).toBeGreaterThan(40);
+    expect(right).toBeGreaterThan(40);
+    const stray: string[] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++)
+        if (fb.get(x, y) === POWDER && Math.abs(x - 90) > 6) stray.push(`${x},${y}`);
+    }
+    expect(stray).toEqual([]);
   });
 
   it('stays put once settled, so it does not shimmer as the board moves on', () => {
@@ -79,8 +104,18 @@ describe('the board track', () => {
     const white = rowCounts(paint(trailFrom(scurve)), WHITE);
     const belly = Math.round(32 * (Math.PI / 2) * 3);
     const pinch = Math.round(32 * Math.PI * 2);
-    const near = (y: number): number => Math.max(...white.slice(y - 2, y + 3));
-    expect(near(belly)).toBeGreaterThan(near(pinch));
+    // The line's real width: its pixels around a point over the length of path they cover, so a diagonal stretch
+    // is not mistaken for a wide one.
+    const width = (y: number): number => {
+      let px = 0;
+      let len = 0;
+      for (let r = y - 6; r <= y + 6; r++) {
+        px += white[r] ?? 0;
+        len += Math.hypot(scurve(r + 0.5) - scurve(r - 0.5), 1);
+      }
+      return px / len;
+    };
+    expect(width(belly)).toBeGreaterThan(width(pinch) + 0.5);
   });
 
   it('casts a grey shadow only in turns', () => {
@@ -200,7 +235,7 @@ describe('the board track', () => {
       let most = 0;
       for (let y = from; y < to; y++) {
         for (let x = 0; x < W; x++) {
-          if (fb.get(x, y) === WHITE) most = Math.max(most, Math.abs(x - tight(y)));
+          if (lit(fb, x, y)) most = Math.max(most, Math.abs(x - tight(y)));
         }
       }
       return most;
@@ -217,7 +252,7 @@ describe('the board track', () => {
       const now = paint(trailFrom(tight, 10, end));
       for (let y = 20; y < end; y++) {
         for (let x = 1; x < W - 1; x++) {
-          if (now.get(x, y) !== WHITE || before.get(x, y) === WHITE) continue;
+          if (!lit(now, x, y) || lit(before, x, y)) continue;
           // The line itself may grow. Clear of it, a new pixel can only be a grain sliding from right next to it, or out from under the shadow.
           if (Math.abs(x - tight(y)) <= 5) continue;
           let near = false;

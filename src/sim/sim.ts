@@ -1,6 +1,7 @@
 import { clearance, crossedY, NEAR_MISS_PX, riderCenter, testObstacle } from './collision';
 import { EDGE, H, STEP, W, START_Y } from '../core/config';
 import { touchDown, type LandEvent } from './landing';
+import { LineTracker, type LineEvent } from './lines';
 import { poseOf } from './pose';
 import { launch, stepRider } from './rider';
 import { createRider, type RiderState, type Surface } from './riderState';
@@ -41,6 +42,12 @@ export interface SimInput {
    * means 0.
    */
   flip?: -1 | 0 | 1;
+  /**
+   * Grab held: in the air the rider holds the board for as long as this is true, and the longer
+   * he holds it the more it pays. It must be let go before touchdown. On the ground it does
+   * nothing. Absent means false.
+   */
+  grab?: boolean;
 }
 
 export interface SimOptions {
@@ -64,7 +71,10 @@ export type SimEvent =
   | { type: 'spin'; deg: number }
   /** A flip came to rest on a full turn in the air: `deg` is signed (positive is a backflip). */
   | { type: 'flip'; deg: number }
+  /** A grab has been held long enough to count. */
+  | { type: 'grab' }
   | LandEvent
+  | LineEvent
   | { type: 'crash'; cause: CrashCause };
 
 /** Seconds of tumbling before a run is over. */
@@ -117,6 +127,8 @@ export class Sim {
   topSpeedSeen = 0;
   /** Current surface under the rider. */
   readonly surface: Surface = { ice: false, drift: false };
+  /** The jump line being ridden, if any. */
+  private readonly lines = new LineTracker();
   private crashVx = 0;
   private crashVy = 0;
   private prevFlip = 0;
@@ -195,6 +207,7 @@ export class Sim {
       flip,
       brake: input.brake === true,
       manual: this.opts.manualSpin === true,
+      grab: input.grab === true,
     });
     const prevMax = this.maxY;
     this.maxY = Math.max(this.maxY, r.y);
@@ -205,6 +218,7 @@ export class Sim {
 
     if (r.spinDone > 0) this.events.push({ type: 'spin', deg: r.spinDone });
     if (r.flipDone !== 0) this.events.push({ type: 'flip', deg: r.flipDone });
+    if (r.grabDone) this.events.push({ type: 'grab' });
     if (r.landed) this.land(top);
     if (this.crashed) return;
 
@@ -227,7 +241,12 @@ export class Sim {
 
   private checkRamps(prevY: number, curY: number): void {
     const ramp = takeRamp(this.ramps, this.rider, prevY, curY);
-    if (!ramp) return;
+    if (!ramp) {
+      const skipped = this.lines.ride(prevY, curY);
+      if (skipped) this.events.push(skipped);
+      return;
+    }
+    this.lines.launch(ramp);
     this.cliffJump = ramp.kind === 'cliff';
     launch(this.rider, this.cliffJump);
     this.events.push({ type: 'launch', cliff: this.cliffJump });
@@ -237,9 +256,17 @@ export class Sim {
   private land(top: number): void {
     const wasCliff = this.cliffJump;
     this.cliffJump = false;
-    const landed = touchDown(this.rider, this.score, wasCliff, this.mult, top);
-    if (landed) this.events.push(landed);
-    else this.startCrash('bail', null);
+    const mult = this.mult;
+    const landed = touchDown(this.rider, this.score, wasCliff, mult, top);
+    if (!landed) {
+      this.startCrash('bail', null);
+      return;
+    }
+    // A jump line multiplies the trick points of this landing, so the landing shows what it really paid.
+    const line = this.lines.land(landed.quality === 'clean', landed.pts, mult, this.score);
+    landed.pts += line.extra;
+    this.events.push(landed);
+    if (line.event) this.events.push(line.event);
   }
 
   private collide(prevY: number, curY: number): boolean {
@@ -298,6 +325,7 @@ export class Sim {
 
   private startCrash(cause: CrashCause, o: Obstacle | null): void {
     const r = this.rider;
+    this.lines.crash();
     this.crashed = true;
     this.crashT = 0;
     this.crashCause = cause;

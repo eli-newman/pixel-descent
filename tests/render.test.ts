@@ -42,7 +42,10 @@ function ride(game: Game, input: FakeInput): void {
   game.update(DT);
 }
 
-function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
+function capture(
+  kit: 'snowboard' | 'skis' = 'snowboard',
+  color = false,
+): {
   frames: Record<string, string>;
   spun: boolean;
   flipped: boolean;
@@ -54,6 +57,7 @@ function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
     frames[name] = hash(draw(game, scene));
   };
 
+  if (color) game.press('color');
   game.update(DT);
   shot('title');
   for (const screen of ['scores', 'gear', 'goals'] as const) {
@@ -121,35 +125,35 @@ describe('golden frames', () => {
     ).toEqual([]);
     expect(frames).toMatchInlineSnapshot(`
       {
-        "air": "9e98e1a7",
-        "crash-hit": "cff3bfa7",
-        "crash-tumble": "d881381d",
-        "flip": "2c61f3fb",
-        "over": "ec7de2be",
-        "paused": "55d45f2e",
-        "ride-10s": "3cbdc99d",
-        "ride-12s": "ae267d16",
-        "ride-14s": "66653779",
-        "ride-16s": "a08123a7",
-        "ride-18s": "9655ba46",
-        "ride-20s": "d45ad7cd",
-        "ride-22s": "e554d18b",
-        "ride-24s": "f22b611e",
-        "ride-26s": "c9026001",
-        "ride-28s": "62085c76",
-        "ride-2s": "e7295cf0",
-        "ride-30s": "19bd9850",
-        "ride-32s": "e3448cdd",
-        "ride-34s": "03bd6779",
-        "ride-36s": "29df7002",
-        "ride-38s": "153acc8a",
-        "ride-40s": "76f4aa43",
-        "ride-4s": "8dabb2cb",
-        "ride-6s": "85032834",
-        "ride-8s": "9dc3af93",
-        "spin": "7e8fec7f",
+        "air": "b511b57d",
+        "crash-hit": "0ffc3114",
+        "crash-tumble": "c9f66604",
+        "flip": "8c36ef7c",
+        "over": "063242bf",
+        "paused": "1cc09956",
+        "ride-10s": "5f9c6d0f",
+        "ride-12s": "8133e9d5",
+        "ride-14s": "7f211a6e",
+        "ride-16s": "c4f8aaec",
+        "ride-18s": "845a7907",
+        "ride-20s": "27254c56",
+        "ride-22s": "0e3c04bc",
+        "ride-24s": "63d4528f",
+        "ride-26s": "b181dc40",
+        "ride-28s": "6b2f6c73",
+        "ride-2s": "cd16e8f9",
+        "ride-30s": "81095b2c",
+        "ride-32s": "adca2084",
+        "ride-34s": "1b2d2271",
+        "ride-36s": "14a27fa6",
+        "ride-38s": "29408e49",
+        "ride-40s": "d680b6f2",
+        "ride-4s": "49c9b255",
+        "ride-6s": "afdf426c",
+        "ride-8s": "32dcbcf1",
+        "spin": "369f3185",
         "start": "1827df37",
-        "title": "223e00fc",
+        "title": "cdb9c71d",
         "title-gear": "31f4dbb4",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
@@ -167,35 +171,35 @@ describe('golden frames', () => {
     expect(same.sort()).toEqual(['title', 'title-goals', 'title-scores']);
     expect(frames).toMatchInlineSnapshot(`
       {
-        "air": "1682e937",
-        "crash-hit": "8196fdd3",
-        "crash-tumble": "5ebe67c5",
-        "flip": "8a5b5a23",
-        "over": "2590845e",
-        "paused": "04c41697",
-        "ride-10s": "ee969264",
-        "ride-12s": "e2390286",
-        "ride-14s": "220b6a58",
-        "ride-16s": "ed2a08b8",
-        "ride-18s": "f7e0247a",
-        "ride-20s": "53a76e95",
-        "ride-22s": "fd2c2466",
-        "ride-24s": "ed91d8ca",
-        "ride-26s": "3d8ddf5e",
-        "ride-28s": "aa25949e",
-        "ride-2s": "407514a0",
-        "ride-30s": "a7abf7b9",
-        "ride-32s": "fc0e941d",
-        "ride-34s": "62ee1bd9",
-        "ride-36s": "e1ae8c27",
-        "ride-38s": "9b5e189a",
-        "ride-40s": "f8f9fdc4",
-        "ride-4s": "0faf5e91",
-        "ride-6s": "6a31ef9c",
-        "ride-8s": "c4d50ff8",
-        "spin": "e75c5927",
+        "air": "3727768d",
+        "crash-hit": "12e694a4",
+        "crash-tumble": "0e70865d",
+        "flip": "4a7599c4",
+        "over": "5d3619da",
+        "paused": "b610aa40",
+        "ride-10s": "8b2bfed4",
+        "ride-12s": "1be72584",
+        "ride-14s": "e207b3fb",
+        "ride-16s": "2e47edcb",
+        "ride-18s": "27defe0f",
+        "ride-20s": "c4b67179",
+        "ride-22s": "3b2fcb81",
+        "ride-24s": "3ed8cf9e",
+        "ride-26s": "3a715f48",
+        "ride-28s": "1552ef73",
+        "ride-2s": "fb709da8",
+        "ride-30s": "f4a6919b",
+        "ride-32s": "50ecbde1",
+        "ride-34s": "db3ab0b5",
+        "ride-36s": "a139b0eb",
+        "ride-38s": "cf71f051",
+        "ride-40s": "2ddc5976",
+        "ride-4s": "273e5436",
+        "ride-6s": "9177ca5c",
+        "ride-8s": "e67c6351",
+        "spin": "e05b7ef4",
         "start": "e412232e",
-        "title": "223e00fc",
+        "title": "cdb9c71d",
         "title-gear": "da556ec2",
         "title-goals": "e9135c03",
         "title-scores": "4c029d3b",
@@ -205,5 +209,49 @@ describe('golden frames', () => {
 
   it('is repeatable', () => {
     expect(capture().frames).toEqual(capture().frames);
+  });
+
+  it('draws the same run in colour, with every frame different from black and white', () => {
+    const { frames, spun, flipped } = capture('snowboard', true);
+    expect(spun).toBe(true);
+    expect(flipped).toBe(true);
+    const mono = capture().frames;
+    expect(Object.keys(frames).filter((k) => frames[k] === mono[k])).toEqual([]);
+    expect(frames).toMatchInlineSnapshot(`
+      {
+        "air": "39fdeb8d",
+        "crash-hit": "7527df54",
+        "crash-tumble": "ba84b45c",
+        "flip": "70646afe",
+        "over": "96b8ce78",
+        "paused": "df3f5725",
+        "ride-10s": "220ebfec",
+        "ride-12s": "c43126d6",
+        "ride-14s": "2ce98e8d",
+        "ride-16s": "370530a1",
+        "ride-18s": "35c309b5",
+        "ride-20s": "65967238",
+        "ride-22s": "3f6a3192",
+        "ride-24s": "5674664a",
+        "ride-26s": "bbb118b4",
+        "ride-28s": "e93aa9d2",
+        "ride-2s": "fab1481d",
+        "ride-30s": "2d0c71ea",
+        "ride-32s": "9586ff5f",
+        "ride-34s": "a4496dc4",
+        "ride-36s": "f6b0d60d",
+        "ride-38s": "173d72a5",
+        "ride-40s": "a4625ce7",
+        "ride-4s": "39f33438",
+        "ride-6s": "37195c2a",
+        "ride-8s": "ecf24231",
+        "spin": "dbd0ce72",
+        "start": "d1d16f9a",
+        "title": "a5ff0c76",
+        "title-gear": "30bb93e8",
+        "title-goals": "fea8c3d3",
+        "title-scores": "7e5089ef",
+      }
+    `);
   });
 });

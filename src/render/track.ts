@@ -1,7 +1,8 @@
 import { BOARD_LEN, H } from '../core/config';
 import { hash2 } from '../core/rng';
 import type { TrailView } from '../state/view';
-import { GREY, SOFT_GREY, WHITE, type Framebuffer } from './framebuffer';
+import type { Framebuffer } from './framebuffer';
+import { MONO, type Palette } from './palette';
 
 /** Past this gap between recorded points the rider was in the air, so the track breaks instead of joining up. */
 const GAP = 6;
@@ -26,6 +27,15 @@ const SHADOW = 2.5;
 const POWDER_MIN_DEPTH = 0.45;
 const POWDER_DENSITY = 0.12;
 const POWDER_GRAINS = 3;
+/**
+ * Powder spilled along both sides of the track, on straights too: the snow the board pushes aside. Grains per
+ * recorded point, the chance of each, and how far past the edge they land at most.
+ */
+const SPILL_GRAINS = 3;
+const SPILL_DENSITY = 0.3;
+const SPILL_REACH = 3;
+/** Share of the groove's floor broken up by loose powder (`trackGrain`). */
+const GROOVE_GRAIN = 0.2;
 /** Points between the two stretches of already travelled path compared to judge a turn for powder. */
 const POWDER_SPAN = 7;
 /**
@@ -66,10 +76,12 @@ export class TrackPainter {
   private skis = false;
   private start = 0;
   private end = 0;
+  private pal: Palette = MONO;
 
   /** `skis` draws the two thin lines of a pair of skis instead of the board's one. */
-  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false): void {
+  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false, pal: Palette = MONO): void {
     this.skis = skis;
+    this.pal = pal;
     this.reserve(t.count);
     let start = 0;
     for (let i = 1; i <= t.count; i++) {
@@ -97,6 +109,7 @@ export class TrackPainter {
     this.start = a;
     this.end = b;
     for (let i = a; i <= b; i++) this.drawPowder(fb, t, i, cam);
+    for (let i = a; i <= b; i++) this.drawSpill(fb, t, i, cam);
     for (let i = a + 1; i <= b; i++) this.drawShadow(fb, i, cam);
     for (let i = a + 1; i <= b; i++) this.drawLine(fb, i, cam);
   }
@@ -152,12 +165,12 @@ export class TrackPainter {
       // Each ski's line is centred on its own path, a real perpendicular away from the middle, so the pair stays
       // evenly apart where the spans swap between rows and columns. It swells outwards, keeping the gap open.
       const off = SKI_GAP / 2 + (w - SKI_WIDTH) / 2;
-      this.span(fb, i, cam, -w / 2, w / 2, WHITE, -off);
-      this.span(fb, i, cam, -w / 2, w / 2, WHITE, off);
+      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, -off);
+      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, off);
       return;
     }
     const half = this.width(i - 1) / 2;
-    this.span(fb, i, cam, -half, half, WHITE);
+    this.span(fb, i, cam, -half, half, this.pal.track);
   }
 
   private skiWidth(i: number): number {
@@ -183,8 +196,8 @@ export class TrackPainter {
     const off = this.skis
       ? (SKI_GAP / 2 + (w - SKI_WIDTH) / 2) * (positive === along >= 0 ? -1 : 1)
       : 0;
-    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY, off);
-    else this.span(fb, i, cam, -half - reach, -half + 1, GREY, off);
+    if (positive) this.span(fb, i, cam, half - 1, half + reach, this.pal.trackShadow, off);
+    else this.span(fb, i, cam, -half - reach, -half + 1, this.pal.trackShadow, off);
   }
 
   /**
@@ -214,8 +227,41 @@ export class TrackPainter {
       const from = Math.round(c + lo);
       const to = Math.max(from, Math.round(c + hi) - 1);
       for (let d = from; d <= to; d++) {
-        if (steep) fb.put(d, Math.round(y) - cam, color);
-        else fb.put(Math.round(x), d - cam, color);
+        const wx = steep ? d : Math.round(x);
+        const wy = steep ? Math.round(y) : d;
+        fb.put(wx, wy - cam, color === this.pal.track ? this.groove(wx, wy) : color);
+      }
+    }
+  }
+
+  /** The groove's floor at a world pixel: packed snow broken up by loose powder, fixed to the snow so it never shimmers. */
+  private groove(wx: number, wy: number): number {
+    return hash2(wx * 5 + 3, wy * 3 + 7) < GROOVE_GRAIN ? this.pal.trackGrain : this.pal.track;
+  }
+
+  /**
+   * Snow pushed out of the groove to both sides, along the whole track. Like the turn powder, each grain is decided
+   * from the recorded board position alone, slides out from under the line while the track settles and then stays.
+   * Some land as two-pixel clumps along the track, so the edges read as broken powder rather than a clean cut.
+   */
+  private drawSpill(fb: Framebuffer, t: TrailView, i: number, cam: number): void {
+    const ix = Math.round(t.x(i));
+    const iy = Math.round(t.y(i));
+    const flight = Math.min(1, (this.end - i) / SETTLE);
+    const thrown = 1 - (1 - flight) * (1 - flight);
+    const half = this.skis ? SKI_GAP / 2 + SKI_WIDTH : BASE_WIDTH / 2;
+    const tx = this.tx[i] ?? 0;
+    const ty = this.ty[i] ?? 0;
+    for (let grain = 0; grain < SPILL_GRAINS; grain++) {
+      if (hash2(ix * 3 + grain * 53, iy * 7 + 11) >= SPILL_DENSITY) continue;
+      const side = hash2(iy + grain * 19, ix * 5) < 0.5 ? -1 : 1;
+      const lands = half + 0.6 + hash2(ix + grain * 7, iy * 5 + 3) * SPILL_REACH;
+      const x = Math.round((this.x[i] ?? 0) + ty * side * lands * thrown);
+      const y = Math.round((this.y[i] ?? 0) - tx * side * lands * thrown);
+      if (y - cam < -8 || y - cam > H + 8) continue;
+      fb.put(x, y - cam, this.pal.powder);
+      if (hash2(ix + grain, iy + 29) < 0.35) {
+        fb.put(Math.round(x + tx), Math.round(y + ty) - cam, this.pal.powder);
       }
     }
   }
@@ -247,7 +293,7 @@ export class TrackPainter {
       const lands = BASE_WIDTH / 2 + SWELL + 2 + hash2(iy, ix + grain * 17) * 4 * depth;
       const x = Math.round((this.x[i] ?? 0) + dx * lands * thrown);
       const y = Math.round((this.y[i] ?? 0) + dy * lands * thrown);
-      if (y - cam >= -8 && y - cam <= H + 8) fb.put(x, y - cam);
+      if (y - cam >= -8 && y - cam <= H + 8) fb.put(x, y - cam, this.pal.powder);
     }
   }
 
@@ -336,7 +382,7 @@ export class TrackPainter {
       for (let v = 0; v <= across; v++) {
         const g = v / Math.max(1, across);
         const fromRim = (noseSunward ? 1 - g : g) * len;
-        const color = fromRim < reach ? SOFT_GREY : WHITE;
+        const color = fromRim < reach ? this.pal.trackSoft : this.pal.track;
         fb.put(
           Math.round(fromX + (toX - fromX) * g),
           Math.round(fromY + (toY - fromY) * g) - cam,

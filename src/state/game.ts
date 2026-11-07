@@ -1,6 +1,7 @@
 import type { Sfx } from '../platform/audio';
+import type { Tracker } from '../platform/analytics';
 import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
-import { BrakeSpray, Particles } from './effects';
+import { BrakeSpray, CarveCloud, Particles, Puffs } from './effects';
 import type { Input } from '../platform/input';
 import { Controls } from './controls';
 import { Feedback, type Toast } from './feedback';
@@ -11,6 +12,7 @@ import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './ru
 import { Sim } from '../sim/sim';
 import type { ResultCardData } from '../render/share';
 import type { ScoreEntry, Store } from './storage';
+import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
 import type { GameView } from './view';
 
 export interface GameDeps {
@@ -25,6 +27,8 @@ export interface GameDeps {
   now?: () => Date;
   /** Cosmetic randomness only (particles). Never feeds the sim. */
   rand?: () => number;
+  /** Anonymous analytics (see `state/telemetry.ts`). Fire and forget: never throws, never waits. */
+  analytics?: Tracker;
 }
 
 /** Ignore restart presses for this long after the game over panel appears. */
@@ -38,6 +42,7 @@ export class Game implements GameView {
   result: RunResult | null = null;
 
   readonly particles = new Particles(512);
+  readonly puffs = new Puffs();
   private camY = 0;
   private camOff = RIDER_SCREEN_Y;
   /** Seconds the world has been animating (stops while paused). */
@@ -46,7 +51,10 @@ export class Game implements GameView {
   private readonly controls: Controls;
   private readonly feedback: Feedback;
   private readonly spray = new BrakeSpray();
+  private readonly cloud = new CarveCloud();
   private sharing = false;
+  /** Runs started since the page loaded, for the second-run rate. Never stored. */
+  private runsStarted = 0;
 
   constructor(
     private readonly deps: GameDeps,
@@ -133,6 +141,11 @@ export class Game implements GameView {
     return this.animT - this.overAt > RESTART_GUARD;
   }
 
+  /** The rider is in the air (for the touch grab). */
+  get airborne(): boolean {
+    return this.sim.rider.air;
+  }
+
   /** Short headline for the game over screen. */
   get crashWord(): string {
     return this.sim.crashCause === 'bail' ? 'BAILED' : 'WIPEOUT';
@@ -156,8 +169,10 @@ export class Game implements GameView {
     this.seed = seed;
     this.sim = new Sim(seed, { manualSpin: this.settings.manualSpin });
     this.particles.clear();
+    this.puffs.clear();
     this.feedback.reset();
     this.spray.reset();
+    this.cloud.reset();
     this.camOff = RIDER_SCREEN_Y;
     this.camY = this.sim.rider.y - this.camOff;
     this.result = null;
@@ -173,6 +188,13 @@ export class Game implements GameView {
     this.deps.input.releaseAll();
     this.deps.sfx.start();
     this.deps.announce?.('Run started.');
+    this.runsStarted++;
+    this.deps.analytics?.track(runStartEvent(this.runsStarted, this.runSetup()));
+  }
+
+  /** How this run is played, for analytics. */
+  private runSetup(): RunSetup {
+    return { kit: this.progress.gear.kit, color: this.settings.color, daily: this.daily };
   }
 
   update(dt: number): void {
@@ -194,6 +216,7 @@ export class Game implements GameView {
       }
       if (this.phase !== 'paused') {
         this.particles.step(dt);
+        this.puffs.step(dt);
         this.feedback.stepToasts(dt);
       }
     }
@@ -263,7 +286,9 @@ export class Game implements GameView {
     const sim = this.sim;
     sim.step(this.controls.readSimInput());
     for (const e of sim.events) this.feedback.react(e, this.animT);
-    this.spray.step(sim.rider, this.particles, this.deps.rand ?? Math.random);
+    const rand = this.deps.rand ?? Math.random;
+    this.spray.step(sim.rider, this.particles, rand);
+    this.cloud.step(sim.rider, this.puffs, this.particles, rand);
     if (sim.crashed) this.phase = 'crashed';
   }
 
@@ -280,6 +305,7 @@ export class Game implements GameView {
     const day = dayString(this.deps.now?.() ?? new Date());
     const res = recordRun(this.deps.store, summary, day);
     this.result = res;
+    this.deps.analytics?.track(runEndEvent(res.dist, res.score, this.runsStarted, this.runSetup()));
     this.deps.announce?.(
       `${this.crashWord}. ${res.dist} metres, score ${res.score}${res.newBest ? ', a new best' : ''}.`,
     );

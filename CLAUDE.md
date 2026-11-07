@@ -1,6 +1,6 @@
 # Powline
 
-Black and white pixel-art downhill snowboard game (skis optional, a look only), with one yellow UI accent and two greys for the track shadow. TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
+Black and white pixel-art downhill snowboard game (skis optional, a look only), with one yellow UI accent and two greys for the track shadow, plus an optional colour mode (a look only, `render/palette.ts`). TypeScript + Vite, a 180x320 canvas drawn into an RGBA framebuffer, no runtime dependencies. See `README.md` for gameplay and controls.
 
 ## Commands
 
@@ -22,6 +22,8 @@ Before calling any change done: `npm run check`, `npm run build` and `npm run te
 Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, linked locally through `.vercel/`, which is git-ignored). Live at https://powline.vercel.app (`https://pixel-descent.vercel.app` still serves it too). The project and GitHub repo keep the old `pixel-descent` name, which players never see. The code is on GitHub at `eli-newman/pixel-descent`.
 
 The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
+
+Vercel Web Analytics is enabled on the project (turned on with `vercel api "/web/insights/toggle?projectId=..." -X POST -F value=true`; the dashboard's Analytics tab does the same). The team is on Hobby: page views only (50,000 events a month), no custom events. Run Start, Run End and Share show up after an upgrade to Pro (2 properties per event, `ANALYTICS_MAX_PROPS`) or Pro with Web Analytics Plus (8). See `src/platform/CLAUDE.md` and the README privacy note.
 
 ## Dependencies
 

@@ -1,6 +1,7 @@
 import { BOARD_LEN, RIDER_SCALE as SC } from '../core/config';
 import { heelSide, type RiderPose } from '../sim/pose';
 import type { Framebuffer } from './framebuffer';
+import { MONO, type Palette } from './palette';
 
 type Pt = readonly [number, number];
 
@@ -29,10 +30,13 @@ class Mask {
   private n = 0;
   private ox = 0;
   private oy = 0;
+  /** What newly added pixels are: 1 the body, 2 the board or skis. Only colour mode tells them apart. */
+  paint: 1 | 2 = 1;
 
   reset(cx: number, cy: number): void {
     for (let i = 0; i < this.n; i++) this.bits[this.touched[i] ?? 0] = 0;
     this.n = 0;
+    this.paint = 1;
     this.ox = Math.round(cx) - HALF;
     this.oy = Math.round(cy) - HALF;
   }
@@ -45,8 +49,8 @@ class Mask {
 
   add(x: number, y: number): void {
     const i = this.idx(x, y);
-    if (i < 0 || this.bits[i] === 1) return;
-    this.bits[i] = 1;
+    if (i < 0 || this.bits[i] !== 0) return;
+    this.bits[i] = this.paint;
     this.touched[this.n++] = i;
   }
 
@@ -57,7 +61,7 @@ class Mask {
 
   has(x: number, y: number): boolean {
     const i = this.idx(x, y);
-    return i >= 0 && this.bits[i] === 1;
+    return i >= 0 && this.bits[i] !== 0;
   }
 
   line(x0: number, y0: number, x1: number, y1: number, th: number): void {
@@ -81,62 +85,66 @@ class Mask {
     let hi = 0;
     for (let k = 0; k < this.n; k++) {
       const i = this.touched[k] ?? 0;
-      if (this.bits[i] !== 1) continue;
+      const v = this.bits[i] ?? 0;
+      if (v === 0) continue;
       const y = Math.floor(i / GRID);
       scratch[m++] = i % GRID;
       scratch[m++] = y;
+      scratch[m++] = v;
       lo = Math.min(lo, y);
       hi = Math.max(hi, y);
     }
     for (let k = 0; k < this.n; k++) this.bits[this.touched[k] ?? 0] = 0;
     this.n = 0;
     const py = (lo + hi + 1) / 2;
-    for (let j = 0; j < m; j += 2) {
+    for (let j = 0; j < m; j += 3) {
       const x = scratch[j] ?? 0;
       const y = scratch[j + 1] ?? 0;
+      const v = scratch[j + 2] === 2 ? 2 : 1;
       let a = py + (y - py) * f;
       let b = py + (y + 1 - py) * f;
       if (a > b) [a, b] = [b, a];
       const r0 = Math.ceil(a - 0.5);
       const r1 = Math.ceil(b - 0.5) - 1;
-      if (r1 < r0) this.addLocal(x, Math.floor((a + b) / 2));
-      else for (let r = r0; r <= r1; r++) this.addLocal(x, r);
+      if (r1 < r0) this.addLocal(x, Math.floor((a + b) / 2), v);
+      else for (let r = r0; r <= r1; r++) this.addLocal(x, r, v);
     }
   }
 
-  private addLocal(lx: number, ly: number): void {
+  private addLocal(lx: number, ly: number, v: 1 | 2): void {
     if (lx < 0 || ly < 0 || lx >= GRID || ly >= GRID) return;
     const i = ly * GRID + lx;
-    if (this.bits[i] === 1) return;
-    this.bits[i] = 1;
+    if (this.bits[i] !== 0) return;
+    this.bits[i] = v;
     this.touched[this.n++] = i;
   }
 
-  /** Draw the set with a one pixel black halo so it reads on top of trees and snow. */
-  stamp(fb: Framebuffer): void {
+  /** Draw the set with a one pixel halo (black, or a near black in colour) so it reads on top of trees and snow. */
+  stamp(fb: Framebuffer, pal: Readonly<Palette>): void {
     const n = this.n;
     for (let k = 0; k < n; k++) {
       const i = this.touched[k] ?? 0;
-      if (this.bits[i] !== 1) continue;
+      if (this.bits[i] === 0) continue;
       const x = (i % GRID) + this.ox;
       const y = Math.floor(i / GRID) + this.oy;
       for (let a = -1; a <= 1; a++) {
         for (let b = -1; b <= 1; b++) {
-          if (!this.has(x + a, y + b)) fb.erase(x + a, y + b);
+          if (!this.has(x + a, y + b)) fb.put(x + a, y + b, pal.riderHalo);
         }
       }
     }
     for (let k = 0; k < n; k++) {
       const i = this.touched[k] ?? 0;
-      if (this.bits[i] !== 1) continue;
+      const v = this.bits[i] ?? 0;
+      if (v === 0) continue;
       const x = (i % GRID) + this.ox;
       const y = Math.floor(i / GRID) + this.oy;
-      fb.put(x, y);
+      fb.put(x, y, v === 2 ? pal.riderBoard : pal.riderBody);
     }
   }
 }
 
-const scratch = new Int32Array(GRID * GRID * 2);
+const scratch = new Int32Array(GRID * GRID * 3);
 const mask = new Mask();
 const fill = new Mask();
 
@@ -156,6 +164,9 @@ export function flipScale(pitch: number): number {
   return Math.abs(f) < FLIP_MIN ? (f < 0 ? -FLIP_MIN : FLIP_MIN) : f;
 }
 
+/** How deep a grab pulls the knees up (the same scale as the speed tuck). */
+const GRAB_TUCK = 0.75;
+
 /** 0..1 limb tuck during a flip: knees up and arms folded in, deepest edge on. */
 export function flipTuck(pitch: number): number {
   const a = (pitch * Math.PI) / 180;
@@ -168,6 +179,8 @@ export interface DrawOptions {
   time?: number;
   /** 0..1, how far into a stop the rider is. Only the skier shows it (a hockey stop). */
   brake?: number;
+  /** The colours to draw in. Defaults to black and white. */
+  palette?: Readonly<Palette>;
 }
 
 /**
@@ -183,17 +196,19 @@ export function drawRider(
 ): void {
   const style = opts.style ?? DEFAULT_STYLE;
   if (style.skis) {
-    drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0);
+    drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0, opts.palette ?? MONO);
     return;
   }
-  // Mid-flip the rider tucks his limbs in; upright (or a full turn) changes nothing.
-  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  // Mid-flip the rider tucks his limbs in, and a grab pulls the knees up; upright (or a full turn) changes nothing.
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
+  mask.paint = 2;
   maskBoard(mask, pose, style.board);
+  mask.paint = 1;
   maskBody(mask, pose, tuck, style.rider, opts.time ?? 0);
   if (flipping) mask.squashY(flipScale(pose.pitch));
-  mask.stamp(fb);
+  mask.stamp(fb, opts.palette ?? MONO);
 }
 
 /** The board: tail on the track head, solid capsule, outlined when it points steeply downhill. */
@@ -253,6 +268,10 @@ interface Skeleton {
   heel: boolean;
   /** Straight downhill the rider is seen almost head on. */
   rear: boolean;
+  /** Holding the board: one hand down on it between the feet, the other thrown up for balance. */
+  grab: boolean;
+  /** Just above the tail of the board, where a grabbing hand goes. */
+  tail: Pt;
   hip: Pt;
   sh: Pt;
   head: Pt;
@@ -292,7 +311,22 @@ function solveSkeleton(pose: Readonly<RiderPose>, tuck: number): Skeleton {
   const ff: Pt = [FF[0], FF[1] - 1];
   const fb: Pt = [FB[0], FB[1] - 1];
   const rear = steep && pose.ang > 74;
-  return { n, mv, heel, rear, hip, sh, head, ff, fb, kf: knee(ff), kb: knee(fb) };
+  const tail: Pt = [rx + n[0] * 1.5, ry + n[1] * 1.5 - 1];
+  return {
+    n,
+    mv,
+    heel,
+    rear,
+    grab: pose.grab,
+    tail,
+    hip,
+    sh,
+    head,
+    ff,
+    fb,
+    kf: knee(ff),
+    kb: knee(fb),
+  };
 }
 
 function maskLegsAndTorso(set: Mask, { hip, sh, ff, fb, kf, kb }: Readonly<Skeleton>): void {
@@ -305,6 +339,10 @@ function maskLegsAndTorso(set: Mask, { hip, sh, ff, fb, kf, kb }: Readonly<Skele
 
 function maskArms(set: Mask, b: Readonly<Skeleton>, tuck: number): void {
   const { n, heel, hip, sh, kf, kb } = b;
+  if (b.grab) {
+    maskGrabArms(set, b, b.tail);
+    return;
+  }
   if (b.rear) {
     // Seen head on: broad shoulders, arms hanging to the sides.
     set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
@@ -325,6 +363,26 @@ function maskArms(set: Mask, b: Readonly<Skeleton>, tuck: number): void {
     ); // front arm reaches along the board
     set.line(sh[0], sh[1] + 1, sh[0] - n[0] * 4 * SC, sh[1] + 4 * SC, 1); // back arm
   }
+}
+
+/**
+ * A grab: the back hand reaches down past the back foot to the tail of the board, clear of the bent
+ * knees (they point at the nose), and the front arm is thrown up and back over the head, the clearest
+ * thing on the silhouette at this size. Seen head on, one arm goes straight down the side of the body
+ * to the board and the other is thrown up and out.
+ */
+function maskGrabArms(set: Mask, b: Readonly<Skeleton>, tail: Pt): void {
+  const { sh, ff, fb } = b;
+  if (b.rear) {
+    const s = b.mv;
+    const foot = Math.max(ff[1], fb[1]);
+    set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
+    set.line(sh[0] + s * 4, sh[1] + 1, sh[0] + s * 4, foot - 1, 1);
+    set.line(sh[0] - s * 4, sh[1], sh[0] - s * 7, sh[1] - 6, 1);
+    return;
+  }
+  set.line(sh[0], sh[1] + 1, tail[0], tail[1], 1);
+  set.line(sh[0] - b.mv, sh[1], sh[0] - b.mv * 4 * SC, sh[1] - 8 * SC, 1);
 }
 
 function maskHelmet(set: Mask, { head, rear }: Readonly<Skeleton>): void {
@@ -408,6 +466,7 @@ export function drawWipeout(
   t: number,
   face: 1 | -1,
   skis = false,
+  pal: Readonly<Palette> = MONO,
 ): void {
   const AIR = 0.75;
   const p = Math.min(1, t / AIR);
@@ -430,6 +489,7 @@ export function drawWipeout(
     const B = tx(b[0], b[1]);
     set.line(A[0], A[1], B[0], B[1], th);
   };
+  set.paint = 2;
   if (skis) {
     // Two skis crossed under the boots, and the poles still in the hands.
     seg([-9, 1], [9, -1], 1);
@@ -437,6 +497,7 @@ export function drawWipeout(
   } else {
     seg([-9, 0], [9, 0], 2); // board
   }
+  set.paint = 1;
   seg([-3, -1], [0, -4], 1);
   seg([3, -1], [0, -4], 1); // legs
   seg([0, -4], [0, -11], 3); // torso
@@ -452,7 +513,7 @@ export function drawWipeout(
       set.add(q[0], q[1]);
     }
   }
-  set.stamp(fb);
+  set.stamp(fb, pal);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -505,12 +566,16 @@ function drawSkier(
   style: Readonly<RiderStyle>,
   time: number,
   brake: number,
+  pal: Readonly<Palette>,
 ): void {
-  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
-  const b = solveSkier(pose, tuck, brake);
+  const solved = solveSkier(pose, tuck, brake);
+  const b = pose.grab ? skierGrab(solved) : solved;
+  mask.paint = 2;
   maskSkis(mask, pose, b, style.board);
+  mask.paint = 1;
   maskSkierBody(mask, b);
   // The helmet and face cut take the snowboarder's skeleton: from behind it is the back of the head.
   const head: Skeleton = {
@@ -518,6 +583,8 @@ function drawSkier(
     mv: b.mv,
     heel: b.view === 'back',
     rear: b.view !== 'side',
+    grab: false,
+    tail: b.hip,
     hip: b.hip,
     sh: b.sh,
     head: b.head,
@@ -530,7 +597,7 @@ function drawSkier(
   headgear(mask, style.rider, b.head, b.mv, time);
   cutFace(mask, head);
   if (flipping) mask.squashY(flipScale(pose.pitch));
-  mask.stamp(fb);
+  mask.stamp(fb, pal);
 }
 
 function solveSkier(pose: Readonly<RiderPose>, tuck: number, brake: number): SkierSkeleton {
@@ -667,6 +734,48 @@ function solveSkierSide(
   };
 }
 
+/**
+ * A ski grab: the near hand reaches down to the near ski just behind the boot, its pole trailing
+ * back along the ski, and the other arm is thrown up with its pole. Square on, the hand reaches down
+ * the outside of the near leg and the free pole points up on the other side.
+ */
+function skierGrab(b: Readonly<SkierSkeleton>): SkierSkeleton {
+  const { n, sh, mv, feet } = b;
+  const f = feet[0];
+  if (!b.square) {
+    const hand: Pt = [f[0] - n[0] * 3, f[1] - n[1] * 3 + 1];
+    const free: Pt = [sh[0] + mv * 3 * SC, sh[1] - 4 * SC];
+    return {
+      ...b,
+      hands: [hand, free],
+      elbows: [
+        [(sh[0] + hand[0]) / 2 - mv, (sh[1] + hand[1]) / 2],
+        [sh[0] + mv * 2 * SC, sh[1] - 1],
+      ],
+      tips: [
+        [hand[0] - n[0] * 7, hand[1] - n[1] * 7 - 2],
+        [free[0] - mv * 4, free[1] - 5],
+      ],
+      farArm: true,
+    };
+  }
+  const s = Math.sign(f[0] - b.hip[0]) || 1;
+  const hand: Pt = [f[0] + s * 1.5, f[1] - 1];
+  const free: Pt = [sh[0] - s * 6, sh[1] - 4];
+  return {
+    ...b,
+    elbows: [
+      [sh[0] + s * 4, sh[1] + 3],
+      [sh[0] - s * 4, sh[1] - 1],
+    ],
+    hands: [hand, free],
+    tips: [
+      [hand[0] + s * 4, hand[1] - 1],
+      [free[0] - s * 2, free[1] - 6],
+    ],
+  };
+}
+
 /** Two thin skis side by side, tips turned up. The board looks carry over to them. */
 function maskSkis(
   set: Mask,
@@ -734,10 +843,13 @@ function maskSkierBody(set: Mask, b: Readonly<SkierSkeleton>): void {
     const from: Pt = b.square ? [sh[0] + Math.sign(h[0] - sh[0]) * 3, sh[1]] : [sh[0], sh[1] + 1];
     set.line(from[0], from[1], e[0], e[1], 1);
     set.line(e[0], e[1], h[0], h[1], 1); // arm
+    // Poles are the colour of the skis in colour mode, so they read apart from the arms.
+    set.paint = 2;
     set.line(h[0], h[1], t[0], t[1], 1); // pole
     // The basket, a nub just above the tip on the outside, is what tells a pole from an arm.
     const out = t[0] >= h[0] ? 1 : -1;
     const up = t[1] >= h[1] ? -2 : 2;
     set.add(t[0] + out, t[1] + up);
+    set.paint = 1;
   }
 }

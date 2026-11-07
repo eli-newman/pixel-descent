@@ -4,6 +4,7 @@ import { H, W } from '../src/core/config';
 import { Framebuffer, GREY, OFF, SOFT_GREY, WHITE, YELLOW } from '../src/render/framebuffer';
 import { SceneRenderer } from '../src/render/scene';
 import { renderUi } from '../src/render/ui';
+import { C, COLOR } from '../src/render/palette';
 import { makeGame } from './helpers/fakes';
 
 /** The [r, g, b] bytes a packed framebuffer colour puts on screen. */
@@ -71,5 +72,44 @@ describe('high contrast', () => {
     for (let i = 0; i < 120 * 300 && game.phase !== 'over'; i++) game.update(1 / 120);
     expect(game.phase).toBe('over');
     check([OFF, WHITE, YELLOW, GREY, SOFT_GREY]);
+  });
+
+  it('draws colour screens with nothing outside the colour palette, and never the black and white greys', () => {
+    const { game, input } = makeGame('palette');
+    game.press('color');
+    const scene = new SceneRenderer(new Framebuffer(W, H));
+    const allowed = new Set([OFF, WHITE, YELLOW, ...Object.values(C)].map((c) => rgb(c).join()));
+    const stray = new Set<string>();
+    const look = (): void => {
+      const out = scene.render(game);
+      renderUi(out, game);
+      for (let i = 0; i < out.data.length; i += 4) {
+        const c = `${out.data[i]},${out.data[i + 1]},${out.data[i + 2]}`;
+        if (!allowed.has(c)) stray.add(c);
+      }
+    };
+    game.update(1 / 120);
+    look();
+    input.push('start');
+    for (let i = 0; i < 120 * 300 && game.phase !== 'over'; i++) {
+      game.update(1 / 120);
+      if (i % 240 === 0) look();
+    }
+    look();
+    expect([...stray]).toEqual([]);
+    expect(allowed.has(rgb(GREY).join())).toBe(false);
+    expect(allowed.has(rgb(SOFT_GREY).join())).toBe(false);
+  });
+
+  it('keeps the colour slope readable: a soft track you can still see, and every hazard and jump marker stands out', () => {
+    const snow = rgb(COLOR.snow);
+    // The track is snow pressed down, so it stays close to the snow, but its shadow wall always shows.
+    expect(ratio(rgb(COLOR.track), snow)).toBeGreaterThanOrEqual(1.15);
+    expect(ratio(rgb(COLOR.track), snow)).toBeLessThan(1.6);
+    expect(ratio(rgb(COLOR.trackShadow), snow)).toBeGreaterThanOrEqual(1.6);
+    expect(ratio(rgb(COLOR.riderHalo), snow)).toBeGreaterThanOrEqual(7);
+    for (const c of [C.pine, C.rockGrey, C.rockBrown, C.bark, C.rockMid, C.pole, C.chevron]) {
+      expect(ratio(rgb(c), snow)).toBeGreaterThanOrEqual(3);
+    }
   });
 });

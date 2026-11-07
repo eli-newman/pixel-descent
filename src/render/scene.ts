@@ -1,37 +1,45 @@
 import { H, W } from '../core/config';
-import type { DeepReadonly, GameView, SimView } from '../state/view';
+import type { DeepReadonly, GameView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
 import type { Obstacle, Patch, Ramp } from '../sim/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
-import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
+import { OFF, type Framebuffer } from './framebuffer';
+import {
+  drawColorCliff,
+  drawColorKicker,
+  linePips,
+  RAMP_HEIGHT,
+  RAMP_ROWS,
+  rampHalfAt,
+} from './terrain';
+import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
-import { getSprite } from './sprites';
+import { getColorSprite, getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
-import { hudRect, type Rect } from './layout';
+import { hudRect, riderZ, type Rect } from './layout';
 import { TrackPainter } from './track';
-
-/** How tall a kicker is for its cast shadow, in pixels at the lip. */
-const RAMP_HEIGHT = 8;
-/** Rows of a kicker's face, from its back edge down to the lip. */
-const RAMP_ROWS = 17;
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
-  private readonly backdrop = buildBackdrop();
+  private readonly backdrop = { mono: buildBackdrop(false), color: buildBackdrop(true) };
   private readonly track = new TrackPainter();
+  /** The palette of the frame being drawn, set at the start of every render. */
+  private pal: Palette = MONO;
 
   constructor(private readonly fb: Framebuffer) {}
 
   render(g: GameView): Framebuffer {
     const fb = this.fb;
     const sim = g.sim;
-    fb.clear(OFF);
+    const pal = paletteFor(g.settings.color);
+    this.pal = pal;
+    fb.clear(pal.snow);
     const tuck = g.phase === 'playing' || g.phase === 'paused' ? sim.tuck : 0;
     const cam = g.camYi;
     const toY = (y: number): number => y - cam;
 
-    this.drawSky(cam);
+    if (!pal.color) this.drawSky(cam);
     this.drawBackdrop(cam);
     this.drawFlecks(cam, hudRect(g.settings.bigHud));
     for (const p of sim.patches) this.drawPatch(p, cam);
@@ -39,7 +47,7 @@ export class SceneRenderer {
       if (r.kind === 'cliff') this.drawCliff(r, cam);
       else this.drawRamp(r, cam);
     }
-    this.track.draw(fb, sim.trail, cam, g.progress.gear.kit === 'skis');
+    this.track.draw(fb, sim.trail, cam, g.progress.gear.kit === 'skis', pal);
     this.drawLanded(g, cam);
     this.drawPickups(g, cam);
 
@@ -52,7 +60,7 @@ export class SceneRenderer {
         const dx = sp.shadow[i] ?? 0;
         const dy = sp.shadow[i + 1] ?? 0;
         // dither by world coordinates so the pattern does not shimmer while scrolling
-        if ((o.x + dx + o.y + dy) % 2 === 0) fb.put(o.x + dx, sy + dy);
+        if ((o.x + dx + o.y + dy) % 2 === 0) fb.put(o.x + dx, sy + dy, pal.shadow);
       }
     }
 
@@ -65,6 +73,7 @@ export class SceneRenderer {
       if (!o || o.y > feetY) break;
       this.drawObstacle(g, o, cam);
     }
+    this.drawPuffs(g, cam);
     this.drawRiderAndEffects(g, cam, tuck);
     for (; i < obs.length; i++) {
       const o = obs[i];
@@ -78,20 +87,31 @@ export class SceneRenderer {
   private drawObstacle(g: GameView, o: DeepReadonly<Obstacle>, cam: number): void {
     const sy = o.y - cam;
     if (sy < -4 || sy > H + 60) return;
+    const pal = this.pal;
     const sp = getSprite(o.kind, o.size, o.variant);
     const sim = g.sim;
     // The obstacle that ended the run flashes yellow so the player sees what hit them.
-    let color = WHITE;
-    if (sim.killer === o && sim.crashed && Math.floor(sim.crashT * 7) % 2 === 0) color = YELLOW;
-    if (color === YELLOW) {
+    const hit = sim.killer === o && sim.crashed && Math.floor(sim.crashT * 7) % 2 === 0;
+    if (hit) {
       for (let k = 0; k < sp.pts.length; k += 2) {
         const px = o.x + (sp.pts[k] ?? 0);
         const py = sy + (sp.pts[k + 1] ?? 0);
-        for (const [dx, dy] of OUTLINE) this.fb.erase(px + dx, py + dy);
+        for (const [dx, dy] of OUTLINE) this.fb.put(px + dx, py + dy, pal.snow);
       }
+      for (let k = 0; k < sp.pts.length; k += 2) {
+        this.fb.put(o.x + (sp.pts[k] ?? 0), sy + (sp.pts[k + 1] ?? 0), pal.hit);
+      }
+      return;
+    }
+    if (pal.color) {
+      const cs = getColorSprite(o.kind, o.size, o.variant);
+      for (let k = 0; k < cs.colors.length; k++) {
+        this.fb.put(o.x + (cs.pts[k * 2] ?? 0), sy + (cs.pts[k * 2 + 1] ?? 0), cs.colors[k]);
+      }
+      return;
     }
     for (let k = 0; k < sp.pts.length; k += 2) {
-      this.fb.put(o.x + (sp.pts[k] ?? 0), sy + (sp.pts[k + 1] ?? 0), color);
+      this.fb.put(o.x + (sp.pts[k] ?? 0), sy + (sp.pts[k + 1] ?? 0));
     }
   }
 
@@ -106,8 +126,10 @@ export class SceneRenderer {
 
   private drawBackdrop(cam: number): void {
     if (cam > BACKDROP_H) return;
-    const b = this.backdrop;
-    for (let i = 0; i < b.length; i += 2) this.fb.put(b[i] ?? 0, (b[i + 1] ?? 0) - cam);
+    const b = this.pal.color ? this.backdrop.color : this.backdrop.mono;
+    for (let k = 0; k < b.colors.length; k++) {
+      this.fb.put(b.pts[k * 2] ?? 0, (b.pts[k * 2 + 1] ?? 0) - cam, b.colors[k]);
+    }
   }
 
   /** Little dashes of snow texture, scattered by a stateless hash so they need no storage. */
@@ -122,7 +144,7 @@ export class SceneRenderer {
         const len = 2 + Math.floor(hash2(row, k + 9) * 3);
         // keep the area behind the score free of snow texture, so the numbers stay readable
         if (y - cam < hud.h + 2 && x + len > 0 && x < hud.w + 4) continue;
-        for (let j = 0; j < len; j++) this.fb.put(x + j, y - cam);
+        for (let j = 0; j < len; j++) this.fb.put(x + j, y - cam, this.pal.fleck);
       }
     }
   }
@@ -132,6 +154,7 @@ export class SceneRenderer {
     const cy = p.y - cam;
     if (cy + p.ry < -2 || cy - p.ry > H + 2) return;
     const fb = this.fb;
+    const pal = this.pal;
     const ice = p.kind === 'ice';
     for (let dy = -p.ry; dy <= p.ry; dy++) {
       const k = Math.sqrt(Math.max(0, 1 - (dy / p.ry) * (dy / p.ry)));
@@ -143,8 +166,10 @@ export class SceneRenderer {
         const y = cy + dy;
         if (ice) {
           // dashed outline plus diagonal glints
-          if (edge && (x + wy) % 3 !== 0) fb.put(x, y);
-          else if (!edge && (x - wy + 4096) % 11 === p.variant && (x + wy) % 2 === 0) fb.put(x, y);
+          if (edge && (x + wy) % 3 !== 0) fb.put(x, y, pal.iceRim);
+          else if (!edge && (x - wy + 4096) % 11 === p.variant && (x + wy) % 2 === 0) {
+            fb.put(x, y, pal.iceGlint);
+          } else if (!edge && pal.iceFill !== null) fb.put(x, y, pal.iceFill);
         } else {
           // deep snow: staggered rows of little humps, open in between, so it reads as soft lumpy
           // snow and never as a solid mound you could hit (or as the flat, glinting ice)
@@ -153,7 +178,7 @@ export class SceneRenderer {
           const lx = (dx + p.rx + row * 3 + p.variant) % 6;
           const inner = Math.abs(dx) < hw - 1 && dy < p.ry;
           const hump = (ly === 1 && lx >= 1 && lx <= 3) || (ly === 2 && (lx === 0 || lx === 4));
-          if (inner && hump) fb.put(x, y);
+          if (inner && hump) fb.put(x, y, pal.drift);
         }
       }
     }
@@ -169,6 +194,10 @@ export class SceneRenderer {
   private drawCliff(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = Math.round(r.y - cam);
     if (ly < -40 || ly > H + 12) return;
+    if (this.pal.color) {
+      drawColorCliff(this.fb, r, ly);
+      return;
+    }
     const fb = this.fb;
     const sd = r.seed * 7;
     const BLOCK = 10;
@@ -233,9 +262,13 @@ export class SceneRenderer {
   private drawRamp(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = r.y - cam;
     if (ly < -RAMP_ROWS - 2 || ly > H + RAMP_HEIGHT + 2) return;
+    if (this.pal.color) {
+      drawColorKicker(this.fb, r, cam);
+      return;
+    }
     const fb = this.fb;
     const rows = RAMP_ROWS;
-    const halfAt = (i: number): number => Math.round(r.half * (0.55 + (0.45 * i) / (rows - 1)));
+    const halfAt = (i: number): number => rampHalfAt(r.half, i);
     // Cast shadow, the same rule as the tree sprites (castShadow): the jump rises toward the lip, a point at
     // height h lands 0.85h + 1 to the right and 0.28h + 1 down. Drawn first so the jump sits on top of it.
     for (let i = 0; i < rows; i++) {
@@ -270,6 +303,11 @@ export class SceneRenderer {
     // the lip: two pixels thick and a pixel wider than the face, then a black gap where the snow drops away
     fb.fillRect(r.x - r.half - 1, ly, r.half * 2 + 3, 2);
     fb.fillRect(r.x - r.half - 1, ly + 2, r.half * 2 + 3, 1, OFF);
+    // a jump line's pips: filled up to this kicker, hollow after it
+    for (const p of linePips(r, cam)) {
+      if (p.filled) fb.fillRect(p.x, p.y, p.size, p.size);
+      else fb.strokeRect(p.x, p.y, p.size, p.size);
+    }
   }
 
   /** Lane stars are solid five-point stars, the one thing on the slope shaped like a reward. */
@@ -277,7 +315,7 @@ export class SceneRenderer {
     for (const p of g.sim.pickups) {
       const y = p.y - cam;
       if (y < -5 || y > H + 5) continue;
-      for (const [dx, dy] of STAR) this.fb.put(p.x + dx, y + dy);
+      for (const [dx, dy] of STAR) this.fb.put(p.x + dx, y + dy, this.pal.star);
     }
   }
 
@@ -302,15 +340,28 @@ export class SceneRenderer {
     const sx = Math.round(r.x);
     const sy = Math.round(r.y - cam);
     if (sim.crashed) {
-      drawWipeout(this.fb, sx, sy + 10, sim.crashT, sim.crashFace, g.progress.gear.kit === 'skis');
+      drawWipeout(
+        this.fb,
+        sx,
+        sy + 10,
+        sim.crashT,
+        sim.crashFace,
+        g.progress.gear.kit === 'skis',
+        this.pal,
+      );
       return;
     }
-    const z = Math.round(zOf(sim));
+    const z = Math.round(riderZ(sim));
     if (r.air) this.drawShadow(sx, sy + 8, z);
     const straight = Math.max(0, 1 - Math.abs(r.hx) / 0.4);
     const poseTuck = Math.min(1, tuck * 1.7) * straight * (r.air ? 0.4 : 1);
     const pose = poseOf(r, sx, sy - z, poseTuck);
-    drawRider(this.fb, pose, { style: this.style(g), time: g.animT, brake: r.brake });
+    drawRider(this.fb, pose, {
+      style: this.style(g),
+      time: g.animT,
+      brake: r.brake,
+      palette: this.pal,
+    });
   }
 
   /** A shadow on the snow under a jumping rider: it shrinks and fades as the rider climbs. */
@@ -319,24 +370,61 @@ export class SceneRenderer {
     for (let dx = -w; dx <= w; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
         const inside = (dx * dx) / (w * w) + (dy * dy) / 2.2 <= 1;
-        if (inside && (dx + dy + 2) % 2 === 0) this.fb.put(sx + dx, sy + dy + 2);
+        if (inside && (dx + dy + 2) % 2 === 0) this.fb.put(sx + dx, sy + dy + 2, this.pal.shadow);
       }
     }
   }
 
   private drawParticles(g: GameView, cam: number): void {
     const p = g.particles;
-    for (let i = 0; i < p.count; i++) this.fb.put(p.x[i] ?? 0, (p.y[i] ?? 0) - cam, WHITE);
+    for (let i = 0; i < p.count; i++) this.fb.put(p.x[i] ?? 0, (p.y[i] ?? 0) - cam, this.pal.spray);
+  }
+
+  /**
+   * Powder clouds behind the rider. Each disc is dithered against the world grid (a 4x4 ordered pattern), so
+   * a thinning cloud loses pixels in a fixed order instead of flickering. The shadow side (lower right) and the
+   * densest middle of a fresh puff are drawn in the deeper spray tone, which gives the cloud its volume.
+   */
+  private drawPuffs(g: GameView, cam: number): void {
+    const p = g.puffs;
+    for (let i = 0; i < p.count; i++) {
+      const cx = p.x[i] ?? 0;
+      const cy = p.y[i] ?? 0;
+      const r = p.r[i] ?? 0;
+      const fill = p.fill[i] ?? 0;
+      const x0 = Math.floor(cx - r);
+      const x1 = Math.ceil(cx + r);
+      const y0 = Math.floor(cy - r);
+      const y1 = Math.ceil(cy + r);
+      for (let wy = y0; wy <= y1; wy++) {
+        for (let wx = x0; wx <= x1; wx++) {
+          const dx = wx - cx;
+          const dy = wy - cy;
+          const d = Math.sqrt(dx * dx + dy * dy) / Math.max(1, r);
+          if (d > 1) continue;
+          // fuller in the middle, soft at the rim
+          const local = fill * (1.15 - d * 0.75);
+          const level = BAYER[(wy & 3) * 4 + (wx & 3)] ?? 0;
+          if (local * 16 <= level) continue;
+          // Lit from the left like everything else: the lower right of each puff is its shadow side.
+          const shade = dx + dy > r * 0.25 || local > 0.8;
+          this.fb.put(wx, wy - cam, shade ? this.pal.spray : this.pal.powder);
+        }
+      }
+    }
   }
 
   /** Spray that has come down. Drawn under everything standing on the snow. */
   private drawLanded(g: GameView, cam: number): void {
     const p = g.particles;
     for (let i = 0; i < p.landedCount; i++) {
-      this.fb.put(p.landedX[i] ?? 0, (p.landedY[i] ?? 0) - cam, WHITE);
+      this.fb.put(p.landedX[i] ?? 0, (p.landedY[i] ?? 0) - cam, this.pal.spray);
     }
   }
 }
+
+/** A 4x4 ordered dither: the order pixels drop out of a thinning cloud. */
+const BAYER: readonly number[] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
 const OUTLINE: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
@@ -361,9 +449,3 @@ const STAR: ReadonlyArray<readonly [number, number]> = [
 ].flatMap((row, y) => [...row].flatMap((c, x) => (c === '#' ? [[x - 3, y - 3] as const] : [])));
 
 /** Height above the snow (px) of a sim's rider. */
-function zOf(sim: SimView): number {
-  const r = sim.rider;
-  if (!r.air || r.airDur <= 0) return 0;
-  const u = Math.min(1, r.airT / r.airDur);
-  return 4 * r.airH * u * (1 - u);
-}

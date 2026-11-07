@@ -8,8 +8,13 @@ import { Framebuffer } from './render/framebuffer';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
 import { shareResult } from './platform/shareDom';
+import { analyticsConfig, DEBUG_SCRIPT, noTracker, startWebAnalytics } from './platform/analytics';
+import { shareEvent } from './state/telemetry';
 import { Store } from './state/storage';
 import { fitCanvas } from './platform/viewport';
+
+/** Analytics settings baked in by `vite.config.ts`: null unless built on Vercel or with `VITE_ANALYTICS=1`. */
+declare const __ANALYTICS__: { debug: boolean; vercelConfig: string } | null;
 
 function required<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -32,9 +37,10 @@ const store = new Store();
 const sfx = new Sfx();
 const input = new Input(canvas);
 const params = new URLSearchParams(window.location.search);
+const fromShare = params.has('seed');
 
 // A shared link opens its course once. Clearing it keeps seeds out of sight, and a reload starts fresh.
-if (params.has('seed')) {
+if (fromShare) {
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete('seed');
@@ -43,6 +49,19 @@ if (params.has('seed')) {
     // History can be unavailable (sandboxed frames). The link still opens its course.
   }
 }
+
+// Anonymous page views and run events (README, Privacy). Started after the seed has left the address bar.
+const analyticsBuild = __ANALYTICS__;
+const analytics = analyticsBuild
+  ? startWebAnalytics(
+      window,
+      document,
+      analyticsBuild.debug
+        ? { scriptSrc: DEBUG_SCRIPT }
+        : analyticsConfig(analyticsBuild.vercelConfig),
+      fromShare,
+    )
+  : noTracker;
 
 /** Map a pointer position to the 180x320 logical canvas. */
 input.logical = (clientX, clientY) => {
@@ -64,7 +83,12 @@ const game = new Game(
     announce: (text) => {
       status.textContent = text;
     },
-    share: (card) => shareResult(card, window.location.href),
+    share: async (card) => {
+      const outcome = await shareResult(card, window.location.href);
+      analytics.track(shareEvent(outcome.via));
+      return outcome.message;
+    },
+    analytics,
   },
   normalizeSeed(params.get('seed')),
 );

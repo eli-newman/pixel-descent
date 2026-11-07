@@ -1,12 +1,15 @@
 import { Game, type GameDeps } from '../../src/state/game';
 import type { Action, Input, InputItem } from '../../src/platform/input';
 import type { Sfx } from '../../src/platform/audio';
+import type { AnalyticsEvent, Tracker } from '../../src/platform/analytics';
 import { Store, type StorageLike } from '../../src/state/storage';
 
 export class FakeInput {
   steerValue = 0;
   brakeValue = false;
   flipValue: -1 | 0 | 1 = 0;
+  grabValue = false;
+  air = false;
   usingTouch = false;
   private queue: InputItem[] = [];
   steer(): number {
@@ -17,6 +20,12 @@ export class FakeInput {
   }
   flip(): -1 | 0 | 1 {
     return this.flipValue;
+  }
+  grab(): boolean {
+    return this.grabValue;
+  }
+  setAir(on: boolean): void {
+    this.air = on;
   }
   drain(): InputItem[] {
     const q = this.queue;
@@ -32,6 +41,7 @@ export class FakeInput {
   releaseAll(): void {
     this.steerValue = 0;
     this.brakeValue = false;
+    this.grabValue = false;
   }
 }
 
@@ -73,6 +83,17 @@ export class FakeSfx {
   }
 }
 
+/** Records analytics events instead of sending them. */
+export class FakeTracker implements Tracker {
+  events: AnalyticsEvent[] = [];
+  track(event: AnalyticsEvent): void {
+    this.events.push(event);
+  }
+  names(): string[] {
+    return this.events.map((e) => e.name);
+  }
+}
+
 export function memoryStorage(): StorageLike & { data: Map<string, string> } {
   const data = new Map<string, string>();
   return {
@@ -89,6 +110,7 @@ export interface Rig {
   store: Store;
   storage: ReturnType<typeof memoryStorage>;
   shared: unknown[];
+  analytics: FakeTracker;
 }
 
 export function makeGame(
@@ -100,6 +122,7 @@ export function makeGame(
   const sfx = new FakeSfx();
   const store = new Store(storage);
   const shared: unknown[] = [];
+  const analytics = new FakeTracker();
   const game = new Game(
     {
       store,
@@ -111,11 +134,12 @@ export function makeGame(
         shared.push(card);
         return Promise.resolve('SHARED');
       },
+      analytics,
       ...over,
     },
     seed,
   );
-  return { game, input, sfx, store, storage, shared };
+  return { game, input, sfx, store, storage, shared, analytics };
 }
 
 /** Step the game until a condition holds (or a step limit). */

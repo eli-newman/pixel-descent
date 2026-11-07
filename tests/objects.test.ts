@@ -4,6 +4,7 @@ import { PEBBLE_SIZE, isPebble, testObstacle } from '../src/sim/collision';
 import type { Obstacle, ObstacleKind } from '../src/sim/types';
 import { Framebuffer, OFF } from '../src/render/framebuffer';
 import { HINT_TEXT, drawHints } from '../src/render/hints';
+import { gaugeRect } from '../src/render/layout';
 import { getSprite, type Sprite } from '../src/render/sprites';
 import { makeGame, stepUntil } from './helpers/fakes';
 
@@ -129,5 +130,29 @@ describe('readable objects', () => {
     expect(lit()).toBeGreaterThan(0);
     store.progress().stats.hintRuns = HINT_RUNS;
     expect(lit()).toBe(0);
+  });
+
+  it('never puts a label half under the speed panel at the bottom left', () => {
+    const offenders: string[] = [];
+    for (const seed of ['hints', 'hints-2', 'hints-3', 'hints-4']) {
+      const { game, input } = makeGame(seed);
+      input.push('start');
+      game.update(1 / 120);
+      const panel = gaugeRect(false);
+      for (let step = 0; step < 6000 && game.phase === 'playing'; step++) {
+        game.update(1 / 120);
+        if (step % 20 !== 0) continue;
+        const fb = new Framebuffer(W, H);
+        fb.clear(OFF);
+        drawHints(fb, game);
+        // any label pixel, halo included, in a band just above the panel up to its bottom
+        for (let y = panel.y - 1; y < panel.y + panel.h; y++) {
+          for (let x = panel.x; x < panel.x + panel.w; x++) {
+            if (fb.get(x, y) !== OFF) offenders.push(`${seed} step ${step} at ${x},${y}`);
+          }
+        }
+      }
+    }
+    expect(offenders.slice(0, 5)).toEqual([]);
   });
 });
