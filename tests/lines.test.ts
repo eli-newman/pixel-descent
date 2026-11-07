@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { LINE_BONUS, LINE_START_M, PX_PER_M, START_Y } from '../src/core/config';
+import { H, LINE_BONUS, LINE_START_M, PX_PER_M, START_Y, STEP, W } from '../src/core/config';
 import { hashSeed } from '../src/core/rng';
+import { Framebuffer, YELLOW } from '../src/render/framebuffer';
+import { renderUi } from '../src/render/ui';
 import { obstacleBox } from '../src/sim/collision';
 import { LineTracker, lineMult, type LineEvent } from '../src/sim/lines';
 import { createScore } from '../src/sim/score';
@@ -9,6 +11,8 @@ import { lineChance, pathHalfWidth, Spawner } from '../src/sim/spawner';
 import { maxFlightPx, topSpeed } from '../src/sim/speed';
 import type { Ramp } from '../src/sim/types';
 import { kickerBotInput } from './helpers/bot';
+import { makeGame } from './helpers/fakes';
+import type { GameView } from '../src/state/view';
 
 /** The kickers of every line in a batch of ramps, one array per line. */
 function linesOf(ramps: readonly Ramp[]): Ramp[][] {
@@ -250,5 +254,34 @@ describe('lines in a real run', () => {
       for (const e of sim.events) if (e.type === 'line') events.push(e);
     }
     expect(events.map((e) => e.broken)).toEqual([null, 'skip']);
+  });
+});
+
+describe('the line toast on screen', () => {
+  it('keeps the combo meter under the second line of a toast, never across it', () => {
+    const { game, input } = makeGame('line-toast');
+    input.push('start');
+    for (let i = 0; i < 6; i++) game.update(STEP);
+    game.sim.score.combo = 3;
+    game.sim.score.lastNearMissAt = game.sim.runTime;
+    const toast = { text: '360 +70', sub: 'LINE X1.5', ttl: 1, max: 1, hot: true };
+    // The real game, with only its toast swapped for one that has a second line.
+    const view = Object.create(game, { toasts: { value: [toast] } }) as GameView;
+    const fb = new Framebuffer(W, H);
+    renderUi(fb, view);
+    // Each row's longest yellow run. Letters are at most 3 px wide, so any longer run is the combo meter, even
+    // where the toast's dark halo cuts through it.
+    const run = (y: number): number => {
+      let best = 0;
+      let cur = 0;
+      for (let x = 0; x < W; x++) {
+        cur = fb.get(x, y) === YELLOW ? cur + 1 : 0;
+        best = Math.max(best, cur);
+      }
+      return best;
+    };
+    const meterRow = Array.from({ length: 120 }, (_, y) => y).find((y) => run(y) > 8) ?? -1;
+    // The toast sits at row 52 and its sub line 8 px under it: 5 px of letters and a 1 px halo.
+    expect(meterRow).toBeGreaterThan(52 + 8 + 5 + 1);
   });
 });
