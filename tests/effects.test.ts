@@ -97,11 +97,30 @@ describe('the carve cloud', () => {
     return { puffs, particles };
   };
 
-  it('throws nothing riding slowly, straight, in the air or braking', () => {
+  it('throws nothing riding slowly, in the air or braking', () => {
     expect(run(carving(60, 4)).puffs.count).toBe(0);
-    expect(run(carving(250, 0)).puffs.count).toBe(0);
     expect(run({ ...carving(250, 4), air: true }).puffs.count).toBe(0);
     expect(run({ ...carving(250, 4), brake: 1 }).puffs.count).toBe(0);
+    expect(CarveCloud.wake({ ...carving(250, 0), air: true })).toBe(0);
+  });
+
+  it('leaves a wake of powder behind a board running straight at speed, to both sides', () => {
+    const straight = { ...carving(250, 0), hx: 0 };
+    expect(run({ ...straight, speed: 90 }).puffs.count).toBe(0);
+    expect(CarveCloud.wake({ ...straight, speed: 150 })).toBeLessThan(CarveCloud.wake(straight));
+    // a wake, not a carve: smaller than a hard turn's cloud
+    expect(CarveCloud.wake(straight)).toBeLessThan(CarveCloud.power(carving(250, 4), 0));
+    let i = 0;
+    const flip = (): number => [0.2, 0.7, 0.5][i++ % 3] ?? 0.5;
+    const cloud = new CarveCloud();
+    const puffs = new Puffs();
+    for (let k = 0; k < 120; k++) cloud.step(straight, puffs, new Particles(), flip);
+    expect(puffs.count).toBeGreaterThan(10);
+    const xs = Array.from(puffs.x.slice(0, puffs.count));
+    puffs.step(0.3);
+    const moved = Array.from(puffs.x.slice(0, puffs.count)).map((x, k) => x - (xs[k] ?? 0));
+    expect(moved.some((d) => d < -1)).toBe(true);
+    expect(moved.some((d) => d > 1)).toBe(true);
   });
 
   it('throws a cloud out of a hard turn at speed, bigger the faster and harder the turn', () => {

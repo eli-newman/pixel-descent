@@ -18,6 +18,8 @@ export interface Palette {
   readonly track: number;
   readonly trackShadow: number;
   readonly trackSoft: number;
+  /** Loose powder broken up across the groove's floor. Black and white keeps the line clean. */
+  readonly trackGrain: number;
   /** Powder thrown out of hard turns, and spray in the air and on the snow. */
   readonly powder: number;
   readonly spray: number;
@@ -44,6 +46,7 @@ export const MONO: Palette = {
   track: WHITE,
   trackShadow: GREY,
   trackSoft: SOFT_GREY,
+  trackGrain: WHITE,
   powder: WHITE,
   spray: WHITE,
   star: WHITE,
@@ -124,6 +127,7 @@ export const COLOR: Palette = {
   track: C.track,
   trackShadow: C.trackShadow,
   trackSoft: C.trackBand,
+  trackGrain: C.trackBand,
   powder: C.powder,
   spray: C.spray,
   star: C.star,

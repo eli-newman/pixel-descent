@@ -1,3 +1,4 @@
+import { H } from '../core/config';
 import type { SimView } from '../state/view';
 
 export interface Rect {
@@ -11,6 +12,13 @@ export interface Rect {
  */
 export function hudRect(big: boolean): Rect {
   return big ? { w: 92, h: 62 } : { w: 62, h: 34 };
+}
+
+/** Speed gauge bar width, and the black panel behind the speed read-out at the bottom left. */
+export const GAUGE_BAR = 52;
+export function gaugeRect(big: boolean): { x: number; y: number; w: number; h: number } {
+  const sc = big ? 2 : 1;
+  return { x: 3, y: H - 8 * sc - 11, w: GAUGE_BAR + 2 + (big ? 20 : 0), h: 8 * sc + 8 };
 }
 
 /** Height of the rider above the snow in px: a parabola over the jump. */

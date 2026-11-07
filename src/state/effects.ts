@@ -138,6 +138,8 @@ const CLOUD_SPEED_RANGE = 130;
 /** Heading rate (|hv|) of a full hard turn, and speed scrubbed per second by a full carve. */
 const CLOUD_TURN_RATE = 4;
 const CLOUD_SCRUB = 250;
+/** How big the wake behind a board running straight gets at full speed, next to a full carve's 1. */
+const WAKE_POWER = 0.5;
 
 /**
  * Soft round clouds of powder. Each puff grows and thins out over its life, and the renderer dithers it
@@ -236,26 +238,41 @@ export class CarveCloud {
     return Math.min(1, fast * (0.35 + 0.65 * turn) * Math.max(turn, scrub) * 1.6);
   }
 
+  /**
+   * The wake: even running straight, a board at speed kicks up a trail of powder behind it, growing with speed
+   * (squared, so cruising gives a light trail and a full tuck a thick one).
+   */
+  static wake(r: RiderState): number {
+    if (r.air || r.brake >= 0.35 || r.speed < CLOUD_MIN_SPEED) return 0;
+    const fast = Math.min(1, (r.speed - CLOUD_MIN_SPEED) / CLOUD_SPEED_RANGE);
+    return WAKE_POWER * fast * fast;
+  }
+
   step(r: RiderState, puffs: Puffs, particles: Particles, rand: () => number): void {
     const dt = 1 / 120;
     const scrubbed = (this.lastSpeed - r.speed) / dt;
     this.lastSpeed = r.speed;
-    const power = CarveCloud.power(r, scrubbed);
+    const carve = CarveCloud.power(r, scrubbed);
+    const wake = CarveCloud.wake(r);
+    const power = Math.max(carve, wake);
     this.tick++;
     if (power < 0.12 || this.tick % 2 !== 0) return;
-    // The edge digs in on the inside of the turn and throws the snow out the other way.
-    const out = r.hv > 0 ? -1 : r.hv < 0 ? 1 : -Math.sign(r.hx) || 1;
+    // The edge digs in on the inside of the turn and throws the snow out the other way. Running straight, the
+    // wake spills out to both sides at random.
+    const turnOut = r.hv > 0 ? -1 : r.hv < 0 ? 1 : -Math.sign(r.hx) || 1;
+    const out = carve >= wake ? turnOut : rand() < 0.5 ? -1 : 1;
     const hy = Math.sqrt(Math.max(0, 1 - r.hx * r.hx));
     // World velocity: a share of the rider's, so the cloud falls behind him, plus the throw out of the turn.
     const keep = 0.3;
-    const throwOut = 40 + 70 * power;
+    const throwOut = carve >= wake ? 40 + 70 * power : 14 + 24 * power;
     const n = 1 + Math.round(power * 1.4);
     for (let k = 0; k < n; k++) {
       const vx = r.hx * r.speed * keep + out * throwOut * (0.6 + rand() * 0.6);
       const vy = hy * r.speed * keep - (10 + 30 * power) * rand();
       puffs.add(
-        r.x + out * 2 + (rand() - 0.5) * 3,
-        r.y - 1 + (rand() - 0.5) * 3,
+        // a little behind the tail, so a fresh puff never sits on the rider himself
+        r.x - r.hx * 3 + out * 2 + (rand() - 0.5) * 3,
+        r.y - hy * 3 + (rand() - 0.5) * 3,
         vx,
         vy,
         3 + 6 * power * (0.7 + rand() * 0.3),

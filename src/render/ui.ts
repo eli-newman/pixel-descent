@@ -14,7 +14,7 @@ import {
 import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { drawHints } from './hints';
-import { hudRect, riderBox } from './layout';
+import { GAUGE_BAR, gaugeRect, hudRect, riderBox } from './layout';
 import { paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
@@ -201,10 +201,11 @@ function drawGauges(fb: Framebuffer, g: GameView): void {
   const mult = sim.mult;
   const ms = mult >= 1.95 ? `X${mult.toFixed(1)}` : `X${mult.toFixed(1)}`;
   const sc = big ? 2 : 1;
-  const gy = H - 8 * sc - 10;
+  const panel = gaugeRect(big);
+  const gy = panel.y + 1;
   // speed bar: fills towards top speed, ticks show cruising speed
-  const bw = 52;
-  fb.fillRect(3, gy - 1, bw + 2 + (big ? 20 : 0), 8 * sc + 8, OFF);
+  const bw = GAUGE_BAR;
+  fb.fillRect(panel.x, panel.y, panel.w, panel.h, OFF);
   drawText(fb, label, 4, gy, hot ? YELLOW : WHITE, sc);
   drawText(fb, ms, 4 + textWidth(label, sc) + 4, gy, hot ? YELLOW : WHITE, sc);
   const by = gy + 5 * sc + 2;

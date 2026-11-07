@@ -3,7 +3,7 @@ import { isPebble } from '../sim/collision';
 import type { GameView } from '../state/view';
 import { drawTextHalo, textWidth } from './font';
 import { Framebuffer, YELLOW } from './framebuffer';
-import { hudRect } from './layout';
+import { gaugeRect, hudRect } from './layout';
 import { getSprite } from './sprites';
 
 /** What each kind of thing on the slope does, in the words its label shows. Pebbles get none: they are only decoration. */
@@ -57,6 +57,7 @@ export function drawHints(fb: Framebuffer, g: GameView): void {
   for (const p of sim.pickups) if (!p.taken) offer({ kind: 'star', wy: p.y, x: p.x, top: p.y - 3 });
 
   const hud = hudRect(g.settings.bigHud);
+  const gauge = gaugeRect(g.settings.bigHud);
   const used: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
   // The rarer, non-lethal things win a crowded spot: the slope is full of trees to learn CRASH from.
   const rank = (s: Readonly<Spot>): number => (HINT_TEXT[s.kind] === 'CRASH' ? 1 : 0);
@@ -68,6 +69,8 @@ export function drawHints(fb: Framebuffer, g: GameView): void {
     // the halo plus a margin, so two labels never stack into one block of text
     const box = { x0: x0 - 4, y0: y0 - 8, x1: x0 + w + 4, y1: y0 + 13 };
     if (box.y0 < 0 || (box.x0 < hud.w + 2 && box.y0 < hud.h + 2)) continue;
+    // nor half hidden behind the speed panel at the bottom left
+    if (box.x0 < gauge.x + gauge.w + 2 && y0 + 7 > gauge.y) continue;
     if (used.some((u) => u.x0 < box.x1 && box.x0 < u.x1 && u.y0 < box.y1 && box.y0 < u.y1))
       continue;
     used.push(box);

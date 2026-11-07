@@ -27,6 +27,15 @@ const SHADOW = 2.5;
 const POWDER_MIN_DEPTH = 0.45;
 const POWDER_DENSITY = 0.12;
 const POWDER_GRAINS = 3;
+/**
+ * Powder spilled along both sides of the track, on straights too: the snow the board pushes aside. Grains per
+ * recorded point, the chance of each, and how far past the edge they land at most.
+ */
+const SPILL_GRAINS = 3;
+const SPILL_DENSITY = 0.3;
+const SPILL_REACH = 3;
+/** Share of the groove's floor broken up by loose powder (`trackGrain`). */
+const GROOVE_GRAIN = 0.2;
 /** Points between the two stretches of already travelled path compared to judge a turn for powder. */
 const POWDER_SPAN = 7;
 /**
@@ -100,6 +109,7 @@ export class TrackPainter {
     this.start = a;
     this.end = b;
     for (let i = a; i <= b; i++) this.drawPowder(fb, t, i, cam);
+    for (let i = a; i <= b; i++) this.drawSpill(fb, t, i, cam);
     for (let i = a + 1; i <= b; i++) this.drawShadow(fb, i, cam);
     for (let i = a + 1; i <= b; i++) this.drawLine(fb, i, cam);
   }
@@ -217,8 +227,41 @@ export class TrackPainter {
       const from = Math.round(c + lo);
       const to = Math.max(from, Math.round(c + hi) - 1);
       for (let d = from; d <= to; d++) {
-        if (steep) fb.put(d, Math.round(y) - cam, color);
-        else fb.put(Math.round(x), d - cam, color);
+        const wx = steep ? d : Math.round(x);
+        const wy = steep ? Math.round(y) : d;
+        fb.put(wx, wy - cam, color === this.pal.track ? this.groove(wx, wy) : color);
+      }
+    }
+  }
+
+  /** The groove's floor at a world pixel: packed snow broken up by loose powder, fixed to the snow so it never shimmers. */
+  private groove(wx: number, wy: number): number {
+    return hash2(wx * 5 + 3, wy * 3 + 7) < GROOVE_GRAIN ? this.pal.trackGrain : this.pal.track;
+  }
+
+  /**
+   * Snow pushed out of the groove to both sides, along the whole track. Like the turn powder, each grain is decided
+   * from the recorded board position alone, slides out from under the line while the track settles and then stays.
+   * Some land as two-pixel clumps along the track, so the edges read as broken powder rather than a clean cut.
+   */
+  private drawSpill(fb: Framebuffer, t: TrailView, i: number, cam: number): void {
+    const ix = Math.round(t.x(i));
+    const iy = Math.round(t.y(i));
+    const flight = Math.min(1, (this.end - i) / SETTLE);
+    const thrown = 1 - (1 - flight) * (1 - flight);
+    const half = this.skis ? SKI_GAP / 2 + SKI_WIDTH : BASE_WIDTH / 2;
+    const tx = this.tx[i] ?? 0;
+    const ty = this.ty[i] ?? 0;
+    for (let grain = 0; grain < SPILL_GRAINS; grain++) {
+      if (hash2(ix * 3 + grain * 53, iy * 7 + 11) >= SPILL_DENSITY) continue;
+      const side = hash2(iy + grain * 19, ix * 5) < 0.5 ? -1 : 1;
+      const lands = half + 0.6 + hash2(ix + grain * 7, iy * 5 + 3) * SPILL_REACH;
+      const x = Math.round((this.x[i] ?? 0) + ty * side * lands * thrown);
+      const y = Math.round((this.y[i] ?? 0) - tx * side * lands * thrown);
+      if (y - cam < -8 || y - cam > H + 8) continue;
+      fb.put(x, y - cam, this.pal.powder);
+      if (hash2(ix + grain, iy + 29) < 0.35) {
+        fb.put(Math.round(x + tx), Math.round(y + ty) - cam, this.pal.powder);
       }
     }
   }
