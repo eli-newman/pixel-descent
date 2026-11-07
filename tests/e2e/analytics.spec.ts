@@ -83,7 +83,8 @@ test.describe('analytics', () => {
     page.on('pageerror', (e) => pageErrors.push(e.message));
     // Registered last, so it wins over the stand-in: what an ad blocker does.
     await page.route(ANALYTICS_SCRIPT, (route) => route.abort('blockedbyclient'));
-    await page.goto('/');
+    // A fixed course, so riding straight always ends in a tree: a random one might not within the wait.
+    await page.goto(`/?seed=${SEED}`);
     await expectPhase(page, 'title');
     await page.keyboard.press('Space');
     await expectPhase(page, 'playing');
