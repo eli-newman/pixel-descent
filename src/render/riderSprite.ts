@@ -164,6 +164,9 @@ export function flipScale(pitch: number): number {
   return Math.abs(f) < FLIP_MIN ? (f < 0 ? -FLIP_MIN : FLIP_MIN) : f;
 }
 
+/** How deep a grab pulls the knees up (the same scale as the speed tuck). */
+const GRAB_TUCK = 0.75;
+
 /** 0..1 limb tuck during a flip: knees up and arms folded in, deepest edge on. */
 export function flipTuck(pitch: number): number {
   const a = (pitch * Math.PI) / 180;
@@ -196,8 +199,8 @@ export function drawRider(
     drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0, opts.palette ?? MONO);
     return;
   }
-  // Mid-flip the rider tucks his limbs in; upright (or a full turn) changes nothing.
-  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  // Mid-flip the rider tucks his limbs in, and a grab pulls the knees up; upright (or a full turn) changes nothing.
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
   mask.paint = 2;
@@ -265,6 +268,10 @@ interface Skeleton {
   heel: boolean;
   /** Straight downhill the rider is seen almost head on. */
   rear: boolean;
+  /** Holding the board: one hand down on it between the feet, the other thrown up for balance. */
+  grab: boolean;
+  /** Just above the tail of the board, where a grabbing hand goes. */
+  tail: Pt;
   hip: Pt;
   sh: Pt;
   head: Pt;
@@ -304,7 +311,22 @@ function solveSkeleton(pose: Readonly<RiderPose>, tuck: number): Skeleton {
   const ff: Pt = [FF[0], FF[1] - 1];
   const fb: Pt = [FB[0], FB[1] - 1];
   const rear = steep && pose.ang > 74;
-  return { n, mv, heel, rear, hip, sh, head, ff, fb, kf: knee(ff), kb: knee(fb) };
+  const tail: Pt = [rx + n[0] * 1.5, ry + n[1] * 1.5 - 1];
+  return {
+    n,
+    mv,
+    heel,
+    rear,
+    grab: pose.grab,
+    tail,
+    hip,
+    sh,
+    head,
+    ff,
+    fb,
+    kf: knee(ff),
+    kb: knee(fb),
+  };
 }
 
 function maskLegsAndTorso(set: Mask, { hip, sh, ff, fb, kf, kb }: Readonly<Skeleton>): void {
@@ -317,6 +339,10 @@ function maskLegsAndTorso(set: Mask, { hip, sh, ff, fb, kf, kb }: Readonly<Skele
 
 function maskArms(set: Mask, b: Readonly<Skeleton>, tuck: number): void {
   const { n, heel, hip, sh, kf, kb } = b;
+  if (b.grab) {
+    maskGrabArms(set, b, b.tail);
+    return;
+  }
   if (b.rear) {
     // Seen head on: broad shoulders, arms hanging to the sides.
     set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
@@ -337,6 +363,26 @@ function maskArms(set: Mask, b: Readonly<Skeleton>, tuck: number): void {
     ); // front arm reaches along the board
     set.line(sh[0], sh[1] + 1, sh[0] - n[0] * 4 * SC, sh[1] + 4 * SC, 1); // back arm
   }
+}
+
+/**
+ * A grab: the back hand reaches down past the back foot to the tail of the board, clear of the bent
+ * knees (they point at the nose), and the front arm is thrown up and back over the head, the clearest
+ * thing on the silhouette at this size. Seen head on, one arm goes straight down the side of the body
+ * to the board and the other is thrown up and out.
+ */
+function maskGrabArms(set: Mask, b: Readonly<Skeleton>, tail: Pt): void {
+  const { sh, ff, fb } = b;
+  if (b.rear) {
+    const s = b.mv;
+    const foot = Math.max(ff[1], fb[1]);
+    set.line(sh[0] - 4, sh[1], sh[0] + 4, sh[1], 2);
+    set.line(sh[0] + s * 4, sh[1] + 1, sh[0] + s * 4, foot - 1, 1);
+    set.line(sh[0] - s * 4, sh[1], sh[0] - s * 7, sh[1] - 6, 1);
+    return;
+  }
+  set.line(sh[0], sh[1] + 1, tail[0], tail[1], 1);
+  set.line(sh[0] - b.mv, sh[1], sh[0] - b.mv * 4 * SC, sh[1] - 8 * SC, 1);
 }
 
 function maskHelmet(set: Mask, { head, rear }: Readonly<Skeleton>): void {
@@ -522,10 +568,11 @@ function drawSkier(
   brake: number,
   pal: Readonly<Palette>,
 ): void {
-  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch));
+  const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
-  const b = solveSkier(pose, tuck, brake);
+  const solved = solveSkier(pose, tuck, brake);
+  const b = pose.grab ? skierGrab(solved) : solved;
   mask.paint = 2;
   maskSkis(mask, pose, b, style.board);
   mask.paint = 1;
@@ -536,6 +583,8 @@ function drawSkier(
     mv: b.mv,
     heel: b.view === 'back',
     rear: b.view !== 'side',
+    grab: false,
+    tail: b.hip,
     hip: b.hip,
     sh: b.sh,
     head: b.head,
@@ -682,6 +731,48 @@ function solveSkierSide(
     tips,
     square: false,
     farArm: false,
+  };
+}
+
+/**
+ * A ski grab: the near hand reaches down to the near ski just behind the boot, its pole trailing
+ * back along the ski, and the other arm is thrown up with its pole. Square on, the hand reaches down
+ * the outside of the near leg and the free pole points up on the other side.
+ */
+function skierGrab(b: Readonly<SkierSkeleton>): SkierSkeleton {
+  const { n, sh, mv, feet } = b;
+  const f = feet[0];
+  if (!b.square) {
+    const hand: Pt = [f[0] - n[0] * 3, f[1] - n[1] * 3 + 1];
+    const free: Pt = [sh[0] + mv * 3 * SC, sh[1] - 4 * SC];
+    return {
+      ...b,
+      hands: [hand, free],
+      elbows: [
+        [(sh[0] + hand[0]) / 2 - mv, (sh[1] + hand[1]) / 2],
+        [sh[0] + mv * 2 * SC, sh[1] - 1],
+      ],
+      tips: [
+        [hand[0] - n[0] * 7, hand[1] - n[1] * 7 - 2],
+        [free[0] - mv * 4, free[1] - 5],
+      ],
+      farArm: true,
+    };
+  }
+  const s = Math.sign(f[0] - b.hip[0]) || 1;
+  const hand: Pt = [f[0] + s * 1.5, f[1] - 1];
+  const free: Pt = [sh[0] - s * 6, sh[1] - 4];
+  return {
+    ...b,
+    elbows: [
+      [sh[0] + s * 4, sh[1] + 3],
+      [sh[0] - s * 4, sh[1] - 1],
+    ],
+    hands: [hand, free],
+    tips: [
+      [hand[0] + s * 4, hand[1] - 1],
+      [free[0] - s * 2, free[1] - 6],
+    ],
   };
 }
 

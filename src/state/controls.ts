@@ -13,6 +13,8 @@ export interface ControlsHost {
   readonly today: string;
   /** The game over panel has been up long enough to accept a restart. */
   readonly overReady: boolean;
+  /** The rider is in the air: input treats a quick tap as a grab. */
+  readonly airborne: boolean;
   begin(): void;
   newRun(seed: string, play?: boolean): void;
   togglePause(): void;
@@ -38,7 +40,7 @@ export class Controls {
   /** A flip pressed since the last step (a fast tap or a touch button): 1 back, -1 front. */
   private flipQueued: -1 | 0 | 1 = 0;
   /** The input of the latest step. A crashed rider keeps tumbling on it. */
-  readonly simInput: SimInput = { steer: 0, trick: false, brake: false, flip: 0 };
+  readonly simInput: SimInput = { steer: 0, trick: false, brake: false, flip: 0, grab: false };
 
   constructor(
     private readonly host: ControlsHost,
@@ -72,6 +74,8 @@ export class Controls {
     this.trickQueued = false;
     si.flip = this.flipQueued !== 0 ? this.flipQueued : input.flip();
     this.flipQueued = 0;
+    input.setAir(this.host.airborne);
+    si.grab = input.grab();
     return si;
   }
 

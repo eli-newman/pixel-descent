@@ -14,7 +14,7 @@ import {
 import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { drawHints } from './hints';
-import { hudRect } from './layout';
+import { hudRect, riderBox } from './layout';
 import { paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
@@ -148,13 +148,46 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   const toast = g.toasts[0];
   if (toast && g.phase !== 'over') {
     const x = Math.round(CX - textWidth(toast.text) / 2);
-    const ty = big ? 66 : 52;
+    const ty = toastRow(g, big);
     drawTextHalo(fb, toast.text, x, ty, toast.hot ? YELLOW : WHITE);
     if (toast.sub) {
       const sx = Math.round(CX - textWidth(toast.sub) / 2);
-      drawTextHalo(fb, toast.sub, sx, ty + 8, toast.hot ? YELLOW : WHITE);
+      drawTextHalo(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? YELLOW : WHITE);
     }
   }
+}
+
+/** Toast rows: the usual one, and one lower down for when a jump carries the rider up through it. The combo meter sits `comboGap` under the toast. */
+const TOAST_ROW = 52;
+const TOAST_ROW_BIG = 66;
+const TOAST_ROW_LOW = 124;
+/** Half the width of the combo meter with its label. */
+const TOAST_HALF = 36;
+
+/** How far under a toast its `sub` line sits. */
+const SUB_GAP = 8;
+
+/** How far under the toast the combo meter sits: below the toast's `sub` line when it has one. */
+function comboGap(g: GameView, big: boolean): number {
+  return (big ? 12 : 10) + (g.toasts[0]?.sub ? SUB_GAP : 0);
+}
+
+/**
+ * The toast's row. A high jump lifts the rider up through the usual row, and a toast there (or the
+ * combo meter under it) would hide the very trick it names, so while he is in that band both sit
+ * lower down instead.
+ */
+function toastRow(g: GameView, big: boolean): number {
+  const ty = big ? TOAST_ROW_BIG : TOAST_ROW;
+  if (!g.sim.rider.air) return ty;
+  const rider = riderBox(g.sim, g.camYi);
+  const toast = g.toasts[0];
+  const wide = Math.max(textWidth(toast?.text ?? ''), textWidth(toast?.sub ?? ''));
+  const meter = g.sim.score.combo > 0 && g.sim.comboLeft > 0;
+  const half = Math.max(wide / 2, meter ? TOAST_HALF : 0) + 2;
+  const across = rider.left <= CX + half && rider.right >= CX - half;
+  const down = rider.top <= ty + comboGap(g, big) + 6 && rider.bottom >= ty - 1;
+  return across && down ? TOAST_ROW_LOW : ty;
 }
 
 /** Speed read-out, score multiplier and combo meter. */
@@ -184,7 +217,7 @@ function drawGauges(fb: Framebuffer, g: GameView): void {
   if (sim.score.combo > 0 && sim.comboLeft > 0) {
     const w = 44;
     const x = Math.round(CX - w / 2);
-    const y = big ? 78 : 62;
+    const y = toastRow(g, big) + comboGap(g, big);
     const label2 = `X${sim.score.combo}`;
     drawTextHalo(fb, label2, x - textWidth(label2) - 4, y - 1, YELLOW);
     fb.fillRect(x - 1, y - 2, w + 2, 8, OFF);
@@ -235,13 +268,13 @@ function drawMain(fb: Framebuffer, g: GameView): void {
   if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
   drawTextCentered(
     fb,
-    g.touch ? 'HOLD SIDE STEER  SWIPE SIDE SPIN' : 'A D STEER  SPACE TRICK  W S FLIP',
+    g.touch ? 'HOLD SIDE STEER  SWIPE SPIN OR FLIP' : 'A D STEER  SPACE TRICK  W S FLIP',
     CX,
     297,
   );
   drawTextCentered(
     fb,
-    g.touch ? 'SWIPE UP DOWN FLIP  2 FINGERS BRAKE' : 'A+D BRAKE  P PAUSE  M SOUND  H HUD',
+    g.touch ? 'TAP IN AIR GRAB  2 FINGERS BRAKE' : 'X GRAB  A+D BRAKE  P PAUSE  M SOUND',
     CX,
     306,
   );
@@ -341,6 +374,7 @@ function drawGear(fb: Framebuffer, g: GameView): void {
     steep: false,
     tuck: 0,
     pitch: 0,
+    grab: false,
   };
   // Measured on a still frame, so animated headgear never nudges the whole preview.
   PREVIEW.clear();

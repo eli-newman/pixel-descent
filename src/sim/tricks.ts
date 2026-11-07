@@ -28,6 +28,13 @@ export const MANUAL_FLIP_RATE = 540;
 /** How far (degrees) from a full turn a landing can be and still count as clean, sloppy, or a bail. */
 export const FLIP_CLEAN = 40;
 export const FLIP_BAIL = 70;
+/**
+ * Grabs: holding the board in the air. A hold counts once it reaches GRAB_MIN seconds; shorter taps
+ * score nothing. Letting go before touchdown is required: see `touchDown` in `landing.ts`.
+ */
+export const GRAB_MIN = 0.15;
+/** Landing still grabbing after a spin of at least this many degrees (or any flip) is a bail, not just sloppy. */
+export const GRAB_BAIL_SPIN = 540;
 /** Landing heading (hx) up to which a landing is clean, and beyond which the rider bails. */
 export const CLEAN_HX = 0.35;
 export const BAIL_HX = 0.7;
@@ -40,6 +47,23 @@ export function resetFlip(r: RiderState): void {
   r.pitchW = 0;
   r.flipSaid = 0;
   r.flipDone = 0;
+}
+
+/** Clear the grab state (a new jump, or a landing). */
+export function resetGrab(r: RiderState): void {
+  r.grab = false;
+  r.grabT = 0;
+  r.grabDone = false;
+}
+
+/** Grab for one airborne step: while held the hold time grows, and it is announced once when it starts to count. */
+export function stepGrab(r: RiderState, held: boolean, dt: number): void {
+  r.grab = held;
+  r.grabDone = false;
+  if (!held) return;
+  const before = r.grabT;
+  r.grabT += dt;
+  if (before < GRAB_MIN && r.grabT >= GRAB_MIN) r.grabDone = true;
 }
 
 /** Clear the manual spin state (a new jump, or a landing). */

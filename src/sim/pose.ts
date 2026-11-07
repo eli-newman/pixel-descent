@@ -28,6 +28,8 @@ export interface RiderPose {
   tuck: number;
   /** Flip angle in degrees (positive is a backflip, 0 or a multiple of 360 is upright). */
   pitch: number;
+  /** Holding the board in the air: knees pulled up and a hand on the board (or a ski). */
+  grab: boolean;
 }
 
 /**
@@ -76,6 +78,7 @@ export function poseOf(
       stance: r.stance,
       tuck: 0,
       pitch: r.pitch,
+      grab: r.grab,
     };
   }
   return {
@@ -90,5 +93,6 @@ export function poseOf(
     stance: r.stance,
     tuck,
     pitch: r.air ? r.pitch : 0,
+    grab: r.air && r.grab,
   };
 }

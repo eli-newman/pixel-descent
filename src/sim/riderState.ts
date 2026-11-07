@@ -64,6 +64,14 @@ export interface RiderState {
   pitchW: number;
   flipSaid: number;
   flipDone: number;
+  /**
+   * Grab: true while the rider holds the board this step (only ever in the air), the seconds held
+   * so far this jump (every grab of the jump adds up), and `grabDone`, set by stepRider for the
+   * caller on the step the hold reaches `GRAB_MIN` and starts to count.
+   */
+  grab: boolean;
+  grabT: number;
+  grabDone: boolean;
   /** Set by stepRider for the caller: the jump ended during this step. */
   landed: boolean;
   /** 0..1: how far the board has swung sideways into a plowing stop. */
@@ -98,6 +106,9 @@ export function createRider(): RiderState {
     pitchW: 0,
     flipSaid: 0,
     flipDone: 0,
+    grab: false,
+    grabT: 0,
+    grabDone: false,
     landed: false,
     brake: 0,
   };

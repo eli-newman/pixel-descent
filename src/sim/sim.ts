@@ -42,6 +42,12 @@ export interface SimInput {
    * means 0.
    */
   flip?: -1 | 0 | 1;
+  /**
+   * Grab held: in the air the rider holds the board for as long as this is true, and the longer
+   * he holds it the more it pays. It must be let go before touchdown. On the ground it does
+   * nothing. Absent means false.
+   */
+  grab?: boolean;
 }
 
 export interface SimOptions {
@@ -65,6 +71,8 @@ export type SimEvent =
   | { type: 'spin'; deg: number }
   /** A flip came to rest on a full turn in the air: `deg` is signed (positive is a backflip). */
   | { type: 'flip'; deg: number }
+  /** A grab has been held long enough to count. */
+  | { type: 'grab' }
   | LandEvent
   | LineEvent
   | { type: 'crash'; cause: CrashCause };
@@ -199,6 +207,7 @@ export class Sim {
       flip,
       brake: input.brake === true,
       manual: this.opts.manualSpin === true,
+      grab: input.grab === true,
     });
     const prevMax = this.maxY;
     this.maxY = Math.max(this.maxY, r.y);
@@ -209,6 +218,7 @@ export class Sim {
 
     if (r.spinDone > 0) this.events.push({ type: 'spin', deg: r.spinDone });
     if (r.flipDone !== 0) this.events.push({ type: 'flip', deg: r.flipDone });
+    if (r.grabDone) this.events.push({ type: 'grab' });
     if (r.landed) this.land(top);
     if (this.crashed) return;
 
