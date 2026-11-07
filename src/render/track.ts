@@ -1,4 +1,4 @@
-import { BOARD_LEN, H } from '../core/config';
+import { BOARD_LEN } from '../core/config';
 import { hash2 } from '../core/rng';
 import type { TrailView } from '../state/view';
 import { GREY, SOFT_GREY, WHITE, type Framebuffer } from './framebuffer';
@@ -173,7 +173,7 @@ export class TrackPainter {
     const ay = this.y[i - 1] ?? 0;
     const bx = this.x[i] ?? 0;
     const by = this.y[i] ?? 0;
-    if (Math.round(by) - cam < -8 || Math.round(ay) - cam > H + 8) return;
+    if (Math.round(by) - cam < -8 || Math.round(ay) - cam > fb.h + 8) return;
     const steep = Math.abs(this.ty[i - 1] ?? 0) >= Math.abs(this.tx[i - 1] ?? 0);
     for (const u of ALONG) {
       const x = ax + (bx - ax) * u;
@@ -215,7 +215,7 @@ export class TrackPainter {
       const lands = BASE_WIDTH / 2 + SWELL + 2 + hash2(iy, ix + grain * 17) * 4 * depth;
       const x = Math.round((this.x[i] ?? 0) + dx * lands * thrown);
       const y = Math.round((this.y[i] ?? 0) + dy * lands * thrown);
-      if (y - cam >= -8 && y - cam <= H + 8) fb.put(x, y - cam);
+      if (y - cam >= -8 && y - cam <= fb.h + 8) fb.put(x, y - cam);
     }
   }
 
@@ -273,7 +273,7 @@ export class TrackPainter {
     const nx1 = this.x[k] ?? 0;
     const ny1 = this.y[k] ?? 0;
     if (Math.round(Math.max(ty0, ny0, ty1, ny1)) - cam < -8) return;
-    if (Math.round(Math.min(ty0, ny0, ty1, ny1)) - cam > H + 8) return;
+    if (Math.round(Math.min(ty0, ny0, ty1, ny1)) - cam > fb.h + 8) return;
     const along = Math.ceil(
       2 * Math.max(Math.hypot(tx1 - tx0, ty1 - ty0), Math.hypot(nx1 - nx0, ny1 - ny0)),
     );

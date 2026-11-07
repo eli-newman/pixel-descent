@@ -386,6 +386,20 @@ function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): 
 }
 
 /**
+ * The shadow on the snow under a jumping rider, centred on (x, y): it shrinks as the rider climbs `z` px. A
+ * checker of white, like every other cast shadow in the game.
+ */
+export function drawAirShadow(fb: Framebuffer, x: number, y: number, z: number): void {
+  const w = Math.max(2, 7 - Math.round(z / 5));
+  for (let dx = -w; dx <= w; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const inside = (dx * dx) / (w * w) + (dy * dy) / 2.2 <= 1;
+      if (inside && (dx + dy + 2) % 2 === 0) fb.put(x + dx, y + dy);
+    }
+  }
+}
+
+/**
  * A wipeout: the rider tumbles through the air, lands, and lies in the snow. Drawn as a small
  * stick figure rotated about its middle, in the same one-colour style as the riding pose.
  * `t` is seconds since the crash, `face` the side the rider was heading to.

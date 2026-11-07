@@ -5,7 +5,7 @@ import { poseOf } from '../sim/pose';
 import type { Obstacle, Patch, Ramp } from '../sim/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
-import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
+import { drawAirShadow, drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
 import { hudRect, type Rect } from './layout';
@@ -310,22 +310,11 @@ export class SceneRenderer {
       return;
     }
     const z = Math.round(zOf(sim));
-    if (r.air) this.drawShadow(sx, sy + 8, z);
+    if (r.air) drawAirShadow(this.fb, sx, sy + 10, z);
     const straight = Math.max(0, 1 - Math.abs(r.hx) / 0.4);
     const poseTuck = Math.min(1, tuck * 1.7) * straight * (r.air ? 0.4 : 1);
     const pose = poseOf(r, sx, sy - z, poseTuck);
     drawRider(this.fb, pose, { style: this.style(g), time: g.animT });
-  }
-
-  /** A shadow on the snow under a jumping rider: it shrinks and fades as the rider climbs. */
-  private drawShadow(sx: number, sy: number, z: number): void {
-    const w = Math.max(2, 7 - Math.round(z / 5));
-    for (let dx = -w; dx <= w; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const inside = (dx * dx) / (w * w) + (dy * dy) / 2.2 <= 1;
-        if (inside && (dx + dy + 2) % 2 === 0) this.fb.put(sx + dx, sy + dy + 2);
-      }
-    }
   }
 
   private drawParticles(g: GameView, cam: number): void {

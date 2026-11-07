@@ -9,7 +9,7 @@ The rules of the game as pure, deterministic code. Feed a seed and inputs at the
 | `riderState.ts` | `RiderState`, `Surface`, `Face`, `createRider`. Types and the starting state only.                                                                                             |
 | `speed.ts`      | The speed model: `cruiseSpeed`, `topSpeed`, tuck and scrub (`stepSpeed`), air time and flight distance. The spawner's only rider dependency, so it must stay exact arithmetic. |
 | `tricks.ts`     | Spins and flips: assisted and manual stepping, caps, `startTrick`/`startSnap`/`startFlip`, landing tolerances.                                                                 |
-| `pose.ts`       | `RiderPose` and `poseOf`: what the renderer needs to draw the rider.                                                                                                           |
+| `pose.ts`       | `RiderPose` and `poseOf`: what the renderer needs to draw the rider. `boardPose`: the pose of a board in any direction from its middle (the spin, and the embed).              |
 | `landing.ts`    | `touchDown`: judges a landing (clean, sloppy, bail), pays the score, returns the `LandEvent`.                                                                                  |
 | `world.ts`      | Live object lists: adding spawned batches, culling, the surface under the rider, ramp crossing (`WorldLists`, `addBatch`, `cullAbove`, `surfaceAt`, `takeRamp`).               |
 | `collision.ts`  | Hitbox overlap tests and near-miss rules.                                                                                                                                      |

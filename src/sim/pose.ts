@@ -49,22 +49,9 @@ export function poseOf(
     const nx = bx * c - by * sn;
     const ny = bx * sn + by * c;
     // The tail is placed so the middle of the board stays where the unspun rider's would be.
-    const half = SPIN_HALF_BOARD;
-    const mx = screenX + bx * half;
-    const my = screenY + by * half;
-    const pang = (Math.atan2(Math.abs(ny), Math.abs(nx)) * 180) / Math.PI;
-    return {
-      x: mx - nx * half,
-      y: my - ny * half,
-      nx,
-      ny,
-      face: nx >= 0 ? 1 : -1,
-      up: Math.min(1, Math.abs(nx) * 2.2),
-      ang: pang,
-      steep: pang > 70,
-      tuck: 0,
-      pitch: r.pitch,
-    };
+    const mx = screenX + bx * SPIN_HALF_BOARD;
+    const my = screenY + by * SPIN_HALF_BOARD;
+    return boardPose(mx, my, nx, ny, nx >= 0 ? 1 : -1, 0, r.pitch);
   }
   return {
     x: screenX,
@@ -77,5 +64,36 @@ export function poseOf(
     steep: r.steep,
     tuck,
     pitch: r.air ? r.pitch : 0,
+  };
+}
+
+/**
+ * The pose of a board whose middle is at (mx, my) and which points along the unit vector (nx, ny), which may point
+ * in any direction, even up the slope. The stance, lean and outline follow from the direction alone, the way a
+ * spinning rider is drawn. Used by the spin and by the embed, which has no rider state.
+ */
+export function boardPose(
+  mx: number,
+  my: number,
+  nx: number,
+  ny: number,
+  face: 1 | -1,
+  tuck: number,
+  pitch: number,
+  up = Math.min(1, Math.abs(nx) * 2.2),
+): RiderPose {
+  const half = SPIN_HALF_BOARD;
+  const pang = (Math.atan2(Math.abs(ny), Math.abs(nx)) * 180) / Math.PI;
+  return {
+    x: mx - nx * half,
+    y: my - ny * half,
+    nx,
+    ny,
+    face,
+    up,
+    ang: pang,
+    steep: pang > 70,
+    tuck,
+    pitch,
   };
 }
