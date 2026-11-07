@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "build:embed": "vite build --config vite.embed.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -24,7 +24,16 @@ function typesOnly(folder, why) {
 }
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules', 'test-results', 'playwright-report'] },
+  {
+    ignores: [
+      'dist',
+      'dist-embed',
+      'coverage',
+      'node_modules',
+      'test-results',
+      'playwright-report',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -39,23 +48,27 @@ export default tseslint.config(
   },
   boundaries(
     ['src/core/**/*.ts'],
-    ['sim', 'state', 'platform', 'render'].map((f) => banned(f, 'core imports nothing.')),
+    ['sim', 'state', 'platform', 'render', 'embed'].map((f) => banned(f, 'core imports nothing.')),
   ),
   boundaries(
     ['src/sim/**/*.ts'],
-    ['state', 'platform', 'render'].map((f) => banned(f, 'sim imports core only.')),
+    ['state', 'platform', 'render', 'embed'].map((f) => banned(f, 'sim imports core only.')),
   ),
   boundaries(
     ['src/state/**/*.ts'],
-    ['platform', 'render'].map((f) =>
-      typesOnly(f, 'state gets browser and drawing code through GameDeps: types only.'),
-    ),
+    [
+      ...['platform', 'render'].map((f) =>
+        typesOnly(f, 'state gets browser and drawing code through GameDeps: types only.'),
+      ),
+      banned('embed', 'Nothing in the game imports the embed.'),
+    ],
   ),
   boundaries(
     ['src/platform/**/*.ts'],
     [
       banned('sim', 'platform imports core and the share card only.'),
       banned('state', 'platform imports core and the share card only.'),
+      banned('embed', 'platform imports core and the share card only.'),
       {
         group: ['**/render/*', '!**/render/share', '!**/render/framebuffer'],
         message: 'platform imports core and the share card only.',
@@ -66,12 +79,38 @@ export default tseslint.config(
     ['src/render/**/*.ts'],
     [
       banned('platform', 'render reads state, it does not talk to the browser.'),
+      banned('embed', 'Nothing in the game imports the embed.'),
       {
         group: ['**/state/game', '**/sim/sim'],
         message: 'render sees the game through state/view (GameView, SimView), which cannot write.',
       },
     ],
   ),
+  boundaries(
+    ['src/embed/**/*.ts'],
+    [
+      banned('state', 'embed draws from its inputs alone: no game state.'),
+      banned('platform', 'embed is pure: no browser I/O.'),
+      { group: ['**/sim/sim'], message: 'embed uses pure sim helpers, not the Sim.' },
+    ],
+  ),
+  {
+    // Every embed drawing is a pure function of its inputs, so a page can scrub it back and forth.
+    files: ['src/embed/**/*.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        ...['window', 'document', 'globalThis', 'self', 'performance', 'Date'].map((name) => ({
+          name,
+          message: 'embed is pure: no DOM, no clock.',
+        })),
+      ],
+      'no-restricted-properties': [
+        'error',
+        { object: 'Math', property: 'random', message: 'embed randomness is seeded (core/rng).' },
+      ],
+    },
+  },
   {
     files: ['src/render/**/*.ts'],
     rules: {

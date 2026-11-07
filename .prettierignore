@@ -1,4 +1,5 @@
 dist
+dist-embed
 coverage
 node_modules
 package-lock.json

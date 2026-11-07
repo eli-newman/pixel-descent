@@ -25,6 +25,10 @@ Players never see a seed: every run is just a new course. The game over SHARE li
 
 The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/powline/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Crawlers need an absolute `og:image` URL, so the `og:image`, `twitter:image` and `og:url` tags in `index.html` point at https://powline.vercel.app: update them if the address changes.
 
+## Embed library
+
+`npm run build:embed` builds `dist-embed/powline-embed.js` (one dependency-free ES module) and `dist-embed/powline-embed.d.ts`: the game's rider, air shadow, carved track and powder, drawn into a transparent RGBA surface for another page to composite. Every function is a pure function of its inputs, so a scroll-driven scene can scrub it. See `src/embed/CLAUDE.md` for the API.
+
 ## Controls
 
 | Action             | Keyboard                       | Touch                                     |

@@ -12,6 +12,7 @@ npm test            # vitest run (tests/)
 npm run check       # typecheck + lint + format check + vitest
 npm run test:e2e    # Playwright smoke test against the production bundle (tests/e2e)
 npm run build       # typecheck + vitest + vite build, so a deploy cannot ship failing tests
+npm run build:embed # the embed library: dist-embed/powline-embed.js and .d.ts (see src/embed/CLAUDE.md)
 npm run format      # prettier
 ```
 
@@ -37,6 +38,8 @@ src/
   state/        game state machine, controls, feedback, progress, persistence, the read-only view. Imports sim and core; types only from platform and render.
   platform/     browser I/O (input, audio, loop, viewport, share sheet). Imports core, render/share and render/framebuffer.
   render/       draws state to the framebuffer. Imports sim, state and core.
+  embed/        library for other pages: the real rider, track and powder on a transparent surface, as pure
+                functions of their inputs. Imports core, render and pure sim helpers. Nothing imports it.
 tests/          vitest, one file per feature, helpers/ for fakes and a bot, e2e/ for the Playwright smoke test
 ```
 
@@ -46,6 +49,7 @@ Note that `render/` imports `state/` at runtime (button layout, gear data) and t
 
 - `sim/` and `core/` must never touch the DOM, `window`, `localStorage`, audio or `render/`. This is what keeps seeds, replays and tests deterministic.
 - `render/` must not change game state. It sees only `GameView` and `SimView` (`src/state/view.ts`), so writing to them or calling a mutating method is a compile error, and boundary lint stops `render/` importing `state/game` or `sim/sim`, even as types. Lint backs this up in `src/render/**`: no `as` casts (except `as const`), type assertions, `!` or ts-comments, and every parameter must be read-only (except `Framebuffer`, `Mask`, `Rng`). Not caught: assigning a view object to a local or array annotated with a mutable type, since TypeScript allows it and no lint rule covers it.
+- `embed/` must stay pure so a page can scrub it by scroll: no DOM, `window`, clock, `Math.random`, `state/`, `platform/` or `sim/sim` (lint enforces all of these). Nothing in the game imports `embed/`. A render or sim refactor it needs must keep the game pixel-identical (`tests/render.test.ts`).
 - Do not add a new top-level folder in `src/` without updating this file.
 - Tunable numbers and feature switches go in `src/core/config.ts`.
 
@@ -66,6 +70,7 @@ A change is not finished until the docs match the code.
 - `src/state/CLAUDE.md`
 - `src/platform/CLAUDE.md`
 - `src/render/CLAUDE.md`
+- `src/embed/CLAUDE.md`
 - `tests/CLAUDE.md`
 
 ## Conventions
