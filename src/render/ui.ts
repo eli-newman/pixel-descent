@@ -13,7 +13,6 @@ import {
 } from '../state/progress';
 import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
-import { drawHints } from './hints';
 import { GAUGE_BAR, gaugeRect, hudRect, riderBox } from './layout';
 import { paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
@@ -130,7 +129,6 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   const big = g.settings.bigHud;
   const rect = hudRect(big);
-  drawHints(fb, g);
   // A solid black block under the numbers: no snow flecks or flakes can touch the text.
   fb.fillRect(0, 0, rect.w, rect.h, OFF);
   fb.fillRect(rect.w, 0, 1, rect.h, OFF);

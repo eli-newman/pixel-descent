@@ -17,6 +17,7 @@ import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getColorSprite, getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
+import { drawHints } from './hints';
 import { hudRect, riderZ, type Rect } from './layout';
 import { TrackPainter } from './track';
 
@@ -65,7 +66,7 @@ export class SceneRenderer {
     }
 
     // Depth sort: obstacles whose base is above the rider's feet are behind the rider.
-    const feetY = sim.rider.y + 8;
+    const feetY = g.riderY + 8;
     const obs = sim.obstacles;
     let i = 0;
     for (; i < obs.length; i++) {
@@ -81,6 +82,8 @@ export class SceneRenderer {
     }
 
     this.drawParticles(g, cam);
+    // Labels sit on things in the world, so they scroll with it.
+    drawHints(fb, g);
     return fb;
   }
 
@@ -337,8 +340,9 @@ export class SceneRenderer {
   private drawRiderAndEffects(g: GameView, cam: number, tuck: number): void {
     const sim = g.sim;
     const r = sim.rider;
-    const sx = Math.round(r.x);
-    const sy = Math.round(r.y - cam);
+    // At the screen's moment, like the camera, so he moves as smoothly as the slope.
+    const sx = Math.round(g.riderX);
+    const sy = Math.round(g.riderY - cam);
     if (sim.crashed) {
       drawWipeout(
         this.fb,

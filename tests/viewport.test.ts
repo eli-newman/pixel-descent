@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { fitCanvas } from '../src/platform/viewport';
+import { slideTransform, fitCanvas } from '../src/platform/viewport';
 
 describe('fitCanvas', () => {
   it('uses the largest whole scale that fits and centres the picture', () => {
@@ -33,5 +33,19 @@ describe('fitCanvas', () => {
     expect(fit.top).toBeGreaterThanOrEqual(47);
     expect(fit.top + fit.cssH).toBeLessThanOrEqual(844 - 34);
     expect(fit.cssH + 20).toBeLessThanOrEqual(844 - 47 - 34);
+  });
+});
+
+describe('slideTransform', () => {
+  it('slides the slope up by the camera fraction, in whole device pixels', () => {
+    expect(slideTransform(0, 6, 3)).toBe('');
+    expect(slideTransform(0.5, 6, 3)).toBe('translateY(-1px)');
+    expect(slideTransform(1 / 6, 6, 3)).toBe(`translateY(${-1 / 3}px)`);
+    expect(slideTransform(0.04, 6, 3)).toBe('');
+  });
+
+  it('never slides past one logical pixel, so the spare row is all that ever shows', () => {
+    expect(slideTransform(1.7, 4, 2)).toBe('translateY(-2px)');
+    expect(slideTransform(-0.3, 4, 2)).toBe('');
   });
 });

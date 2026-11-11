@@ -17,15 +17,18 @@ function watchErrors(page: Page): string[] {
 /** How many distinct colours the canvas shows and a checksum, so "blank" and "frozen" can both be detected. */
 function readCanvas(page: Page): Promise<{ colours: number; sum: number }> {
   return page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>('#game');
-    const data = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
-    if (!data) return { colours: 0, sum: 0 };
+    // Both layers: the slope and the HUD and menus drawn over it.
     const seen = new Set<number>();
     let sum = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const c = ((data[i] ?? 0) << 16) | ((data[i + 1] ?? 0) << 8) | (data[i + 2] ?? 0);
-      seen.add(c);
-      sum = (sum * 31 + c) % 1000000007;
+    for (const id of ['#game', '#ui']) {
+      const canvas = document.querySelector<HTMLCanvasElement>(id);
+      const data = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+      if (!data) return { colours: 0, sum: 0 };
+      for (let i = 0; i < data.length; i += 4) {
+        const c = ((data[i] ?? 0) << 16) | ((data[i + 1] ?? 0) << 8) | (data[i + 2] ?? 0);
+        seen.add(c);
+        sum = (sum * 31 + c) % 1000000007;
+      }
     }
     return { colours: seen.size, sum };
   });
@@ -83,8 +86,9 @@ test.describe('mobile', () => {
     await page.goto('/');
     await expectTitleDrawn(page);
 
-    const box = await page.locator('#game').boundingBox();
-    if (!box) throw new Error('The canvas has no box');
+    // The stage is the picture: the slope canvas inside it is a row taller and slides.
+    const box = await page.locator('#stage').boundingBox();
+    if (!box) throw new Error('The stage has no box');
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390);
     await page.touchscreen.tap(

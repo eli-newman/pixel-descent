@@ -69,6 +69,10 @@ export interface GameView {
   readonly puffs: PuffsView;
   readonly toasts: readonly Readonly<Toast>[];
   readonly camYi: number;
+  /** The camera's fraction of a pixel past `camYi` (0 to 1), and the rider drawn at the same moment. */
+  readonly camFrac: number;
+  readonly riderX: number;
+  readonly riderY: number;
   readonly animT: number;
   readonly settings: Readonly<Settings>;
   readonly progress: DeepReadonly<Progress>;

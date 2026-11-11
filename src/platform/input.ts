@@ -99,8 +99,8 @@ export class Input {
   private tapGrab = false;
   /** This touch let go of a grab when it landed, so lifting it does not grab again. */
   private letGo = false;
-  /** True once a touch has been seen: the game shows touch hints. */
-  usingTouch = false;
+  /** True on a touch-first device from the start, or once a touch has been seen: the game shows touch hints. */
+  usingTouch = primaryTouch();
   /** Set by the game so taps can be reported in logical (180x320) coordinates. */
   logical: (clientX: number, clientY: number) => { x: number; y: number } = (x, y) => ({ x, y });
 
@@ -324,4 +324,18 @@ export class Input {
     this.holdSide = 0;
     this.dragging = false;
   };
+}
+
+/**
+ * Whether the main pointer is a finger, so a phone shows the touch help on the very first screen, before it has
+ * been touched. Guarded: a test window may have no `matchMedia`.
+ */
+function primaryTouch(): boolean {
+  try {
+    return (
+      typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+    );
+  } catch {
+    return false;
+  }
 }

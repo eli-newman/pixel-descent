@@ -44,6 +44,15 @@ export class Game implements GameView {
   readonly particles = new Particles(512);
   readonly puffs = new Puffs();
   private camY = 0;
+  /**
+   * The camera and the rider as they were before the latest step, and how far the screen's moment lies between that
+   * step and the next one (0 to 1). The screen draws in between, so motion stays even whatever the display's refresh
+   * rate: at 90 Hz the 120 Hz steps land 1, 1, 2 per frame, which made the slope lurch every third frame.
+   */
+  private prevCamY = 0;
+  private prevRiderX = 0;
+  private prevRiderY = 0;
+  private blendAlpha = 1;
   private camOff = RIDER_SCREEN_Y;
   /** Seconds the world has been animating (stops while paused). */
   animT = 0;
@@ -106,9 +115,40 @@ export class Game implements GameView {
     return dailySeed(this.deps.now?.() ?? new Date());
   }
 
-  /** Camera y snapped to a whole pixel, so the scene scrolls in crisp one pixel steps. */
+  /** Where the screen should be drawn between the last two steps (see `prevCamY`). Called before every render. */
+  setBlend(alpha: number): void {
+    this.blendAlpha = Math.min(1, Math.max(0, alpha));
+  }
+
+  /** The camera at the screen's moment, in fractional pixels. */
+  private get camView(): number {
+    return this.prevCamY + (this.camY - this.prevCamY) * this.blendAlpha;
+  }
+
+  /** The camera's whole pixel: the world is drawn from this row. */
   get camYi(): number {
-    return Math.round(this.camY);
+    return Math.floor(this.camView);
+  }
+
+  /** The rest of the camera, 0 to 1: the page slides the slope up this much of a pixel for a smooth scroll. */
+  get camFrac(): number {
+    return this.camView - this.camYi;
+  }
+
+  /** The rider's board tail at the screen's moment, for drawing him in step with the camera. */
+  get riderX(): number {
+    return this.prevRiderX + (this.sim.rider.x - this.prevRiderX) * this.blendAlpha;
+  }
+
+  get riderY(): number {
+    return this.prevRiderY + (this.sim.rider.y - this.prevRiderY) * this.blendAlpha;
+  }
+
+  /** Forget the previous step, after a jump cut such as a new run. */
+  private settleBlend(): void {
+    this.prevCamY = this.camY;
+    this.prevRiderX = this.sim.rider.x;
+    this.prevRiderY = this.sim.rider.y;
   }
 
   /** Best score ever. */
@@ -175,6 +215,7 @@ export class Game implements GameView {
     this.cloud.reset();
     this.camOff = RIDER_SCREEN_Y;
     this.camY = this.sim.rider.y - this.camOff;
+    this.settleBlend();
     this.result = null;
     this.phase = 'title';
     this.controls.reset();
@@ -198,6 +239,7 @@ export class Game implements GameView {
   }
 
   update(dt: number): void {
+    this.settleBlend();
     this.controls.handleInput();
     if (this.phase !== 'paused') this.animT += dt;
     if (this.feedback.hitStop > 0) {

@@ -11,7 +11,7 @@ import { shareResult } from './platform/shareDom';
 import { analyticsConfig, DEBUG_SCRIPT, noTracker, startWebAnalytics } from './platform/analytics';
 import { shareEvent } from './state/telemetry';
 import { Store } from './state/storage';
-import { fitCanvas } from './platform/viewport';
+import { fitCanvas, slideTransform } from './platform/viewport';
 
 /** Analytics settings baked in by `vite.config.ts`: null unless built on Vercel or with `VITE_ANALYTICS=1`. */
 declare const __ANALYTICS__: { debug: boolean; vercelConfig: string } | null;
@@ -23,15 +23,21 @@ function required<T extends HTMLElement>(id: string): T {
 }
 
 const canvas = required<HTMLCanvasElement>('game');
+const uiCanvas = required<HTMLCanvasElement>('ui');
 const stage = required<HTMLElement>('stage');
 const pauseBtn = required<HTMLButtonElement>('pause-btn');
 const safeProbe = required<HTMLElement>('safe');
 const status = required<HTMLElement>('status');
+// The slope layer has one spare row at the bottom, revealed as it slides up by a fraction of a pixel.
 canvas.width = W;
-canvas.height = H;
+canvas.height = H + 1;
+uiCanvas.width = W;
+uiCanvas.height = H;
 const ctx = canvas.getContext('2d', { alpha: false });
-if (!ctx) throw new Error('2D canvas is not supported');
+const uiCtx = uiCanvas.getContext('2d');
+if (!ctx || !uiCtx) throw new Error('2D canvas is not supported');
 ctx.imageSmoothingEnabled = false;
+uiCtx.imageSmoothingEnabled = false;
 
 const store = new Store();
 const sfx = new Sfx();
@@ -65,7 +71,8 @@ const analytics = analyticsBuild
 
 /** Map a pointer position to the 180x320 logical canvas. */
 input.logical = (clientX, clientY) => {
-  const rect = canvas.getBoundingClientRect();
+  // The stage, not the slope canvas: that one is a row taller and slides.
+  const rect = stage.getBoundingClientRect();
   return {
     x: ((clientX - rect.left) / Math.max(1, rect.width)) * W,
     y: ((clientY - rect.top) / Math.max(1, rect.height)) * H,
@@ -93,14 +100,27 @@ const game = new Game(
   normalizeSeed(params.get('seed')),
 );
 
-const fb = new Framebuffer(W, H);
+const fb = new Framebuffer(W, H + 1);
 const scene = new SceneRenderer(fb);
-const image = new ImageData(fb.data, W, H);
+const image = new ImageData(fb.data, W, H + 1);
+const uiFb = new Framebuffer(W, H);
+const uiImage = new ImageData(uiFb.data, W, H);
+/** Device pixels per logical pixel, from the last layout. */
+let scale = 1;
+let shift = '';
 
-function render(): void {
+function render(alpha: number): void {
+  game.setBlend(alpha);
   scene.render(game);
-  renderUi(fb, game);
+  uiFb.clear(0);
+  renderUi(uiFb, game);
   ctx?.putImageData(image, 0, 0);
+  uiCtx?.putImageData(uiImage, 0, 0);
+  const next = slideTransform(game.camFrac, scale, window.devicePixelRatio || 1);
+  if (next !== shift) {
+    shift = next;
+    canvas.style.transform = next;
+  }
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
 }
 
@@ -125,6 +145,7 @@ function layout(): void {
     safe,
     margin,
   );
+  scale = fit.scale;
   stage.style.width = `${fit.cssW}px`;
   stage.style.height = `${fit.cssH}px`;
   stage.style.left = `${fit.left}px`;
