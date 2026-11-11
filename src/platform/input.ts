@@ -65,6 +65,12 @@ const HOLD_MS = 80;
  * side only after TAP_MS.
  */
 const TAP_MS = 160;
+/**
+ * Two fingers brake only when they land together, the second within BRAKE_MS of the first. A second finger that
+ * lands later is a thumb rolling over to steer the other way: the newest finger steers, and when it lifts, the
+ * finger still down takes over at once.
+ */
+const BRAKE_MS = 150;
 
 function preventDefault(e: Event): void {
   e.preventDefault();
@@ -90,8 +96,10 @@ export class Input {
   private trail: Array<{ x: number; y: number; t: number }> = [];
   /** True once this touch has been used for a swipe, so it fires once. */
   private swiped = false;
-  /** Fingers currently down (touch only): two or more is the brake. */
-  private readonly touches = new Set<number>();
+  /** Fingers currently down (touch only), oldest first: where each one is and when it landed. */
+  private readonly touches = new Map<number, { x: number; t: number }>();
+  /** Two fingers landed together and are still down: the brake. */
+  private braking = false;
   private readonly cleanup: Array<() => void> = [];
   /** Set by the game each step: the rider is airborne, so a quick tap is a grab. */
   private air = false;
@@ -134,7 +142,7 @@ export class Input {
       if (RIGHT.has(code)) k += 1;
     }
     // Two fingers are the brake: like holding both arrows, they cancel out and do not steer.
-    if (this.touches.size >= 2) return Math.max(-1, Math.min(1, k));
+    if (this.braking) return Math.max(-1, Math.min(1, k));
     return Math.max(-1, Math.min(1, k + this.pointerSteer));
   }
 
@@ -162,9 +170,9 @@ export class Input {
     if (!on) this.tapGrab = false;
   }
 
-  /** True while a left key and a right key are held together, or two fingers are down. */
+  /** True while a left key and a right key are held together, or two fingers that landed together are down. */
   brake(): boolean {
-    if (this.touches.size >= 2) return true;
+    if (this.braking) return true;
     let l = false;
     let r = false;
     for (const code of this.keys) {
@@ -193,6 +201,7 @@ export class Input {
     this.dragging = false;
     this.tapGrab = false;
     this.touches.clear();
+    this.braking = false;
   }
 
   dispose(): void {
@@ -233,16 +242,21 @@ export class Input {
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.target instanceof Element && e.target.closest('button')) return;
+    const now = this.now();
     if (e.pointerType === 'touch') {
       this.usingTouch = true;
-      this.touches.add(e.pointerId);
+      // Landing together with a finger that is still down is the brake; landing later is a thumb taking over.
+      for (const other of this.touches.values()) if (now - other.t <= BRAKE_MS) this.braking = true;
+      this.touches.set(e.pointerId, { x: e.clientX, t: now });
     }
     const p = this.logical(e.clientX, e.clientY);
     this.queue.push({ kind: 'tap', x: p.x, y: p.y });
     // Any touch lets go of a touch grab at once: waiting for it to lift would land the rider still grabbing.
     const letGo = this.tapGrab;
     this.tapGrab = false;
-    if (this.pointerId !== null) return;
+    // While braking, extra fingers change nothing. Otherwise the newest finger steers, so rolling from one thumb to
+    // the other turns the other way at once; the old side keeps steering until the new touch holds its side.
+    if (this.pointerId !== null && (this.braking || e.pointerType !== 'touch')) return;
     this.pointerId = e.pointerId;
     this.pointerX0 = e.clientX;
     this.pointerY0 = e.clientY;
@@ -257,7 +271,7 @@ export class Input {
     const rect = this.canvas.getBoundingClientRect();
     this.holdT0 = this.now();
     this.holdSide = e.clientX < rect.left + rect.width / 2 ? -1 : 1;
-    this.pointerSteer = 0;
+    if (this.touches.size <= 1) this.pointerSteer = 0;
   };
 
   /** Start holding the touched side once the touch has stayed still for HOLD_MS, or moved without a flick for SWIPE_MS. */
@@ -270,12 +284,14 @@ export class Input {
   }
 
   private readonly onPointerMove = (e: PointerEvent): void => {
+    const finger = this.touches.get(e.pointerId);
+    if (finger) finger.x = e.clientX;
     if (e.pointerId !== this.pointerId) return;
     const dx = e.clientX - this.pointerX0;
     const dy = e.clientY - this.pointerY0;
     const early = e.timeStamp - this.pointerT0 <= SWIPE_MS;
     if (Math.abs(dx) > DRAG_START || Math.abs(dy) > DRAG_START) this.moved = true;
-    if (!this.swiped && this.touches.size < 2) {
+    if (!this.swiped && !this.braking) {
       // A vertical flick counts within SWIPE_MS of any point of the touch, so resting the thumb first still works.
       const trail = this.trail;
       while (trail.length > 1 && e.timeStamp - (trail[0]?.t ?? 0) > SWIPE_MS) trail.shift();
@@ -314,6 +330,7 @@ export class Input {
   private readonly onPointerUp = (e: PointerEvent): void => {
     const alone = this.touches.size <= 1;
     this.touches.delete(e.pointerId);
+    if (this.touches.size < 2) this.braking = false;
     if (e.pointerId !== this.pointerId) return;
     // A quick still tap in the air, before the touch held its side, grabs the board.
     const still = !this.moved && !this.swiped && !this.dragging && this.holdSide !== 0;
@@ -323,7 +340,29 @@ export class Input {
     this.pointerSteer = 0;
     this.holdSide = 0;
     this.dragging = false;
+    this.takeOver();
   };
+
+  /**
+   * The steering finger lifted while another is still down (a thumb rolled back, or one finger of the brake lifted):
+   * the newest finger left steers its side at once. It has been held all along, so it is a hold, never a flick.
+   */
+  private takeOver(): void {
+    let id: number | null = null;
+    let x = 0;
+    for (const [pid, f] of this.touches) {
+      id = pid;
+      x = f.x;
+    }
+    if (id === null) return;
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointerId = id;
+    this.pointerX0 = x;
+    this.swiped = true;
+    this.moved = true;
+    this.letGo = false;
+    this.pointerSteer = x < rect.left + rect.width / 2 ? -1 : 1;
+  }
 }
 
 /**

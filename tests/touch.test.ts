@@ -276,6 +276,50 @@ describe('touch gestures', () => {
     expect(input.steer()).toBe(-1);
     input.dispose();
   });
+
+  it('rolling from one thumb to the other steers the new way, and back, with no brake', () => {
+    // Hold right, put the left thumb down before lifting the right one: the way a phone player turns.
+    const clock = { t: 0 };
+    const { input, down, up } = touchInput(clock);
+    down({ id: 1, x: 300, y: 300, t: 0 });
+    clock.t = 300;
+    expect(input.steer()).toBe(1);
+    down({ id: 2, x: 100, y: 300, t: 300 });
+    expect(input.brake()).toBe(false);
+    // The right side keeps steering until the new thumb is clearly a hold, then the left one wins.
+    expect(input.steer()).toBe(1);
+    clock.t = 400;
+    expect(input.steer()).toBe(-1);
+    expect(input.brake()).toBe(false);
+    // Lift the left thumb: the right one, still down, steers again at once.
+    up({ id: 2, x: 100, y: 300, t: 600 });
+    clock.t = 600;
+    expect(input.steer()).toBe(1);
+    // And roll over again, this time lifting the old thumb first: the newest one keeps steering.
+    down({ id: 3, x: 90, y: 300, t: 900 });
+    clock.t = 1000;
+    expect(input.steer()).toBe(-1);
+    up({ id: 1, x: 300, y: 300, t: 1100 });
+    clock.t = 1100;
+    expect(input.steer()).toBe(-1);
+    expect(input.brake()).toBe(false);
+    up({ id: 3, x: 90, y: 300, t: 1200 });
+    expect(input.steer()).toBe(0);
+    input.dispose();
+  });
+
+  it('the finger left after a two finger brake steers its side at once', () => {
+    const clock = { t: 0 };
+    const { input, down, up } = touchInput(clock);
+    down({ id: 1, x: 100, y: 300, t: 0 });
+    down({ id: 2, x: 300, y: 300, t: 20 });
+    clock.t = 300;
+    expect(input.brake()).toBe(true);
+    up({ id: 1, x: 100, y: 300, t: 300 });
+    expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(1);
+    input.dispose();
+  });
 });
 
 /**
