@@ -87,18 +87,7 @@ export function drawText(
   color: number = WHITE,
   scale = 1,
 ): void {
-  let cx = x;
-  for (const ch of text.toUpperCase()) {
-    const rows = glyphOf(ch);
-    const gw = glyphWidth(ch);
-    for (let j = 0; j < GLYPH_H; j++) {
-      const row = rows[j] ?? '';
-      for (let i = 0; i < gw; i++) {
-        if (row[i] === '1') fb.fillRect(cx + i * scale, y + j * scale, scale, scale, color);
-      }
-    }
-    cx += (gw + 1) * scale;
-  }
+  eachPixel(text, x, y, scale, (px, py) => fb.fillRect(px, py, scale, scale, color));
 }
 
 /** Draw text horizontally centred on x. */
@@ -113,7 +102,13 @@ export function drawTextCentered(
   drawText(fb, text, Math.round(cx - textWidth(text, scale) / 2), y, color, scale);
 }
 
-/** Text with a one pixel black halo, so it stays readable over trees and snow. */
+/**
+ * Text with an `edge` that follows the letters, so it stays readable over snow, trees and sky with no box behind it.
+ * Every glyph block paints the pixels around it in `edge` first (one pixel deep, two from scale 3 up), then the
+ * letters go on top. The edge fills the gaps inside and between the letters, so it must be the tone of the background
+ * the text is meant for (black under white text on the black slope, snow under dark text on the white one), never a
+ * contrast colour.
+ */
 export function drawTextHalo(
   fb: Framebuffer,
   text: string,
@@ -121,8 +116,44 @@ export function drawTextHalo(
   y: number,
   color: number = WHITE,
   scale = 1,
+  edge: number = OFF,
 ): void {
-  const w = textWidth(text, scale);
-  fb.fillRect(x - 1, y - 1, w + 2, GLYPH_H * scale + 2, OFF);
+  const e = Math.ceil(scale / 2);
+  eachPixel(text, x, y, scale, (px, py) =>
+    fb.fillRect(px - e, py - e, scale + 2 * e, scale + 2 * e, edge),
+  );
   drawText(fb, text, x, y, color, scale);
+}
+
+/** Outlined text (`drawTextHalo`) horizontally centred on x. */
+export function drawTextHaloCentered(
+  fb: Framebuffer,
+  text: string,
+  cx: number,
+  y: number,
+  color: number = WHITE,
+  scale = 1,
+  edge: number = OFF,
+): void {
+  drawTextHalo(fb, text, Math.round(cx - textWidth(text, scale) / 2), y, color, scale, edge);
+}
+
+/** Calls `fn` with the top left of every lit glyph block of `text`. */
+function eachPixel(
+  text: string,
+  x: number,
+  y: number,
+  scale: number,
+  fn: (px: number, py: number) => void,
+): void {
+  let cx = x;
+  for (const ch of text.toUpperCase()) {
+    const rows = glyphOf(ch);
+    const gw = glyphWidth(ch);
+    for (let j = 0; j < GLYPH_H; j++) {
+      const row = rows[j] ?? '';
+      for (let i = 0; i < gw; i++) if (row[i] === '1') fn(cx + i * scale, y + j * scale);
+    }
+    cx += (gw + 1) * scale;
+  }
 }

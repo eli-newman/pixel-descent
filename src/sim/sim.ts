@@ -126,7 +126,7 @@ export class Sim {
   sendItTime = 0;
   topSpeedSeen = 0;
   /** Current surface under the rider. */
-  readonly surface: Surface = { ice: false, drift: false };
+  readonly surface: Surface = { drift: false };
   /** The jump line being ridden, if any. */
   private readonly lines = new LineTracker();
   private crashVx = 0;

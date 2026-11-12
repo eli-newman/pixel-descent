@@ -11,19 +11,36 @@ import {
   riderIndex,
   type GearDef,
 } from '../state/progress';
-import { drawText, drawTextCentered, drawTextHalo, textWidth } from './font';
-import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
-import { GAUGE_BAR, gaugeRect, hudRect, riderBox } from './layout';
-import { paletteFor } from './palette';
+import { drawTextHalo, drawTextHaloCentered, textWidth } from './font';
+import { Framebuffer } from './framebuffer';
+import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
+import { MONO, paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
 
 const CX = W / 2;
 
-function panel(fb: Framebuffer, y0: number, y1: number): void {
-  fb.fillRect(8, y0, W - 16, y1 - y0, OFF);
-  fb.strokeRect(8, y0, W - 16, y1 - y0, WHITE);
-  fb.strokeRect(10, y0 + 2, W - 20, y1 - y0 - 4, WHITE);
+/**
+ * The UI colours of the frame being drawn (`Palette.ui`, `uiHot`, `uiEdge`), set at the start of every `renderUi`.
+ * Nothing in the UI sits on a box: the slope shows through everywhere, and every word and frame carries a one
+ * pixel edge in the slope's own tone, so it reads over trees, rocks and sky.
+ */
+let INK = MONO.ui;
+let HOT = MONO.uiHot;
+let EDGE = MONO.uiEdge;
+
+function frame(fb: Framebuffer, x: number, y: number, w: number, h: number, color: number): void {
+  fb.strokeRect(x - 1, y - 1, w + 2, h + 2, EDGE);
+  if (w > 2 && h > 2) fb.strokeRect(x + 1, y + 1, w - 2, h - 2, EDGE);
+  fb.strokeRect(x, y, w, h, color);
+}
+
+function text(fb: Framebuffer, t: string, x: number, y: number, color = INK, scale = 1): void {
+  drawTextHalo(fb, t, x, y, color, scale, EDGE);
+}
+
+function textC(fb: Framebuffer, t: string, cx: number, y: number, color = INK, scale = 1): void {
+  drawTextHaloCentered(fb, t, cx, y, color, scale, EDGE);
 }
 
 function labelOf(g: GameView, id: ButtonId): string {
@@ -92,20 +109,21 @@ function drawButton(
   selected = false,
 ): void {
   const y = bt.y;
-  const edge = bt.accent || selected ? YELLOW : WHITE;
-  fb.fillRect(bt.x, y, bt.w, bt.h, OFF);
-  fb.strokeRect(bt.x, y, bt.w, bt.h, edge);
-  if (focused) {
-    fb.strokeRect(bt.x + 2, y + 2, bt.w - 4, bt.h - 4, YELLOW);
-  }
+  const edge = bt.accent || selected ? HOT : INK;
+  frame(fb, bt.x, y, bt.w, bt.h, edge);
+  if (focused) frame(fb, bt.x + 2, y + 2, bt.w - 4, bt.h - 4, HOT);
   const label = labelOf(g, bt.id);
   const scale = bt.accent && bt.h >= 26 ? 2 : 1;
   const ty = y + Math.round((bt.h - 5 * scale) / 2);
-  drawTextCentered(fb, label, bt.x + bt.w / 2, ty, bt.accent || selected ? YELLOW : WHITE, scale);
+  textC(fb, label, bt.x + bt.w / 2, ty, bt.accent || selected ? HOT : INK, scale);
 }
 
 /** Heads-up display, title, pause and game over screens, all drawn into the low-res buffer. */
 export function renderUi(fb: Framebuffer, g: GameView): void {
+  const pal = paletteFor(g.settings.color);
+  INK = pal.ui;
+  HOT = pal.uiHot;
+  EDGE = pal.uiEdge;
   switch (g.phase) {
     case 'title':
       drawTitle(fb, g);
@@ -128,29 +146,25 @@ export function renderUi(fb: Framebuffer, g: GameView): void {
 function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   const big = g.settings.bigHud;
-  const rect = hudRect(big);
-  // A solid black block under the numbers: no snow flecks or flakes can touch the text.
-  fb.fillRect(0, 0, rect.w, rect.h, OFF);
-  fb.fillRect(rect.w, 0, 1, rect.h, OFF);
   const s1 = big ? 3 : 2;
   const s2 = big ? 2 : 1;
-  drawText(fb, String(g.sim.scoreValue), 4, 4, YELLOW, s1);
+  text(fb, String(g.sim.scoreValue), 4, 4, HOT, s1);
   let y = 4 + 5 * s1 + 3;
-  drawText(fb, `${sim.distM}M`, 4, y, WHITE, s2);
+  text(fb, `${sim.distM}M`, 4, y, INK, s2);
   y += 5 * s2 + 3;
-  drawText(fb, `BEST ${g.overallBest}`, 4, y, WHITE, s2);
+  text(fb, `BEST ${g.overallBest}`, 4, y, INK, s2);
 
   if (g.phase === 'playing' || g.phase === 'crashed') drawGauges(fb, g);
-  if (g.settings.muted) drawTextHalo(fb, 'MUTED', W - 26, H - 8);
+  if (g.settings.muted) text(fb, 'MUTED', W - 26, H - 8);
 
   const toast = g.toasts[0];
   if (toast && g.phase !== 'over') {
     const x = Math.round(CX - textWidth(toast.text) / 2);
     const ty = toastRow(g, big);
-    drawTextHalo(fb, toast.text, x, ty, toast.hot ? YELLOW : WHITE);
+    text(fb, toast.text, x, ty, toast.hot ? HOT : INK);
     if (toast.sub) {
       const sx = Math.round(CX - textWidth(toast.sub) / 2);
-      drawTextHalo(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? YELLOW : WHITE);
+      text(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? HOT : INK);
     }
   }
 }
@@ -203,13 +217,12 @@ function drawGauges(fb: Framebuffer, g: GameView): void {
   const gy = panel.y + 1;
   // speed bar: fills towards top speed, ticks show cruising speed
   const bw = GAUGE_BAR;
-  fb.fillRect(panel.x, panel.y, panel.w, panel.h, OFF);
-  drawText(fb, label, 4, gy, hot ? YELLOW : WHITE, sc);
-  drawText(fb, ms, 4 + textWidth(label, sc) + 4, gy, hot ? YELLOW : WHITE, sc);
+  text(fb, label, 4, gy, hot ? HOT : INK, sc);
+  text(fb, ms, 4 + textWidth(label, sc) + 4, gy, hot ? HOT : INK, sc);
   const by = gy + 5 * sc + 2;
-  fb.strokeRect(4, by, bw, 4, WHITE);
+  frame(fb, 4, by, bw, 4, INK);
   const fill = Math.round((bw - 2) * Math.min(1, sim.rider.speed / 340));
-  fb.fillRect(5, by + 1, fill, 2, hot ? YELLOW : WHITE);
+  fb.fillRect(5, by + 1, fill, 2, hot ? HOT : INK);
 
   if (!live) return;
   // combo meter: a bar that drains as the combo window runs out
@@ -218,10 +231,9 @@ function drawGauges(fb: Framebuffer, g: GameView): void {
     const x = Math.round(CX - w / 2);
     const y = toastRow(g, big) + comboGap(g, big);
     const label2 = `X${sim.score.combo}`;
-    drawTextHalo(fb, label2, x - textWidth(label2) - 4, y - 1, YELLOW);
-    fb.fillRect(x - 1, y - 2, w + 2, 8, OFF);
-    fb.strokeRect(x, y - 1, w, 6, YELLOW);
-    fb.fillRect(x + 1, y, Math.round((w - 2) * sim.comboLeft), 4, YELLOW);
+    text(fb, label2, x - textWidth(label2) - 4, y - 1, HOT);
+    frame(fb, x, y - 1, w, 6, HOT);
+    fb.fillRect(x + 1, y, Math.round((w - 2) * sim.comboLeft), 4, HOT);
   }
 }
 
@@ -251,27 +263,22 @@ function drawButtons(fb: Framebuffer, g: GameView, selected?: ButtonId): void {
 }
 
 function drawMain(fb: Framebuffer, g: GameView): void {
-  // title plate over the mountains
-  fb.fillRect(22, 10, W - 44, 46, OFF);
-  fb.strokeRect(22, 10, W - 44, 46, WHITE);
-  drawTextCentered(fb, 'POW', CX, 15, WHITE, 3);
-  drawTextCentered(fb, 'LINE', CX, 34, WHITE, 3);
-
-  panel(fb, 146, 316);
+  textC(fb, 'POW', CX, 15, INK, 3);
+  textC(fb, 'LINE', CX, 34, INK, 3);
   const best = g.overallBest;
-  drawTextCentered(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, WHITE, 2);
+  textC(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, INK, 2);
   drawButtons(fb, g);
   const daily = g.dailyBest;
-  drawTextCentered(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 279, WHITE);
+  textC(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 279, INK);
   const c = nextChallenge(g);
-  if (c) drawTextCentered(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, YELLOW);
-  drawTextCentered(
+  if (c) textC(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, HOT);
+  textC(
     fb,
     g.touch ? 'HOLD SIDE STEER  SWIPE SPIN OR FLIP' : 'A D STEER  SPACE TRICK  W S FLIP',
     CX,
     297,
   );
-  drawTextCentered(
+  textC(
     fb,
     g.touch ? 'TAP IN AIR GRAB  2 FINGERS BRAKE' : 'X GRAB  A+D BRAKE  P PAUSE  M SOUND',
     CX,
@@ -292,25 +299,24 @@ function nextChallenge(g: GameView): { name: string; value: number; target: numb
 }
 
 function drawScores(fb: Framebuffer, g: GameView): void {
-  panel(fb, 4, 316);
-  drawTextCentered(fb, 'TOP 10', CX, 12, WHITE, 2);
+  textC(fb, 'TOP 10', CX, 12, INK, 2);
   const daily = g.scoreTab === 'daily';
   drawButtons(fb, g, daily ? 'tabDaily' : 'tabTop');
-  drawTextCentered(fb, daily ? "TODAY'S COURSE" : 'YOUR BEST RUNS', CX, 62, YELLOW);
+  textC(fb, daily ? "TODAY'S COURSE" : 'YOUR BEST RUNS', CX, 62, HOT);
   const list = daily ? g.dailyRuns : g.topRuns;
   for (let i = 0; i < 10; i++) {
     const e = list[i];
     const y = 76 + i * 12;
-    drawText(fb, String(i + 1).padStart(2, ' '), 16, y, WHITE);
+    text(fb, String(i + 1).padStart(2, ' '), 16, y, INK);
     if (e) {
-      drawText(fb, String(e.score), 36, y, i === 0 ? YELLOW : WHITE);
-      drawText(fb, `${e.dist}M`, 86, y, WHITE);
-      drawText(fb, e.date.slice(5).replace('-', '/'), 128, y, WHITE);
+      text(fb, String(e.score), 36, y, i === 0 ? HOT : INK);
+      text(fb, `${e.dist}M`, 86, y, INK);
+      text(fb, e.date.slice(5).replace('-', '/'), 128, y, INK);
     } else {
-      drawText(fb, '-', 36, y, WHITE);
+      text(fb, '-', 36, y, INK);
     }
   }
-  drawTextCentered(fb, 'SCORES STAY ON THIS DEVICE', CX, 262);
+  textC(fb, 'SCORES STAY ON THIS DEVICE', CX, 262);
 }
 
 function gearRow(
@@ -323,10 +329,10 @@ function gearRow(
 ): void {
   const def = list[idx];
   if (!def) return;
-  drawTextCentered(fb, title, CX, y, WHITE);
-  drawTextCentered(fb, def.name, CX, y + 23, YELLOW, 1);
+  textC(fb, title, CX, y, INK);
+  textC(fb, def.name, CX, y + 23, HOT, 1);
   const unlocked = def.unlocked(g.progress);
-  drawTextCentered(fb, unlocked ? 'UNLOCKED' : def.need, CX, y + 36, unlocked ? WHITE : YELLOW);
+  textC(fb, unlocked ? 'UNLOCKED' : def.need, CX, y + 36, unlocked ? INK : HOT);
   void idx;
 }
 
@@ -354,8 +360,7 @@ function litBox(src: Framebuffer): { x0: number; y0: number; x1: number; y1: num
 }
 
 function drawGear(fb: Framebuffer, g: GameView): void {
-  panel(fb, 4, 316);
-  drawTextCentered(fb, 'GEAR', CX, 12, WHITE, 2);
+  textC(fb, 'GEAR', CX, 12, INK, 2);
   const skis = g.progress.gear.kit === 'skis';
   const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx, skis };
   const palette = paletteFor(g.settings.color);
@@ -392,29 +397,28 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   // The board looks are drawn on the skis too.
   gearRow(fb, g, skis ? 'SKIS' : 'BOARD', BOARDS, boardIndex(b), 150);
   gearRow(fb, g, 'RIDER', RIDERS, riderIndex(r), 200);
-  drawTextCentered(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
+  textC(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
 }
 
 function drawGoals(fb: Framebuffer, g: GameView): void {
-  panel(fb, 4, 316);
-  drawTextCentered(fb, 'GOALS', CX, 12, WHITE, 2);
-  drawText(fb, 'CHALLENGES', 16, 32, YELLOW);
+  textC(fb, 'GOALS', CX, 12, INK, 2);
+  text(fb, 'CHALLENGES', 16, 32, HOT);
   CHALLENGES.forEach((c, i) => {
     const y = 44 + i * 20;
     const v = Math.min(c.target, Math.floor(c.value(g.progress)));
     const done = challengeDone(c, g.progress);
-    drawText(fb, c.name, 16, y, done ? YELLOW : WHITE);
-    drawText(
+    text(fb, c.name, 16, y, done ? HOT : INK);
+    text(
       fb,
       done ? 'DONE' : `${v}/${c.target}`,
       W - 16 - textWidth(done ? 'DONE' : `${v}/${c.target}`),
       y,
-      WHITE,
+      INK,
     );
-    fb.strokeRect(16, y + 8, W - 32, 5, WHITE);
-    fb.fillRect(17, y + 9, Math.round(((W - 34) * v) / c.target), 3, done ? YELLOW : WHITE);
+    frame(fb, 16, y + 8, W - 32, 5, INK);
+    fb.fillRect(17, y + 9, Math.round(((W - 34) * v) / c.target), 3, done ? HOT : INK);
   });
-  drawText(fb, `ACHIEVEMENTS ${g.achievementCount}/${ACHIEVEMENTS.length}`, 16, 134, YELLOW);
+  text(fb, `ACHIEVEMENTS ${g.achievementCount}/${ACHIEVEMENTS.length}`, 16, 134, HOT);
   let firstOpen = '';
   ACHIEVEMENTS.forEach((a, i) => {
     const col = i % 2;
@@ -423,47 +427,39 @@ function drawGoals(fb: Framebuffer, g: GameView): void {
     if (!got && firstOpen === '') firstOpen = a.desc;
     const x = 16 + col * 80;
     const y = 148 + row * 14;
-    drawText(fb, got ? '*' : '-', x, y, got ? YELLOW : WHITE);
-    drawText(fb, a.name, x + 8, y, WHITE);
+    text(fb, got ? '*' : '-', x, y, got ? HOT : INK);
+    text(fb, a.name, x + 8, y, INK);
   });
-  drawTextCentered(
-    fb,
-    firstOpen !== '' ? `NEXT: ${firstOpen}` : 'ALL ACHIEVEMENTS EARNED',
-    CX,
-    240,
-    YELLOW,
-  );
+  textC(fb, firstOpen !== '' ? `NEXT: ${firstOpen}` : 'ALL ACHIEVEMENTS EARNED', CX, 240, HOT);
   drawButtons(fb, g);
 }
 
 function drawPause(fb: Framebuffer, g: GameView): void {
-  panel(fb, 50, 254);
-  drawTextCentered(fb, 'PAUSED', CX, 56, WHITE, 2);
+  textC(fb, 'PAUSED', CX, 56, INK, 2);
   drawButtons(fb, g);
   // The spin mode is fixed for a run, so a change made here waits for the next one.
   if (g.settings.manualSpin !== (g.sim.opts.manualSpin === true)) {
-    drawTextCentered(fb, 'SPIN MODE STARTS NEXT RUN', CX, 232, YELLOW);
+    textC(fb, 'SPIN MODE STARTS NEXT RUN', CX, 232, HOT);
   }
-  drawTextCentered(fb, 'P, ESC OR TAP TO RESUME', CX, 242, YELLOW);
+  textC(fb, 'P, ESC OR TAP TO RESUME', CX, 242, HOT);
 }
 
 function drawOver(fb: Framebuffer, g: GameView): void {
   const res = g.result;
   if (!res) return;
   const top = OVER_PANEL_TOP;
-  panel(fb, top, top + 164);
-  drawTextCentered(fb, g.crashWord, CX, top + 6, WHITE, 2);
-  drawTextCentered(fb, String(res.score), CX, top + 21, YELLOW, 3);
+  textC(fb, g.crashWord, CX, top + 6, INK, 2);
+  textC(fb, String(res.score), CX, top + 21, HOT, 3);
   if (res.newBest) {
-    drawTextCentered(fb, 'NEW BEST!', CX, top + 41, YELLOW);
+    textC(fb, 'NEW BEST!', CX, top + 41, HOT);
   } else {
-    drawTextCentered(fb, `BEST ${g.overallBest}`, CX, top + 41, WHITE);
+    textC(fb, `BEST ${g.overallBest}`, CX, top + 41, INK);
   }
   const sm = res.summary;
-  drawTextCentered(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
-  drawTextCentered(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);
+  textC(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
+  textC(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);
   const rank = res.rank;
-  drawTextCentered(fb, rank ? `RANK ${rank} ALL TIME` : 'NOT IN YOUR TOP 10', CX, top + 71, WHITE);
+  textC(fb, rank ? `RANK ${rank} ALL TIME` : 'NOT IN YOUR TOP 10', CX, top + 71, INK);
   // new achievements and gear take turns in one line
   const news: string[] = [
     ...res.achievements.map((a) => `GOAL: ${a.name}`),
@@ -471,16 +467,16 @@ function drawOver(fb: Framebuffer, g: GameView): void {
   ];
   if (news.length > 0) {
     const n = news[Math.floor(g.animT / 1.4) % news.length] ?? '';
-    drawTextCentered(fb, n, CX, top + 80, YELLOW);
+    textC(fb, n, CX, top + 80, HOT);
   }
   const buttons = menuButtons(g);
   for (let i = 0; i < buttons.length; i++) {
     const bt = buttons[i];
     if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus);
   }
-  drawTextCentered(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
+  textC(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
   const toast = g.toasts[0];
   if (toast) {
-    drawTextHalo(fb, toast.text, Math.round(CX - textWidth(toast.text) / 2), top - 10, YELLOW);
+    text(fb, toast.text, Math.round(CX - textWidth(toast.text) / 2), top - 10, HOT);
   }
 }

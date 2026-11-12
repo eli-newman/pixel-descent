@@ -28,7 +28,6 @@ export interface RideState {
   tuck: number;
   air: boolean;
   active: boolean;
-  ice: boolean;
   drift: boolean;
   /** 0..1 swing of the board into a plowing stop. */
   brake: number;
@@ -155,8 +154,8 @@ export class Sfx {
 
   /**
    * Called every frame. Wind rises in pitch and level with speed, and again with the straight-line
-   * tuck; the board hiss follows how hard the rider is carving and goes silent in the air; ice makes
-   * it brighter, a snowdrift muffles everything.
+   * tuck; the board hiss follows how hard the rider is carving and goes silent in the air; a snowdrift
+   * muffles everything.
    */
   ride(s: RideState): void {
     const ctx = this.ctx;
@@ -179,13 +178,10 @@ export class Sfx {
     bed.windFilter.Q.setTargetAtTime(0.35 + 0.45 * tuck, now, 0.2);
     const grounded = s.active && !s.air;
     bed.hiss.gain.setTargetAtTime(
-      grounded
-        ? (0.003 + 0.03 * sp * carve + 0.05 * s.brake * (0.3 + sp)) * muffle * (s.ice ? 0.6 : 1)
-        : 0,
+      grounded ? (0.003 + 0.03 * sp * carve + 0.05 * s.brake * (0.3 + sp)) * muffle : 0,
       now,
       0.08,
     );
-    bed.hissFilter.frequency.setTargetAtTime(s.ice ? 3200 : 1500, now, 0.1);
     bed.rumble.gain.setTargetAtTime(grounded ? (0.015 + 0.035 * sp) * muffle : 0, now, 0.15);
     if (
       grounded &&

@@ -52,15 +52,13 @@ export function cullAbove(world: WorldLists, top: number): void {
 /** Fill `out` with the surface under the rider's board at (x, y). */
 export function surfaceAt(patches: readonly Patch[], x: number, y: number, out: Surface): void {
   const cy = y + 8;
-  out.ice = false;
   out.drift = false;
   for (const p of patches) {
     if (Math.abs(p.y - cy) > p.ry) continue;
     const dx = (x - p.x) / p.rx;
     const dy = (cy - p.y) / p.ry;
     if (dx * dx + dy * dy >= 1) continue;
-    if (p.kind === 'ice') out.ice = true;
-    else out.drift = true;
+    out.drift = true;
   }
 }
 

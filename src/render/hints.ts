@@ -2,19 +2,19 @@ import { H, HINT_RUNS, W } from '../core/config';
 import { isPebble } from '../sim/collision';
 import type { GameView } from '../state/view';
 import { drawTextHalo, textWidth } from './font';
-import { Framebuffer, YELLOW } from './framebuffer';
+import { Framebuffer } from './framebuffer';
+import { paletteFor } from './palette';
 import { gaugeRect, hudRect } from './layout';
 import { getSprite } from './sprites';
 
 /** What each kind of thing on the slope does, in the words its label shows. Pebbles get none: they are only decoration. */
-type HintKind = 'tree' | 'dead' | 'rock' | 'bush' | 'ice' | 'drift' | 'star';
+type HintKind = 'tree' | 'dead' | 'rock' | 'bush' | 'drift' | 'star';
 
 export const HINT_TEXT: Readonly<Record<HintKind, string>> = {
   tree: 'CRASH',
   dead: 'CRASH',
   rock: 'CRASH',
   bush: 'SLOWS',
-  ice: 'ICE',
   drift: 'DEEP SNOW',
   star: '+30',
 };
@@ -36,9 +36,10 @@ interface Spot {
 /**
  * On a player's first runs, put a small label over the next thing of each kind below the rider: what it
  * does, not what it is called. One label per kind, never over the score, never on top of another label.
- * The labels ride with the slope and do not blink.
+ * The labels ride with the slope and do not blink. `top` is how many rows the slope buffer holds above the frame:
+ * labels are placed in frame rows and drawn that much lower.
  */
-export function drawHints(fb: Framebuffer, g: GameView): void {
+export function drawHints(fb: Framebuffer, g: GameView, top = 0): void {
   if (!hintsOn(g)) return;
   const sim = g.sim;
   const cam = g.camYi;
@@ -58,6 +59,7 @@ export function drawHints(fb: Framebuffer, g: GameView): void {
 
   const hud = hudRect(g.settings.bigHud);
   const gauge = gaugeRect(g.settings.bigHud);
+  const pal = paletteFor(g.settings.color);
   const used: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
   // The rarer, non-lethal things win a crowded spot: the slope is full of trees to learn CRASH from.
   const rank = (s: Readonly<Spot>): number => (HINT_TEXT[s.kind] === 'CRASH' ? 1 : 0);
@@ -74,6 +76,6 @@ export function drawHints(fb: Framebuffer, g: GameView): void {
     if (used.some((u) => u.x0 < box.x1 && box.x0 < u.x1 && u.y0 < box.y1 && box.y0 < u.y1))
       continue;
     used.push(box);
-    drawTextHalo(fb, text, x0, y0, YELLOW);
+    drawTextHalo(fb, text, x0, y0 + top, pal.uiHot, 1, pal.uiEdge);
   }
 }

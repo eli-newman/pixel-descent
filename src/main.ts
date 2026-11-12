@@ -4,7 +4,8 @@ import { Game } from './state/game';
 import { Input } from './platform/input';
 import { Loop } from './platform/loop';
 import { normalizeSeed } from './core/rng';
-import { Framebuffer } from './render/framebuffer';
+import { cssColor, Framebuffer } from './render/framebuffer';
+import { paletteFor } from './render/palette';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
 import { shareResult } from './platform/shareDom';
@@ -28,9 +29,6 @@ const stage = required<HTMLElement>('stage');
 const pauseBtn = required<HTMLButtonElement>('pause-btn');
 const safeProbe = required<HTMLElement>('safe');
 const status = required<HTMLElement>('status');
-// The slope layer has one spare row at the bottom, revealed as it slides up by a fraction of a pixel.
-canvas.width = W;
-canvas.height = H + 1;
 uiCanvas.width = W;
 uiCanvas.height = H;
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -100,14 +98,34 @@ const game = new Game(
   normalizeSeed(params.get('seed')),
 );
 
-const fb = new Framebuffer(W, H + 1);
-const scene = new SceneRenderer(fb);
-const image = new ImageData(fb.data, W, H + 1);
+/**
+ * The slope layer: the 180x320 frame plus `above` and `below` rows of slope so it reaches the screen's edges on a
+ * tall phone, and one spare row at the bottom, revealed as it slides up by a fraction of a pixel. Rebuilt when the
+ * layout asks for a different number of rows.
+ */
+let fb = new Framebuffer(W, H + 1);
+let scene = new SceneRenderer(fb);
+let image = new ImageData(fb.data, W, fb.h);
+let slopeRows = { above: 0, below: 0 };
+canvas.width = W;
+canvas.height = fb.h;
+
+function sizeSlope(above: number, below: number): void {
+  if (above === slopeRows.above && below === slopeRows.below) return;
+  slopeRows = { above, below };
+  fb = new Framebuffer(W, above + H + below + 1);
+  scene = new SceneRenderer(fb, above);
+  image = new ImageData(fb.data, W, fb.h);
+  canvas.width = W;
+  canvas.height = fb.h;
+}
+
 const uiFb = new Framebuffer(W, H);
 const uiImage = new ImageData(uiFb.data, W, H);
 /** Device pixels per logical pixel, from the last layout. */
 let scale = 1;
 let shift = '';
+let colorOn: boolean | null = null;
 
 function render(alpha: number): void {
   game.setBlend(alpha);
@@ -122,9 +140,17 @@ function render(alpha: number): void {
     canvas.style.transform = next;
   }
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
+  if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
+  const color = game.settings.color;
+  if (color !== colorOn) {
+    colorOn = color;
+    // Wherever the slope does not reach (beside it on a wide screen, under a browser's toolbar), the page is its snow.
+    document.body.style.background = cssColor(paletteFor(color).snow);
+    stage.dataset['color'] = color ? 'on' : 'off';
+  }
 }
 
-/** CSS px of black kept around the picture on touch screens. */
+/** CSS px kept clear around the frame on a touch screen that it does not fill (held sideways, or a tablet). */
 const TOUCH_MARGIN = 10;
 
 function layout(): void {
@@ -135,21 +161,27 @@ function layout(): void {
     bottom: parseFloat(css.paddingBottom) || 0,
     left: parseFloat(css.paddingLeft) || 0,
   };
-  // On a touch screen keep the picture clear of rounded corners and bezels, so the score is never clipped.
-  const margin = window.matchMedia('(pointer: coarse)').matches ? TOUCH_MARGIN : 0;
+  // A phone fills its screen edge to edge. Elsewhere on a touch screen keep the picture clear of rounded corners.
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  const dpr = window.devicePixelRatio || 1;
   // Not innerWidth or innerHeight: iOS Safari shrinks those while the page is zoomed, which would shrink the picture too.
   const fit = fitCanvas(
     document.documentElement.clientWidth,
     document.documentElement.clientHeight,
-    window.devicePixelRatio || 1,
+    dpr,
     safe,
-    margin,
+    touch ? TOUCH_MARGIN : 0,
+    touch,
   );
   scale = fit.scale;
   stage.style.width = `${fit.cssW}px`;
   stage.style.height = `${fit.cssH}px`;
   stage.style.left = `${fit.left}px`;
   stage.style.top = `${fit.top}px`;
+  sizeSlope(fit.above, fit.below);
+  // The slope canvas starts `above` rows over the frame and runs on past it, at the frame's scale.
+  canvas.style.top = `${(-fit.above * fit.scale) / dpr}px`;
+  canvas.style.height = `${(fb.h * fit.scale) / dpr}px`;
 }
 
 window.addEventListener('resize', layout);

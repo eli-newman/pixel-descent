@@ -47,7 +47,7 @@ const LANDING_MARGIN = 110;
 const FIRST_RAMP_Y = START_Y + FIRST_JUMP_Y;
 /** Clear ground kept between a jump (lip or landing end) and a risk lane. */
 const LANE_JUMP_PAD = 60;
-/** Ice and drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
+/** Drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
 const JUMP_PATCH_PAD = 40;
 /**
  * After the last kicker of a line the clear ground runs on until a rider who landed on the line's x can
@@ -431,7 +431,10 @@ export class Spawner {
     return segs;
   }
 
-  /** Plan ice patches and snowdrifts up to `limit`. */
+  /**
+   * Plan snowdrifts up to `limit`. Ice patches were removed (tag `archive/ice`), but every draw they made is still
+   * made in the same order, so drifts, jumps and lanes stay where they were and a shared link opens the same course.
+   */
   private planPatches(limit: number): void {
     while (this.nextPatchY <= limit) {
       const y = Math.round(this.nextPatchY + this.patchRng.range(0, 120));
@@ -444,15 +447,14 @@ export class Spawner {
       const slack = this.patchRng.range(0, 24);
       const variant = this.patchRng.int(0, 3);
       this.planFeatures(y + ry + 80);
+      if (ice) continue;
       if (this.nearLane(y, ry + 30)) continue;
-      // Keep the run-up and the lip of every jump clean: no ice or drift drawn over it or slowing the rider into it.
+      // Keep the run-up and the lip of every jump clean: no drift drawn over it or slowing the rider into it.
       if (this.nearJump(y, ry + JUMP_PATCH_PAD)) continue;
       const distM = (y - START_Y) / PX_PER_M;
       const centre = this.pathCenter(y);
       let x: number;
       if (onPath) {
-        // Ice on the path only where the path is nearly straight, so a loose board can still hold the line.
-        if (ice && Math.abs(this.pathCenter(y - ry) - this.pathCenter(y + ry)) > 12) continue;
         x = centre + side * Math.min(8, slack / 3);
       } else {
         x = centre + side * (pathHalfWidth(distM) + rx + 4 + slack);
@@ -460,7 +462,7 @@ export class Spawner {
       if (x < rx * 0.5 || x > W - rx * 0.5) x = Math.min(W - rx * 0.5, Math.max(rx * 0.5, x));
       this.patches.push({
         id: this.nextPatchId++,
-        kind: ice ? 'ice' : 'drift',
+        kind: 'drift',
         x: Math.round(x),
         y,
         rx,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { slideTransform, fitCanvas } from '../src/platform/viewport';
+import { fitCanvas, MAX_EXTRA_ROWS, slideTransform } from '../src/platform/viewport';
 
 describe('fitCanvas', () => {
   it('uses the largest whole scale that fits and centres the picture', () => {
@@ -33,6 +33,42 @@ describe('fitCanvas', () => {
     expect(fit.top).toBeGreaterThanOrEqual(47);
     expect(fit.top + fit.cssH).toBeLessThanOrEqual(844 - 34);
     expect(fit.cssH + 20).toBeLessThanOrEqual(844 - 47 - 34);
+  });
+});
+
+describe('fitCanvas on a phone (fill)', () => {
+  const safe = { top: 59, right: 0, bottom: 34, left: 0 };
+
+  it('fills the whole width, starts just under the notch, and the slope reaches both ends of the screen', () => {
+    const fit = fitCanvas(393, 852, 3, safe, 10, true);
+    expect(fit.left).toBe(0);
+    expect(fit.cssW).toBeCloseTo(393, 9);
+    expect(fit.scale).toBeCloseTo((393 * 3) / W, 9);
+    expect(fit.top).toBe(59);
+    // the frame fits above the home bar, so nothing in the HUD is ever under it
+    expect(fit.top + fit.cssH).toBeLessThanOrEqual(852 - 34);
+    // whole rows of slope cover the screen above and below the frame
+    expect((fit.above * fit.scale) / 3).toBeGreaterThanOrEqual(fit.top);
+    expect((fit.below * fit.scale) / 3).toBeGreaterThanOrEqual(852 - fit.top - fit.cssH);
+    expect(((fit.above - 1) * fit.scale) / 3).toBeLessThan(fit.top);
+  });
+
+  it('keeps whole, crisp pixels where filling the width would push the frame past the screen', () => {
+    // A tablet held upright is wider than the frame's shape: fit by height, as on desktop.
+    const fit = fitCanvas(820, 1180, 2, safe, 10, true);
+    expect(Number.isInteger(fit.scale)).toBe(true);
+    expect(fit.left).toBeGreaterThan(0);
+  });
+
+  it('never draws more than MAX_EXTRA_ROWS of slope past the frame', () => {
+    const fit = fitCanvas(100, 5000, 1, undefined, 0, true);
+    expect(fit.below).toBe(MAX_EXTRA_ROWS);
+  });
+
+  it('extends the slope over the leftover rows on desktop too', () => {
+    const fit = fitCanvas(1000, 1000, 1);
+    expect(fit.above).toBe(Math.ceil((1000 - H * 3) / 2 / 3));
+    expect(fit.below).toBe(fit.above);
   });
 });
 

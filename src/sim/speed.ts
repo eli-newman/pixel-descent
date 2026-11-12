@@ -71,7 +71,7 @@ export interface SpeedEnv {
   surface: Surface;
 }
 
-/** Ground speed update: tuck acceleration, carve scrub, drifts and ice. */
+/** Ground speed update: tuck acceleration, carve scrub and drifts. */
 export function stepSpeed(r: RiderState, dt: number, env: SpeedEnv): void {
   const c = Math.abs(r.hx);
   const { cruise, top, surface } = env;
@@ -93,7 +93,7 @@ export function stepSpeed(r: RiderState, dt: number, env: SpeedEnv): void {
     }
     r.speed = Math.min(target, r.speed + a * dt);
   } else if (r.speed > target) {
-    const rate = (SCRUB_BASE + SCRUB_HX * c) * (surface.ice ? 0.35 : 1);
+    const rate = SCRUB_BASE + SCRUB_HX * c;
     r.speed += (target - r.speed) * Math.min(1, rate * dt);
   }
   if (r.speed > MAX_SPEED) r.speed = MAX_SPEED;

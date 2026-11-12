@@ -21,7 +21,7 @@ import {
   startTrick,
 } from '../src/sim/tricks';
 
-const flat: Surface = { ice: false, drift: false };
+const flat: Surface = { drift: false };
 
 function run(
   r: RiderState,
@@ -108,18 +108,11 @@ describe('speed model', () => {
     expect(r.speed).toBeGreaterThan(cruiseSpeed(800));
   });
 
-  it('turns a snowdrift into a crawl and keeps ice slippery', () => {
+  it('turns a snowdrift into a crawl', () => {
     const drift = createRider();
     drift.speed = topSpeed(800);
-    run(drift, 0, 3, 800, { ice: false, drift: true });
+    run(drift, 0, 3, 800, { drift: true });
     expect(drift.speed).toBeLessThan(cruiseSpeed(800) * 0.6);
-
-    const normal = createRider();
-    const ice = createRider();
-    run(normal, 1, 0.25);
-    run(ice, 1, 0.25, 800, { ice: true, drift: false });
-    // the icy board is slower to come round to the new heading
-    expect(Math.abs(ice.hx)).toBeLessThan(Math.abs(normal.hx));
   });
 
   it('maps the tuck to a score multiplier from x1 to x2.5', () => {

@@ -185,6 +185,8 @@ export interface Sprite {
   shadow: Int16Array;
   /** The highest row of the sprite (most negative y), where a label can sit above it. */
   top: number;
+  /** The lowest row of the sprite or its shadow, which falls below the base, for culling at the screen's top edge. */
+  bottom: number;
 }
 
 function flatten(points: Iterable<Pt>): Int16Array {
@@ -232,10 +234,12 @@ export function getSprite(kind: ObstacleKind, size: number, variant: number): Sp
     }
     // A pebble lies flat, so it casts no shadow: only things that stand up out of the snow do.
     const flat = isPebble(kind, size);
+    const shadow = flat ? new Int16Array(0) : castShadow(pts);
     sprite = {
       pts: flatten(pts),
-      shadow: flat ? new Int16Array(0) : castShadow(pts),
+      shadow,
       top: Math.min(0, ...pts.map(([, y]) => y)),
+      bottom: Math.max(0, ...pts.map(([, y]) => y), ...shadow.filter((_, i) => i % 2 === 1)),
     };
     cache.set(key, sprite);
   }

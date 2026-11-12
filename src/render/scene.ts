@@ -1,4 +1,4 @@
-import { H, W } from '../core/config';
+import { W } from '../core/config';
 import type { DeepReadonly, GameView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
@@ -28,7 +28,14 @@ export class SceneRenderer {
   /** The palette of the frame being drawn, set at the start of every render. */
   private pal: Palette = MONO;
 
-  constructor(private readonly fb: Framebuffer) {}
+  /**
+   * `top` is how many rows of slope the buffer holds above the 180x320 frame (the HUD's frame), so that on a tall
+   * phone the slope reaches the screen's edges. The frame starts at row `top` and the buffer runs on below it.
+   */
+  constructor(
+    private readonly fb: Framebuffer,
+    private readonly top = 0,
+  ) {}
 
   render(g: GameView): Framebuffer {
     const fb = this.fb;
@@ -37,7 +44,8 @@ export class SceneRenderer {
     this.pal = pal;
     fb.clear(pal.snow);
     const tuck = g.phase === 'playing' || g.phase === 'paused' ? sim.tuck : 0;
-    const cam = g.camYi;
+    // The camera's row is the frame's top row; the buffer starts `top` rows above it.
+    const cam = g.camYi - this.top;
     const toY = (y: number): number => y - cam;
 
     if (!pal.color) this.drawSky(cam);
@@ -55,8 +63,8 @@ export class SceneRenderer {
     // Cast shadows first, so every sprite sits on top of every shadow.
     for (const o of sim.obstacles) {
       const sy = toY(o.y);
-      if (sy < -4 || sy > H + 60) continue;
       const sp = getSprite(o.kind, o.size, o.variant);
+      if (this.offscreen(sp, sy)) continue;
       for (let i = 0; i < sp.shadow.length; i += 2) {
         const dx = sp.shadow[i] ?? 0;
         const dy = sp.shadow[i + 1] ?? 0;
@@ -83,15 +91,15 @@ export class SceneRenderer {
 
     this.drawParticles(g, cam);
     // Labels sit on things in the world, so they scroll with it.
-    drawHints(fb, g);
+    drawHints(fb, g, this.top);
     return fb;
   }
 
   private drawObstacle(g: GameView, o: DeepReadonly<Obstacle>, cam: number): void {
     const sy = o.y - cam;
-    if (sy < -4 || sy > H + 60) return;
-    const pal = this.pal;
     const sp = getSprite(o.kind, o.size, o.variant);
+    if (this.offscreen(sp, sy)) return;
+    const pal = this.pal;
     const sim = g.sim;
     // The obstacle that ended the run flashes yellow so the player sees what hit them.
     const hit = sim.killer === o && sim.crashed && Math.floor(sim.crashT * 7) % 2 === 0;
@@ -118,6 +126,14 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * Whether a sprite with its base on row `sy` misses the buffer entirely: its shadow falls below the base and it rises
+   * above it, so both ends count, with a pixel to spare for the snow edging of colour sprites.
+   */
+  private offscreen(sp: { readonly top: number; readonly bottom: number }, sy: number): boolean {
+    return sy + sp.bottom < -2 || sy + sp.top > this.fb.h + 2;
+  }
+
   private drawSky(cam: number): void {
     if (cam > 40) return;
     for (let i = 0; i < 14; i++) {
@@ -129,6 +145,8 @@ export class SceneRenderer {
 
   private drawBackdrop(cam: number): void {
     if (cam > BACKDROP_H) return;
+    // Above the start area (only ever seen past the top of the frame on a tall phone) the sky carries on.
+    if (cam < 0) this.fb.fillRect(0, 0, W, -cam, this.pal.sky);
     const b = this.pal.color ? this.backdrop.color : this.backdrop.mono;
     for (let k = 0; k < b.colors.length; k++) {
       this.fb.put(b.pts[k * 2] ?? 0, (b.pts[k * 2 + 1] ?? 0) - cam, b.colors[k]);
@@ -138,7 +156,7 @@ export class SceneRenderer {
   /** Little dashes of snow texture, scattered by a stateless hash so they need no storage. */
   private drawFlecks(cam: number, hud: Readonly<Rect>): void {
     const r0 = Math.floor(cam / 16) - 1;
-    const r1 = Math.floor((cam + H) / 16) + 1;
+    const r1 = Math.floor((cam + this.fb.h) / 16) + 1;
     for (let row = r0; row <= r1; row++) {
       if (row * 16 < 130) continue;
       for (let k = 0; k < 2; k++) {
@@ -146,43 +164,30 @@ export class SceneRenderer {
         const y = row * 16 + Math.floor(hash2(row, k + 3) * 16);
         const len = 2 + Math.floor(hash2(row, k + 9) * 3);
         // keep the area behind the score free of snow texture, so the numbers stay readable
-        if (y - cam < hud.h + 2 && x + len > 0 && x < hud.w + 4) continue;
+        if (y - cam - this.top < hud.h + 2 && x + len > 0 && x < hud.w + 4) continue;
         for (let j = 0; j < len; j++) this.fb.put(x + j, y - cam, this.pal.fleck);
       }
     }
   }
 
-  /** Ice is a bare, glinting oval with a dashed rim; a snowdrift is rows of little humps. Neither looks like an obstacle. */
+  /** A snowdrift is rows of little humps. It does not look like an obstacle. */
   private drawPatch(p: DeepReadonly<Patch>, cam: number): void {
     const cy = p.y - cam;
-    if (cy + p.ry < -2 || cy - p.ry > H + 2) return;
+    if (cy + p.ry < -2 || cy - p.ry > this.fb.h + 2) return;
     const fb = this.fb;
     const pal = this.pal;
-    const ice = p.kind === 'ice';
     for (let dy = -p.ry; dy <= p.ry; dy++) {
       const k = Math.sqrt(Math.max(0, 1 - (dy / p.ry) * (dy / p.ry)));
       const hw = Math.round(p.rx * k);
-      const wy = p.y + dy;
       for (let dx = -hw; dx <= hw; dx++) {
-        const x = p.x + dx;
-        const edge = dx === -hw || dx === hw || Math.abs(dy) === p.ry;
-        const y = cy + dy;
-        if (ice) {
-          // dashed outline plus diagonal glints
-          if (edge && (x + wy) % 3 !== 0) fb.put(x, y, pal.iceRim);
-          else if (!edge && (x - wy + 4096) % 11 === p.variant && (x + wy) % 2 === 0) {
-            fb.put(x, y, pal.iceGlint);
-          } else if (!edge && pal.iceFill !== null) fb.put(x, y, pal.iceFill);
-        } else {
-          // deep snow: staggered rows of little humps, open in between, so it reads as soft lumpy
-          // snow and never as a solid mound you could hit (or as the flat, glinting ice)
-          const row = Math.floor((dy + p.ry) / 4);
-          const ly = (dy + p.ry) % 4;
-          const lx = (dx + p.rx + row * 3 + p.variant) % 6;
-          const inner = Math.abs(dx) < hw - 1 && dy < p.ry;
-          const hump = (ly === 1 && lx >= 1 && lx <= 3) || (ly === 2 && (lx === 0 || lx === 4));
-          if (inner && hump) fb.put(x, y, pal.drift);
-        }
+        // deep snow: staggered rows of little humps, open in between, so it reads as soft lumpy
+        // snow and never as a solid mound you could hit
+        const row = Math.floor((dy + p.ry) / 4);
+        const ly = (dy + p.ry) % 4;
+        const lx = (dx + p.rx + row * 3 + p.variant) % 6;
+        const inner = Math.abs(dx) < hw - 1 && dy < p.ry;
+        const hump = (ly === 1 && lx >= 1 && lx <= 3) || (ly === 2 && (lx === 0 || lx === 4));
+        if (inner && hump) fb.put(p.x + dx, cy + dy, pal.drift);
       }
     }
   }
@@ -196,7 +201,7 @@ export class SceneRenderer {
    */
   private drawCliff(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = Math.round(r.y - cam);
-    if (ly < -40 || ly > H + 12) return;
+    if (ly < -40 || ly > this.fb.h + 12) return;
     if (this.pal.color) {
       drawColorCliff(this.fb, r, ly);
       return;
@@ -264,7 +269,8 @@ export class SceneRenderer {
    */
   private drawRamp(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = r.y - cam;
-    if (ly < -RAMP_ROWS - 2 || ly > H + RAMP_HEIGHT + 2) return;
+    // The face rises RAMP_ROWS above the lip and the shadow falls below it.
+    if (ly < -RAMP_ROWS - 2 || ly - RAMP_ROWS > this.fb.h + 2) return;
     if (this.pal.color) {
       drawColorKicker(this.fb, r, cam);
       return;
@@ -317,7 +323,7 @@ export class SceneRenderer {
   private drawPickups(g: GameView, cam: number): void {
     for (const p of g.sim.pickups) {
       const y = p.y - cam;
-      if (y < -5 || y > H + 5) continue;
+      if (y < -5 || y > this.fb.h + 5) continue;
       for (const [dx, dy] of STAR) this.fb.put(p.x + dx, y + dy, this.pal.star);
     }
   }

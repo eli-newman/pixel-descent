@@ -62,9 +62,9 @@ export interface CliffSeg {
   dy: number;
 }
 
-export type PatchKind = 'ice' | 'drift';
+export type PatchKind = 'drift';
 
-/** An ellipse of ice (loose steering) or snowdrift (heavy, slow snow). Not an obstacle: it never kills. */
+/** An ellipse of snowdrift (heavy, slow snow). Not an obstacle: it never kills. */
 export interface Patch {
   id: number;
   kind: PatchKind;

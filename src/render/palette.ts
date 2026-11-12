@@ -3,13 +3,16 @@ import { GREY, OFF, pack, SOFT_GREY, WHITE, YELLOW } from './framebuffer';
 /**
  * Every colour the world is drawn in, by what it is. `MONO` is the original white-on-black look and maps each role
  * to the colour that role always had, so the black and white game is pixel for pixel what it was. `COLOR` is the
- * daytime look: white snow, dark green pines, grey and brown rock, a grey track. The UI (HUD blocks, panels,
- * buttons, labels) keeps its black cards in both, so text reads the same on white snow.
+ * daytime look: white snow, dark green pines, grey and brown rock, a grey track. The UI sits straight on the slope
+ * with no cards behind it, so its words and frames take their colours from here too: white and yellow on the black
+ * slope, dark ink and red on the white one, each with a one pixel edge in the opposite tone.
  */
 export interface Palette {
   readonly color: boolean;
   /** The snow itself: what the frame is cleared to and what "erase" paints. */
   readonly snow: number;
+  /** The sky above the start area's backdrop. */
+  readonly sky: number;
   /** Little dashes of texture on the snow. */
   readonly fleck: number;
   /** The dithered cast shadow of anything standing up. */
@@ -24,11 +27,7 @@ export interface Palette {
   readonly powder: number;
   readonly spray: number;
   readonly star: number;
-  /** Ice: the dashed rim and the glints. Deep snow: its humps. */
-  readonly iceRim: number;
-  readonly iceGlint: number;
-  /** Fill inside the ice rim, or null for none (the snow shows through). */
-  readonly iceFill: number | null;
+  /** Deep snow: its humps. */
   readonly drift: number;
   /** The rider: body, board or skis, and the one pixel halo that keeps them readable on anything. */
   readonly riderBody: number;
@@ -36,11 +35,16 @@ export interface Palette {
   readonly riderHalo: number;
   /** The yellow flash on whatever ended the run. */
   readonly hit: number;
+  /** UI words and frames, the highlighted ones (score, PLAY, labels), and the edge drawn around both. */
+  readonly ui: number;
+  readonly uiHot: number;
+  readonly uiEdge: number;
 }
 
 export const MONO: Palette = {
   color: false,
   snow: OFF,
+  sky: OFF,
   fleck: WHITE,
   shadow: WHITE,
   track: WHITE,
@@ -50,14 +54,14 @@ export const MONO: Palette = {
   powder: WHITE,
   spray: WHITE,
   star: WHITE,
-  iceRim: WHITE,
-  iceGlint: WHITE,
-  iceFill: null,
   drift: WHITE,
   riderBody: WHITE,
   riderBoard: WHITE,
   riderHalo: OFF,
   hit: YELLOW,
+  ui: WHITE,
+  uiHot: YELLOW,
+  uiEdge: OFF,
 };
 
 /** Colour mode only: the named colours of the daytime slope. */
@@ -72,8 +76,6 @@ export const C = {
   powder: pack(0xc9, 0xd2, 0xdc),
   spray: pack(0xb3, 0xc0, 0xcf),
   star: pack(0xe8, 0xa3, 0x17),
-  ice: pack(0xc6, 0xe6, 0xf5),
-  iceRim: pack(0x6f, 0xb3, 0xd6),
   drift: pack(0xa9, 0xb9, 0xcc),
   // packed snow on a kicker, lit to shaded, and its orange marker poles
   snowLit: pack(0xfb, 0xfd, 0xff),
@@ -117,11 +119,15 @@ export const C = {
   riderBody: pack(0xd8, 0x38, 0x3a),
   riderBoard: pack(0x2d, 0x5f, 0xa8),
   riderHalo: pack(0x1b, 0x1f, 0x2a),
+  // the UI on the white slope: dark ink, and a warm red for what matters most
+  ink: pack(0x1b, 0x22, 0x33),
+  inkHot: pack(0xc8, 0x32, 0x2b),
 } as const;
 
 export const COLOR: Palette = {
   color: true,
   snow: C.snow,
+  sky: C.skyHigh,
   fleck: C.fleck,
   shadow: C.shadow,
   track: C.track,
@@ -131,14 +137,14 @@ export const COLOR: Palette = {
   powder: C.powder,
   spray: C.spray,
   star: C.star,
-  iceRim: C.iceRim,
-  iceGlint: C.white,
-  iceFill: C.ice,
   drift: C.drift,
   riderBody: C.riderBody,
   riderBoard: C.riderBoard,
   riderHalo: C.riderHalo,
   hit: YELLOW,
+  ui: C.ink,
+  uiHot: C.inkHot,
+  uiEdge: C.snow,
 };
 
 /** The palette for a colour setting. */

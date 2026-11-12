@@ -6,6 +6,14 @@ export function pack(r: number, g: number, b: number): number {
     : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;
 }
 
+/** A packed colour (`pack`) as a CSS colour, for the page around the canvas. */
+export function cssColor(c: number): string {
+  const r = LITTLE_ENDIAN ? c & 255 : (c >>> 24) & 255;
+  const g = LITTLE_ENDIAN ? (c >>> 8) & 255 : (c >>> 16) & 255;
+  const b = LITTLE_ENDIAN ? (c >>> 16) & 255 : (c >>> 8) & 255;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 /** The game is white on black, with one yellow accent for UI and greys, only for the shadow of the board's track. */
 export const OFF = pack(0, 0, 0);
 export const WHITE = pack(255, 255, 255);

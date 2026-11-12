@@ -7,14 +7,14 @@ export interface Rect {
 }
 
 /**
- * The block at the top left that holds the score. It is drawn on solid black, and snow texture and
- * weather are kept out of it, so the numbers never fight with flecks.
+ * The block at the top left that holds the score. It has no box behind it, but the slope's snow texture is
+ * kept out of it, so the numbers never fight with flecks.
  */
 export function hudRect(big: boolean): Rect {
   return big ? { w: 92, h: 62 } : { w: 62, h: 34 };
 }
 
-/** Speed gauge bar width, and the black panel behind the speed read-out at the bottom left. */
+/** Speed gauge bar width, and the area of the speed read-out at the bottom left (labels keep out of it). */
 export const GAUGE_BAR = 52;
 export function gaugeRect(big: boolean): { x: number; y: number; w: number; h: number } {
   const sc = big ? 2 : 1;

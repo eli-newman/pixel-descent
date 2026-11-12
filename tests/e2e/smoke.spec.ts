@@ -81,12 +81,25 @@ test.describe('mobile', () => {
     expect(await page.locator('#stage').boundingBox()).toEqual(before);
   });
 
+  test('fills the phone screen edge to edge with the slope', async ({ page }) => {
+    await page.goto('/');
+    await expectTitleDrawn(page);
+    const stage = await page.locator('#stage').boundingBox();
+    const slope = await page.locator('#game').boundingBox();
+    if (!stage || !slope) throw new Error('No layout');
+    // The frame (HUD and taps) is as wide as the screen, and the slope runs past it to the top and bottom edges.
+    expect(stage.x).toBe(0);
+    expect(stage.width).toBeCloseTo(390, 1);
+    expect(slope.y).toBeLessThanOrEqual(0);
+    expect(slope.y + slope.height).toBeGreaterThanOrEqual(844);
+  });
+
   test('plays and pauses with touch', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/');
     await expectTitleDrawn(page);
 
-    // The stage is the picture: the slope canvas inside it is a row taller and slides.
+    // The stage is the frame that takes taps: the slope canvas runs past it and slides.
     const box = await page.locator('#stage').boundingBox();
     if (!box) throw new Error('The stage has no box');
     expect(box.x).toBeGreaterThanOrEqual(0);

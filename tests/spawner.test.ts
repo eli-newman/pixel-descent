@@ -132,7 +132,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(kickers / all).toBeLessThan(0.9);
   });
 
-  it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of ice and drifts', () => {
+  it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of drifts', () => {
     const offenders: string[] = [];
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
@@ -160,7 +160,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         for (const p of batch.patches) {
           if (Math.abs(p.y - r.y) < p.ry + 40)
             offenders.push(`${seed} ${r.id}: patch ${p.id} at the lip`);
-          // A line's run-ups are plain snow too, so ice or a drift never breaks it.
+          // A line's run-ups are plain snow too, so a drift never breaks it.
           if (r.lineIdx < r.lineLen - 1 && p.y + p.ry > r.y && p.y - p.ry < r.landEnd)
             offenders.push(`${seed} ${r.id}: patch ${p.id} inside a line`);
         }
@@ -255,7 +255,6 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
       const batch = s.advance(START_Y + 40000);
-      expect(batch.patches.some((p) => p.kind === 'ice')).toBe(true);
       expect(batch.patches.some((p) => p.kind === 'drift')).toBe(true);
       for (const p of batch.patches) {
         expect(s.laneAt(p.y)).toBeNull();
@@ -283,7 +282,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('stays winnable for a bot that is slowed by drifts and ice (no forced speed)', () => {
+  it('stays winnable for a bot that is slowed by drifts (no forced speed)', () => {
     for (const seed of seeds.slice(0, 6)) {
       const sim = new Sim(seed);
       runBot(sim, 4000);
@@ -316,7 +315,7 @@ describe('mountain world is stable', () => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
       // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
       // ids started at 1,000,000, so those are put back here. Refreshed on purpose only when the course
-      // design changes (last: a jump every ~85 m instead of ~150 m, jump lines, lanes fitted between jumps), never to get green.
+      // design changes (last: ice removed, with every other object where it was; drift ids moved up), never to get green.
       const old = {
         obstacles: b.obstacles,
         pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
@@ -327,7 +326,7 @@ describe('mountain world is stable', () => {
       };
       return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
-    expect(fp('alpha')).toEqual([2402853442, 726, 28]);
-    expect(fp('k3m9qa')).toEqual([1247566756, 674, 31]);
+    expect(fp('alpha')).toEqual([103026582, 726, 28]);
+    expect(fp('k3m9qa')).toEqual([1418971424, 674, 31]);
   });
 });

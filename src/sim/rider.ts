@@ -72,9 +72,8 @@ export function stepRider(r: RiderState, steer: number, dt: number, env: StepEnv
   r.spinDone = 0;
   r.grabDone = false;
   r.landed = false;
-  const ice = env.surface.ice && !r.air;
-  const stiff = STIFFNESS * (r.air ? 0.5 : ice ? 0.38 : 1);
-  const damp = DAMPING * (ice ? 0.5 : 1);
+  const stiff = STIFFNESS * (r.air ? 0.5 : 1);
+  const damp = DAMPING;
   // The arrows never steer in the air: the flight path is fixed by the launch. They only turn the
   // rider, which (assisted) keeps a spin going a half turn at a time or (manual) turns him freely.
   const manual = env.manual === true;

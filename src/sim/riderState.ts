@@ -3,8 +3,6 @@ import { START_X, START_Y } from '../core/config';
 export type Face = 1 | -1;
 
 export interface Surface {
-  /** Looser steering, and carving scrubs less speed. */
-  ice: boolean;
   /** Heavy snow: no tuck, speed bleeds off towards a crawl. */
   drift: boolean;
 }

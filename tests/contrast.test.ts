@@ -101,6 +101,17 @@ describe('high contrast', () => {
     expect(allowed.has(rgb(SOFT_GREY).join())).toBe(false);
   });
 
+  it('reads the colour UI straight off the snow and sky: dark ink, a red that still passes, and the CSS to match', () => {
+    const snow = rgb(C.snow);
+    expect(COLOR.uiEdge).toBe(C.snow);
+    expect(ratio(rgb(C.ink), snow)).toBeGreaterThanOrEqual(7);
+    expect(ratio(rgb(C.inkHot), snow)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(rgb(C.ink), rgb(C.sky))).toBeGreaterThanOrEqual(7);
+    const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+    const hex = /--ink:\s*#([0-9a-f]{6})/i.exec(css)?.[1] ?? '';
+    expect([0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16))).toEqual(rgb(C.ink));
+  });
+
   it('keeps the colour slope readable: a soft track you can still see, and every hazard and jump marker stands out', () => {
     const snow = rgb(COLOR.snow);
     // The track is snow pressed down, so it stays close to the snow, but its shadow wall always shows.
