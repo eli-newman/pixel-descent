@@ -277,33 +277,33 @@ describe('touch gestures', () => {
     input.dispose();
   });
 
-  it('rolling from one thumb to the other steers the new way, and back, with no brake', () => {
-    // Hold right, put the left thumb down before lifting the right one: the way a phone player turns.
+  it('a second thumb brakes however late it lands, and lifting either one turns that way at once', () => {
+    // Hold right, put the left thumb down a while later: the slip slide. Then roll off one thumb to turn.
     const clock = { t: 0 };
     const { input, down, up } = touchInput(clock);
     down({ id: 1, x: 300, y: 300, t: 0 });
     clock.t = 300;
     expect(input.steer()).toBe(1);
-    down({ id: 2, x: 100, y: 300, t: 300 });
-    expect(input.brake()).toBe(false);
-    // The right side keeps steering until the new thumb is clearly a hold, then the left one wins.
-    expect(input.steer()).toBe(1);
-    clock.t = 400;
-    expect(input.steer()).toBe(-1);
-    expect(input.brake()).toBe(false);
-    // Lift the left thumb: the right one, still down, steers again at once.
-    up({ id: 2, x: 100, y: 300, t: 600 });
+    down({ id: 2, x: 100, y: 300, t: 600 });
     clock.t = 600;
-    expect(input.steer()).toBe(1);
-    // And roll over again, this time lifting the old thumb first: the newest one keeps steering.
-    down({ id: 3, x: 90, y: 300, t: 900 });
-    clock.t = 1000;
-    expect(input.steer()).toBe(-1);
-    up({ id: 1, x: 300, y: 300, t: 1100 });
-    clock.t = 1100;
-    expect(input.steer()).toBe(-1);
+    expect(input.brake()).toBe(true);
+    expect(input.steer()).toBe(0);
+    clock.t = 900;
+    expect(input.brake()).toBe(true);
+    expect(input.steer()).toBe(0);
+    // Lift the right thumb: the left one, still down, steers left at once.
+    up({ id: 1, x: 300, y: 300, t: 900 });
     expect(input.brake()).toBe(false);
-    up({ id: 3, x: 90, y: 300, t: 1200 });
+    expect(input.steer()).toBe(-1);
+    // A right thumb lands again: brake. Lift the left one: right at once.
+    down({ id: 3, x: 310, y: 300, t: 1200 });
+    clock.t = 1200;
+    expect(input.brake()).toBe(true);
+    up({ id: 2, x: 100, y: 300, t: 1400 });
+    clock.t = 1400;
+    expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(1);
+    up({ id: 3, x: 310, y: 300, t: 1500 });
     expect(input.steer()).toBe(0);
     input.dispose();
   });

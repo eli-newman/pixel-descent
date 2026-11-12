@@ -65,13 +65,6 @@ const HOLD_MS = 80;
  * side only after TAP_MS.
  */
 const TAP_MS = 160;
-/**
- * Two fingers brake only when they land together, the second within BRAKE_MS of the first. A second finger that
- * lands later is a thumb rolling over to steer the other way: the newest finger steers, and when it lifts, the
- * finger still down takes over at once.
- */
-const BRAKE_MS = 150;
-
 function preventDefault(e: Event): void {
   e.preventDefault();
 }
@@ -96,9 +89,9 @@ export class Input {
   private trail: Array<{ x: number; y: number; t: number }> = [];
   /** True once this touch has been used for a swipe, so it fires once. */
   private swiped = false;
-  /** Fingers currently down (touch only), oldest first: where each one is and when it landed. */
-  private readonly touches = new Map<number, { x: number; t: number }>();
-  /** Two fingers landed together and are still down: the brake. */
+  /** Fingers currently down (touch only), oldest first, and where each one is. */
+  private readonly touches = new Map<number, { x: number }>();
+  /** Two fingers are down: the brake (slip slide). */
   private braking = false;
   private readonly cleanup: Array<() => void> = [];
   /** Set by the game each step: the rider is airborne, so a quick tap is a grab. */
@@ -170,7 +163,7 @@ export class Input {
     if (!on) this.tapGrab = false;
   }
 
-  /** True while a left key and a right key are held together, or two fingers that landed together are down. */
+  /** True while a left key and a right key are held together, or two fingers are down. */
   brake(): boolean {
     if (this.braking) return true;
     let l = false;
@@ -242,21 +235,19 @@ export class Input {
 
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.target instanceof Element && e.target.closest('button')) return;
-    const now = this.now();
     if (e.pointerType === 'touch') {
       this.usingTouch = true;
-      // Landing together with a finger that is still down is the brake; landing later is a thumb taking over.
-      for (const other of this.touches.values()) if (now - other.t <= BRAKE_MS) this.braking = true;
-      this.touches.set(e.pointerId, { x: e.clientX, t: now });
+      // A second finger is the brake, however long after the first it lands.
+      if (this.touches.size > 0) this.braking = true;
+      this.touches.set(e.pointerId, { x: e.clientX });
     }
     const p = this.logical(e.clientX, e.clientY);
     this.queue.push({ kind: 'tap', x: p.x, y: p.y });
     // Any touch lets go of a touch grab at once: waiting for it to lift would land the rider still grabbing.
     const letGo = this.tapGrab;
     this.tapGrab = false;
-    // While braking, extra fingers change nothing. Otherwise the newest finger steers, so rolling from one thumb to
-    // the other turns the other way at once; the old side keeps steering until the new touch holds its side.
-    if (this.pointerId !== null && (this.braking || e.pointerType !== 'touch')) return;
+    // Extra fingers only brake: the first finger stays the tracked one until it lifts (see takeOver).
+    if (this.pointerId !== null) return;
     this.pointerId = e.pointerId;
     this.pointerX0 = e.clientX;
     this.pointerY0 = e.clientY;
@@ -271,7 +262,7 @@ export class Input {
     const rect = this.canvas.getBoundingClientRect();
     this.holdT0 = this.now();
     this.holdSide = e.clientX < rect.left + rect.width / 2 ? -1 : 1;
-    if (this.touches.size <= 1) this.pointerSteer = 0;
+    this.pointerSteer = 0;
   };
 
   /** Start holding the touched side once the touch has stayed still for HOLD_MS, or moved without a flick for SWIPE_MS. */
@@ -344,8 +335,9 @@ export class Input {
   };
 
   /**
-   * The steering finger lifted while another is still down (a thumb rolled back, or one finger of the brake lifted):
-   * the newest finger left steers its side at once. It has been held all along, so it is a hold, never a flick.
+   * The tracked finger lifted while another is still down (one finger of the brake lifted, often a thumb rolling over
+   * to turn the other way): the newest finger left steers its side at once. It has been held all along, so it is a
+   * hold, never a flick.
    */
   private takeOver(): void {
     let id: number | null = null;
