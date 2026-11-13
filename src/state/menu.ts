@@ -46,25 +46,29 @@ function b(id: ButtonId, x: number, y: number, w: number, h: number, accent = fa
   return { id, x, y, w, h, accent };
 }
 
+/**
+ * The title's grid is wider than the other menus' (80 px buttons, 8 px from the edges), so even SOUND OFF fits at
+ * twice the font size; the score and gear tabs share it.
+ */
 const TITLE: UiButton[] = [
-  b('play', 14, 172, 152, 26, true),
-  b('daily', 14, 202, 74, MIN_TOUCH),
-  b('color', 92, 202, 74, MIN_TOUCH),
-  b('scores', 14, 228, 74, MIN_TOUCH),
-  b('gear', 92, 228, 74, MIN_TOUCH),
-  b('goals', 14, 254, 74, MIN_TOUCH),
-  b('sound', 92, 254, 74, MIN_TOUCH),
+  b('play', 8, 172, 164, 26, true),
+  b('daily', 8, 202, 80, MIN_TOUCH),
+  b('color', 92, 202, 80, MIN_TOUCH),
+  b('scores', 8, 228, 80, MIN_TOUCH),
+  b('gear', 92, 228, 80, MIN_TOUCH),
+  b('goals', 8, 254, 80, MIN_TOUCH),
+  b('sound', 92, 254, 80, MIN_TOUCH),
 ];
 
 const SCORES: UiButton[] = [
-  b('tabTop', 14, 34, 74, MIN_TOUCH),
-  b('tabDaily', 92, 34, 74, MIN_TOUCH),
+  b('tabTop', 8, 34, 80, MIN_TOUCH),
+  b('tabDaily', 92, 34, 80, MIN_TOUCH),
   b('back', 14, 286, 152, 26, true),
 ];
 
 const GEAR: UiButton[] = [
-  b('snowboard', 14, 34, 74, MIN_TOUCH),
-  b('skis', 92, 34, 74, MIN_TOUCH),
+  b('snowboard', 8, 34, 80, MIN_TOUCH),
+  b('skis', 92, 34, 80, MIN_TOUCH),
   b('boardPrev', 14, 164, 28, 24),
   b('boardNext', 138, 164, 28, 24),
   b('riderPrev', 14, 214, 28, 24),

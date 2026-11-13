@@ -101,11 +101,13 @@ describe('high contrast', () => {
     expect(allowed.has(rgb(SOFT_GREY).join())).toBe(false);
   });
 
-  it('reads the colour UI straight off the snow and sky: dark ink, a red that still passes, and the CSS to match', () => {
+  it('reads the colour UI straight off the snow and sky: dark ink, yellow with a dark edge, and the CSS to match', () => {
     const snow = rgb(C.snow);
     expect(COLOR.uiEdge).toBe(C.snow);
     expect(ratio(rgb(C.ink), snow)).toBeGreaterThanOrEqual(7);
-    expect(ratio(rgb(C.inkHot), snow)).toBeGreaterThanOrEqual(4.5);
+    expect(COLOR.uiHot).toBe(YELLOW);
+    expect(COLOR.uiHotEdge).toBe(C.ink);
+    expect(ratio(rgb(YELLOW), rgb(C.ink))).toBeGreaterThanOrEqual(7);
     expect(ratio(rgb(C.ink), rgb(C.sky))).toBeGreaterThanOrEqual(7);
     const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
     const hex = /--ink:\s*#([0-9a-f]{6})/i.exec(css)?.[1] ?? '';

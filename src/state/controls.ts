@@ -15,6 +15,9 @@ export interface ControlsHost {
   readonly overReady: boolean;
   /** The rider is in the air: input treats a quick tap as a grab. */
   readonly airborne: boolean;
+  /** A tutorial lesson is stopping the run: the next tap or key goes on. */
+  readonly lesson: object | null;
+  dismissLesson(): void;
   begin(): void;
   newRun(seed: string, play?: boolean): void;
   togglePause(): void;
@@ -81,9 +84,29 @@ export class Controls {
 
   handleInput(): void {
     for (const item of this.deps.input.drain()) {
+      if (this.onLesson(item.kind === 'tap' ? null : item.action)) continue;
       if (item.kind === 'tap') this.handleTap(item.x, item.y);
       else this.handleAction(item.action);
     }
+  }
+
+  /**
+   * Under a tutorial lesson a tap, Space, Enter or a trick key goes on (once the lesson has been up long enough),
+   * and nothing else but pause, mute and the like reaches the run. True when the item was used here.
+   */
+  private onLesson(action: Action | null): boolean {
+    if (!this.playing || !this.host.lesson) return false;
+    if (
+      action === null ||
+      action === 'start' ||
+      action === 'trick' ||
+      action === 'up' ||
+      action === 'down'
+    ) {
+      this.host.dismissLesson();
+      return true;
+    }
+    return false;
   }
 
   private handleTap(x: number, y: number): void {

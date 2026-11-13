@@ -38,21 +38,44 @@ async function expectPhase(page: Page, phase: string): Promise<void> {
   await expect(page.locator('#stage')).toHaveAttribute('data-phase', phase);
 }
 
+async function expectLesson(page: Page, on: boolean): Promise<void> {
+  await expect(page.locator('#stage')).toHaveAttribute('data-lesson', on ? 'on' : 'off');
+}
+
+/** A lesson takes a tap or Space only once it has been up long enough to read (LESSON_GUARD in core/config.ts). */
+async function afterLessonGuard(page: Page): Promise<void> {
+  await page.waitForTimeout(600);
+}
+
 async function expectTitleDrawn(page: Page): Promise<void> {
   await expectPhase(page, 'title');
   expect((await readCanvas(page)).colours).toBeGreaterThan(1);
 }
 
 test.describe('desktop', () => {
-  test('plays and pauses with the keyboard', async ({ page }) => {
+  test('plays and pauses with the keyboard, after the first-run lesson', async ({ page }) => {
     const errors = watchErrors(page);
     await page.goto('/');
     await expectTitleDrawn(page);
 
+    // A first visit: the run starts on the steering lesson and holds still under it.
     await page.keyboard.press('Space');
     await expectPhase(page, 'playing');
+    await expectLesson(page, true);
+    const held = await readCanvas(page);
+    await afterLessonGuard(page);
+    expect((await readCanvas(page)).sum).toBe(held.sum);
+    await page.keyboard.press('Space');
+    await expectLesson(page, false);
     const first = await readCanvas(page);
     await expect.poll(async () => (await readCanvas(page)).sum).not.toBe(first.sum);
+    // and it is not shown again on the next visit
+    await page.reload();
+    await expectTitleDrawn(page);
+    await page.keyboard.press('Space');
+    await expectPhase(page, 'playing');
+    await page.waitForTimeout(300);
+    await expectLesson(page, false);
 
     await page.keyboard.press('KeyP');
     await expectPhase(page, 'paused');
@@ -92,6 +115,19 @@ test.describe('mobile', () => {
     expect(stage.width).toBeCloseTo(390, 1);
     expect(slope.y).toBeLessThanOrEqual(0);
     expect(slope.y + slope.height).toBeGreaterThanOrEqual(844);
+    // Drawn crisp at a whole scale inside the canvas, at least as sharp as the screen, and fitted smoothly by the page.
+    const backing = await page.evaluate(() => {
+      const c = document.querySelector<HTMLCanvasElement>('#game');
+      return {
+        w: c?.width ?? 0,
+        dpr: window.devicePixelRatio,
+        look: c ? getComputedStyle(c).imageRendering : '',
+      };
+    });
+    expect(backing.w % 180).toBe(0);
+    expect(backing.w).toBeGreaterThanOrEqual(390 * backing.dpr);
+    expect(backing.w).toBeLessThan(390 * backing.dpr + 180);
+    expect(backing.look).toBe('auto');
   });
 
   test('plays and pauses with touch', async ({ page }) => {
@@ -99,7 +135,7 @@ test.describe('mobile', () => {
     await page.goto('/');
     await expectTitleDrawn(page);
 
-    // The stage is the frame that takes taps: the slope canvas runs past it and slides.
+    // The stage is the frame that takes taps: the slope canvas covers the whole screen.
     const box = await page.locator('#stage').boundingBox();
     if (!box) throw new Error('The stage has no box');
     expect(box.x).toBeGreaterThanOrEqual(0);
@@ -109,6 +145,10 @@ test.describe('mobile', () => {
       box.y + (PLAY.y / 320) * box.height,
     );
     await expectPhase(page, 'playing');
+    await expectLesson(page, true);
+    await afterLessonGuard(page);
+    await page.touchscreen.tap(195, 600);
+    await expectLesson(page, false);
 
     await page.locator('#pause-btn').tap();
     await expectPhase(page, 'paused');

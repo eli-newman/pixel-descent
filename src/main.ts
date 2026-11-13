@@ -6,13 +6,15 @@ import { Loop } from './platform/loop';
 import { normalizeSeed } from './core/rng';
 import { cssColor, Framebuffer } from './render/framebuffer';
 import { paletteFor } from './render/palette';
+import { lessonTarget } from './render/lesson';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
 import { shareResult } from './platform/shareDom';
 import { analyticsConfig, DEBUG_SCRIPT, noTracker, startWebAnalytics } from './platform/analytics';
 import { shareEvent } from './state/telemetry';
 import { Store } from './state/storage';
-import { fitCanvas, slideTransform } from './platform/viewport';
+import { fitCanvas, type Fit } from './platform/viewport';
+import { SharpCanvas, sharpScale, slideRows, slopeBox } from './platform/present';
 
 /** Analytics settings baked in by `vite.config.ts`: null unless built on Vercel or with `VITE_ANALYTICS=1`. */
 declare const __ANALYTICS__: { debug: boolean; vercelConfig: string } | null;
@@ -29,13 +31,9 @@ const stage = required<HTMLElement>('stage');
 const pauseBtn = required<HTMLButtonElement>('pause-btn');
 const safeProbe = required<HTMLElement>('safe');
 const status = required<HTMLElement>('status');
-uiCanvas.width = W;
-uiCanvas.height = H;
-const ctx = canvas.getContext('2d', { alpha: false });
-const uiCtx = uiCanvas.getContext('2d');
-if (!ctx || !uiCtx) throw new Error('2D canvas is not supported');
-ctx.imageSmoothingEnabled = false;
-uiCtx.imageSmoothingEnabled = false;
+const wash = required<HTMLElement>('wash');
+const slopeLayer = new SharpCanvas(canvas);
+const uiLayer = new SharpCanvas(uiCanvas);
 
 const store = new Store();
 const sfx = new Sfx();
@@ -99,16 +97,14 @@ const game = new Game(
 );
 
 /**
- * The slope layer: the 180x320 frame plus `above` and `below` rows of slope so it reaches the screen's edges on a
- * tall phone, and one spare row at the bottom, revealed as it slides up by a fraction of a pixel. Rebuilt when the
- * layout asks for a different number of rows.
+ * The slope: the 180x320 frame plus `above` and `below` rows of slope so it reaches the screen's edges on a tall phone,
+ * and one spare row at the bottom, revealed as it slides up by the camera's fraction of a pixel. Rebuilt when the layout
+ * asks for a different number of rows.
  */
 let fb = new Framebuffer(W, H + 1);
 let scene = new SceneRenderer(fb);
 let image = new ImageData(fb.data, W, fb.h);
 let slopeRows = { above: 0, below: 0 };
-canvas.width = W;
-canvas.height = fb.h;
 
 function sizeSlope(above: number, below: number): void {
   if (above === slopeRows.above && below === slopeRows.below) return;
@@ -116,38 +112,53 @@ function sizeSlope(above: number, below: number): void {
   fb = new Framebuffer(W, above + H + below + 1);
   scene = new SceneRenderer(fb, above);
   image = new ImageData(fb.data, W, fb.h);
-  canvas.width = W;
-  canvas.height = fb.h;
 }
 
 const uiFb = new Framebuffer(W, H);
 const uiImage = new ImageData(uiFb.data, W, H);
-/** Device pixels per logical pixel, from the last layout. */
-let scale = 1;
-let shift = '';
+/** The last layout, and the whole-number scale both layers are drawn at inside their canvases. */
+let fit: Fit = fitCanvas(W, H, 1);
+let sharp = 1;
 let colorOn: boolean | null = null;
 
+/** Both layers go through `SharpCanvas`: crisp at any scale, and the slope's slide is drawn into its own pixels. */
 function render(alpha: number): void {
   game.setBlend(alpha);
   scene.render(game);
   uiFb.clear(0);
   renderUi(uiFb, game);
-  ctx?.putImageData(image, 0, 0);
-  uiCtx?.putImageData(uiImage, 0, 0);
-  const next = slideTransform(game.camFrac, scale, window.devicePixelRatio || 1);
-  if (next !== shift) {
-    shift = next;
-    canvas.style.transform = next;
-  }
-  if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
-  if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
   const color = game.settings.color;
   if (color !== colorOn) {
     colorOn = color;
-    // Wherever the slope does not reach (beside it on a wide screen, under a browser's toolbar), the page is its snow.
+    // Wherever the slope does not reach (beside it on a wide screen), the page is its snow.
     document.body.style.background = cssColor(paletteFor(color).snow);
     stage.dataset['color'] = color ? 'on' : 'off';
   }
+  slopeLayer.draw(image, slideRows(game.camFrac, sharp));
+  uiLayer.draw(uiImage);
+  if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
+  if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
+  const lesson = game.lesson ? 'on' : 'off';
+  if (stage.dataset['lesson'] !== lesson) stage.dataset['lesson'] = lesson;
+  const hole = washHole();
+  if (hole !== washClip) {
+    washClip = hole;
+    wash.style.clipPath = hole;
+  }
+}
+
+let washClip = '';
+
+/** A tutorial lesson's fade leaves the thing it is about clear: the whole screen minus that box, in CSS px. */
+function washHole(): string {
+  const box = game.lesson ? lessonTarget(game) : null;
+  if (!box) return '';
+  const k = fit.cssW / W;
+  const x = fit.left + box.x * k;
+  const y = fit.top + box.y * k;
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  return `path(evenodd, 'M0 0H${vw}V${vh}H0Z M${x} ${y}h${box.w * k}v${box.h * k}h${-box.w * k}Z')`;
 }
 
 /** CSS px kept clear around the frame on a touch screen that it does not fill (held sideways, or a tablet). */
@@ -164,24 +175,28 @@ function layout(): void {
   // A phone fills its screen edge to edge. Elsewhere on a touch screen keep the picture clear of rounded corners.
   const touch = window.matchMedia('(pointer: coarse)').matches;
   const dpr = window.devicePixelRatio || 1;
+  const viewW = document.documentElement.clientWidth;
+  const viewH = document.documentElement.clientHeight;
   // Not innerWidth or innerHeight: iOS Safari shrinks those while the page is zoomed, which would shrink the picture too.
-  const fit = fitCanvas(
-    document.documentElement.clientWidth,
-    document.documentElement.clientHeight,
-    dpr,
-    safe,
-    touch ? TOUCH_MARGIN : 0,
-    touch,
-  );
-  scale = fit.scale;
+  fit = fitCanvas(viewW, viewH, dpr, safe, touch ? TOUCH_MARGIN : 0, touch);
   stage.style.width = `${fit.cssW}px`;
   stage.style.height = `${fit.cssH}px`;
   stage.style.left = `${fit.left}px`;
   stage.style.top = `${fit.top}px`;
   sizeSlope(fit.above, fit.below);
-  // The slope canvas starts `above` rows over the frame and runs on past it, at the frame's scale.
-  canvas.style.top = `${(-fit.above * fit.scale) / dpr}px`;
-  canvas.style.height = `${(fb.h * fit.scale) / dpr}px`;
+  sharp = sharpScale(fit.scale);
+  slopeLayer.resize(W, fb.h, sharp);
+  uiLayer.resize(W, H, sharp);
+  // The slope starts `above` rows over the frame and runs on past it, at the frame's scale. The page fits each canvas
+  // to its box, smoothly when the scale is fractional.
+  const box = slopeBox(fit, dpr, fb.h);
+  canvas.style.left = `${box.left}px`;
+  canvas.style.top = `${box.top}px`;
+  canvas.style.width = `${box.width}px`;
+  canvas.style.height = `${box.height}px`;
+  const crisp = sharp === fit.scale ? 'pixelated' : 'auto';
+  canvas.style.imageRendering = crisp;
+  uiCanvas.style.imageRendering = crisp;
 }
 
 window.addEventListener('resize', layout);

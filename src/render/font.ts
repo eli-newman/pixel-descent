@@ -125,17 +125,23 @@ export function drawTextHalo(
   drawText(fb, text, x, y, color, scale);
 }
 
-/** Outlined text (`drawTextHalo`) horizontally centred on x. */
-export function drawTextHaloCentered(
+/**
+ * Text with a drop shadow in `shadow`, down and to the right by about half a letter pixel. For light letters on a
+ * light background (yellow on white snow): a full outline would fill the two pixel gaps inside letters at twice the
+ * size, while a shadow leaves every gap half open and still draws the letter's shape.
+ */
+export function drawTextShadow(
   fb: Framebuffer,
   text: string,
-  cx: number,
+  x: number,
   y: number,
-  color: number = WHITE,
-  scale = 1,
-  edge: number = OFF,
+  color: number,
+  scale: number,
+  shadow: number,
 ): void {
-  drawTextHalo(fb, text, Math.round(cx - textWidth(text, scale) / 2), y, color, scale, edge);
+  const o = Math.ceil(scale / 2);
+  drawText(fb, text, x + o, y + o, shadow, scale);
+  drawText(fb, text, x, y, color, scale);
 }
 
 /** Calls `fn` with the top left of every lit glyph block of `text`. */

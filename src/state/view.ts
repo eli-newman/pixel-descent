@@ -5,6 +5,7 @@ import type { Phase, Screen } from './menu';
 import type { Progress } from './progress';
 import type { RunResult } from './runReport';
 import type { ScoreEntry, Settings } from './storage';
+import type { Lesson } from './tutorial';
 
 /** Readonly all the way down. Functions stay callable, so give views data, not mutating methods. */
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -86,4 +87,6 @@ export interface GameView {
   readonly boardIdx: number;
   readonly riderIdx: number;
   readonly crashWord: string;
+  /** The tutorial lesson stopping the run, or null. */
+  readonly lesson: DeepReadonly<Lesson> | null;
 }

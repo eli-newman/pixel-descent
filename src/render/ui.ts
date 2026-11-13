@@ -11,9 +11,10 @@ import {
   riderIndex,
   type GearDef,
 } from '../state/progress';
-import { drawTextHalo, drawTextHaloCentered, textWidth } from './font';
+import { drawTextHalo, drawTextShadow, textWidth } from './font';
 import { Framebuffer } from './framebuffer';
 import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
+import { LESSON_LINE, lessonTarget, lessonTop } from './lesson';
 import { MONO, paletteFor } from './palette';
 import { drawRider, type RiderStyle } from './riderSprite';
 import type { RiderPose } from '../sim/pose';
@@ -21,26 +22,41 @@ import type { RiderPose } from '../sim/pose';
 const CX = W / 2;
 
 /**
- * The UI colours of the frame being drawn (`Palette.ui`, `uiHot`, `uiEdge`), set at the start of every `renderUi`.
- * Nothing in the UI sits on a box: the slope shows through everywhere, and every word and frame carries a one
- * pixel edge in the slope's own tone, so it reads over trees, rocks and sky.
+ * The UI colours of the frame being drawn (`Palette.ui`, `uiHot` and their edges), set at the start of every
+ * `renderUi`. Nothing in the UI sits on a box: the slope shows through everywhere, and every word and frame carries
+ * an edge that sets it off from the slope, so it reads over trees, rocks and sky.
  */
 let INK = MONO.ui;
 let HOT = MONO.uiHot;
 let EDGE = MONO.uiEdge;
+let HOT_EDGE = MONO.uiHotEdge;
+let HOT_SMALL = MONO.uiHotSmall;
+let HOT_SHADOW = MONO.uiHotShadow;
+
+/** A highlight at the smallest font size is `uiHotSmall`: in colour a dark edge would fill its letters in. */
+function sized(color: number, scale: number): number {
+  return color === HOT && scale === 1 ? HOT_SMALL : color;
+}
+
+function edgeOf(color: number): number {
+  return color === HOT ? HOT_EDGE : EDGE;
+}
 
 function frame(fb: Framebuffer, x: number, y: number, w: number, h: number, color: number): void {
-  fb.strokeRect(x - 1, y - 1, w + 2, h + 2, EDGE);
-  if (w > 2 && h > 2) fb.strokeRect(x + 1, y + 1, w - 2, h - 2, EDGE);
+  const edge = edgeOf(color);
+  fb.strokeRect(x - 1, y - 1, w + 2, h + 2, edge);
+  if (w > 2 && h > 2) fb.strokeRect(x + 1, y + 1, w - 2, h - 2, edge);
   fb.strokeRect(x, y, w, h, color);
 }
 
 function text(fb: Framebuffer, t: string, x: number, y: number, color = INK, scale = 1): void {
-  drawTextHalo(fb, t, x, y, color, scale, EDGE);
+  const c = sized(color, scale);
+  if (c === HOT && HOT_SHADOW) drawTextShadow(fb, t, x, y, c, scale, HOT_EDGE);
+  else drawTextHalo(fb, t, x, y, c, scale, edgeOf(c));
 }
 
 function textC(fb: Framebuffer, t: string, cx: number, y: number, color = INK, scale = 1): void {
-  drawTextHaloCentered(fb, t, cx, y, color, scale, EDGE);
+  text(fb, t, Math.round(cx - textWidth(t, scale) / 2), y, color, scale);
 }
 
 function labelOf(g: GameView, id: ButtonId): string {
@@ -65,7 +81,7 @@ function labelOf(g: GameView, id: ButtonId): string {
     case 'tabDaily':
       return 'TODAY';
     case 'snowboard':
-      return 'SNOWBOARD';
+      return 'BOARD';
     case 'skis':
       return 'SKIS';
     case 'boardPrev':
@@ -106,14 +122,14 @@ function drawButton(
   g: GameView,
   bt: Readonly<UiButton>,
   focused: boolean,
-  selected = false,
+  selected: boolean,
+  scale: number,
 ): void {
   const y = bt.y;
   const edge = bt.accent || selected ? HOT : INK;
   frame(fb, bt.x, y, bt.w, bt.h, edge);
   if (focused) frame(fb, bt.x + 2, y + 2, bt.w - 4, bt.h - 4, HOT);
   const label = labelOf(g, bt.id);
-  const scale = bt.accent && bt.h >= 26 ? 2 : 1;
   const ty = y + Math.round((bt.h - 5 * scale) / 2);
   textC(fb, label, bt.x + bt.w / 2, ty, bt.accent || selected ? HOT : INK, scale);
 }
@@ -124,6 +140,9 @@ export function renderUi(fb: Framebuffer, g: GameView): void {
   INK = pal.ui;
   HOT = pal.uiHot;
   EDGE = pal.uiEdge;
+  HOT_EDGE = pal.uiHotEdge;
+  HOT_SMALL = pal.uiHotSmall;
+  HOT_SHADOW = pal.uiHotShadow;
   switch (g.phase) {
     case 'title':
       drawTitle(fb, g);
@@ -157,6 +176,10 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   if (g.phase === 'playing' || g.phase === 'crashed') drawGauges(fb, g);
   if (g.settings.muted) text(fb, 'MUTED', W - 26, H - 8);
 
+  if (g.lesson) {
+    drawLesson(fb, g);
+    return;
+  }
   const toast = g.toasts[0];
   if (toast && g.phase !== 'over') {
     const x = Math.round(CX - textWidth(toast.text) / 2);
@@ -167,6 +190,46 @@ function drawHud(fb: Framebuffer, g: GameView): void {
       text(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? HOT : INK);
     }
   }
+}
+
+/**
+ * A tutorial lesson: corner marks around the thing it is about, its words in big yellow letters where they cover
+ * neither that thing nor the rider, and how to go on. The page fades the rest of the slope behind it (see main.ts).
+ */
+function drawLesson(fb: Framebuffer, g: GameView): void {
+  const lesson = g.lesson;
+  if (!lesson) return;
+  const target = lessonTarget(g);
+  if (target) corners(fb, target.x, target.y, target.w, target.h, HOT);
+  const go = g.touch ? 'TAP TO GO ON' : 'SPACE TO GO ON';
+  const rows = lesson.lines.length * LESSON_LINE + 10;
+  let y = lessonTop(g, rows);
+  for (const line of lesson.lines) {
+    textC(fb, line, CX, y, HOT, 2);
+    y += LESSON_LINE;
+  }
+  textC(fb, go, CX, y + 3, INK);
+}
+
+/** Corner marks around a box, each arm a few pixels long, with the usual edge. */
+function corners(fb: Framebuffer, x: number, y: number, w: number, h: number, color: number): void {
+  const arm = Math.max(3, Math.min(6, Math.floor(Math.min(w, h) / 3)));
+  const edge = edgeOf(color);
+  const marks: Array<[number, number, number, number]> = [];
+  for (const [cx, dx] of [
+    [x, 1],
+    [x + w - 1, -1],
+  ] as const) {
+    for (const [cy, dy] of [
+      [y, 1],
+      [y + h - 1, -1],
+    ] as const) {
+      marks.push([dx > 0 ? cx : cx - arm + 1, cy, arm, 1]);
+      marks.push([cx, dy > 0 ? cy : cy - arm + 1, 1, arm]);
+    }
+  }
+  for (const [mx, my, mw, mh] of marks) fb.fillRect(mx - 1, my - 1, mw + 2, mh + 2, edge);
+  for (const [mx, my, mw, mh] of marks) fb.fillRect(mx, my, mw, mh, color);
 }
 
 /** Toast rows: the usual one, and one lower down for when a jump carries the rider up through it. The combo meter sits `comboGap` under the toast. */
@@ -254,11 +317,30 @@ function drawTitle(fb: Framebuffer, g: GameView): void {
   }
 }
 
+/** Whether a button's label fits it at twice the font size, with room on both sides. */
+function fitsBig(g: GameView, bt: Readonly<UiButton>): boolean {
+  return textWidth(labelOf(g, bt.id), 2) <= bt.w - 8 && bt.h >= 18;
+}
+
+/**
+ * The label size for a screen's plain buttons: twice the font size when every one fits that way, so the words read
+ * easily on a phone, else the small font for all of them, so a row never mixes the two. Both labels of a toggle are
+ * measured, so a label never shrinks when it is switched. The main button (PLAY, RESUME) is big whenever it fits.
+ */
+function labelScale(g: GameView, buttons: readonly Readonly<UiButton>[]): number {
+  const widest = (bt: Readonly<UiButton>): boolean =>
+    fitsBig(g, bt) && textWidth(labelOf(g, bt.id).replace(/ ON$/, ' OFF'), 2) <= bt.w - 8;
+  return buttons.filter((bt) => !bt.accent).every(widest) ? 2 : 1;
+}
+
 function drawButtons(fb: Framebuffer, g: GameView, selected?: ButtonId): void {
   const buttons = menuButtons(g);
+  const plain = labelScale(g, buttons);
   for (let i = 0; i < buttons.length; i++) {
     const bt = buttons[i];
-    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus, bt.id === selected);
+    if (!bt) continue;
+    const scale = bt.accent ? (fitsBig(g, bt) ? 2 : 1) : plain;
+    drawButton(fb, g, bt, g.focusVisible && i === g.focus, bt.id === selected, scale);
   }
 }
 
@@ -269,21 +351,9 @@ function drawMain(fb: Framebuffer, g: GameView): void {
   textC(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, INK, 2);
   drawButtons(fb, g);
   const daily = g.dailyBest;
-  textC(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 279, INK);
+  textC(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 284, INK);
   const c = nextChallenge(g);
-  if (c) textC(fb, `${c.name} ${c.value}/${c.target}`, CX, 288, HOT);
-  textC(
-    fb,
-    g.touch ? 'HOLD SIDE STEER  SWIPE SPIN OR FLIP' : 'A D STEER  SPACE TRICK  W S FLIP',
-    CX,
-    297,
-  );
-  textC(
-    fb,
-    g.touch ? 'TAP IN AIR GRAB  2 FINGERS BRAKE' : 'X GRAB  A+D BRAKE  P PAUSE  M SOUND',
-    CX,
-    306,
-  );
+  if (c) textC(fb, `${c.name} ${c.value}/${c.target}`, CX, 296, HOT);
 }
 
 /** The unfinished challenge closest to done. */
@@ -469,11 +539,7 @@ function drawOver(fb: Framebuffer, g: GameView): void {
     const n = news[Math.floor(g.animT / 1.4) % news.length] ?? '';
     textC(fb, n, CX, top + 80, HOT);
   }
-  const buttons = menuButtons(g);
-  for (let i = 0; i < buttons.length; i++) {
-    const bt = buttons[i];
-    if (bt) drawButton(fb, g, bt, g.focusVisible && i === g.focus);
-  }
+  drawButtons(fb, g);
   textC(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
   const toast = g.toasts[0];
   if (toast) {

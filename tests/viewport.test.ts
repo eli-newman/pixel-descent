@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { fitCanvas, MAX_EXTRA_ROWS, slideTransform } from '../src/platform/viewport';
+import { fitCanvas, MAX_EXTRA_ROWS } from '../src/platform/viewport';
+import { sharpScale, slideRows, slopeBox } from '../src/platform/present';
 
 describe('fitCanvas', () => {
   it('uses the largest whole scale that fits and centres the picture', () => {
@@ -72,16 +73,38 @@ describe('fitCanvas on a phone (fill)', () => {
   });
 });
 
-describe('slideTransform', () => {
-  it('slides the slope up by the camera fraction, in whole device pixels', () => {
-    expect(slideTransform(0, 6, 3)).toBe('');
-    expect(slideTransform(0.5, 6, 3)).toBe('translateY(-1px)');
-    expect(slideTransform(1 / 6, 6, 3)).toBe(`translateY(${-1 / 3}px)`);
-    expect(slideTransform(0.04, 6, 3)).toBe('');
+describe('slopeBox and slideRows', () => {
+  const safe = { top: 59, right: 0, bottom: 34, left: 0 };
+
+  it('puts the frame on its box and runs the slope to both ends of a phone screen, even fully slid', () => {
+    const fit = fitCanvas(393, 852, 3, safe, 10, true);
+    const rows = fit.above + H + fit.below + 1;
+    const box = slopeBox(fit, 3, rows);
+    expect(box.left).toBe(0);
+    expect(box.width).toBeCloseTo(393, 6);
+    // the frame's first row lands on the frame's top edge
+    expect(box.top + (fit.above * fit.scale) / 3).toBeCloseTo(fit.top, 6);
+    expect(box.top).toBeLessThanOrEqual(0);
+    // slid up by a whole logical pixel, the spare row still reaches the bottom
+    expect(box.top + box.height - fit.scale / 3).toBeGreaterThanOrEqual(852);
   });
 
-  it('never slides past one logical pixel, so the spare row is all that ever shows', () => {
-    expect(slideTransform(1.7, 4, 2)).toBe('translateY(-2px)');
-    expect(slideTransform(-0.3, 4, 2)).toBe('');
+  it('slides in whole canvas pixels, evenly, and never past one logical pixel', () => {
+    expect([0, 0.2, 0.5, 0.99, 1].map((f) => slideRows(f, 7))).toEqual([0, 1, 4, 7, 7]);
+    expect(slideRows(1.7, 4)).toBe(4);
+    expect(slideRows(-0.3, 4)).toBe(0);
+    // at a scale of 7 every step of a seventh of a pixel moves the picture by one canvas pixel
+    const steps = Array.from({ length: 8 }, (_, i) => slideRows(i / 7, 7));
+    expect(steps).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe('sharpScale', () => {
+  it('blows a picture up by the next whole number, or exactly a whole scale', () => {
+    expect(sharpScale(6.55)).toBe(7);
+    expect(sharpScale(6)).toBe(6);
+    expect(sharpScale(3.0000000001)).toBe(3);
+    expect(sharpScale((393 * 3) / 180)).toBe(7);
+    expect(sharpScale(0.5)).toBe(1);
   });
 });

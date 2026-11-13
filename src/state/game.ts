@@ -1,6 +1,6 @@
 import type { Sfx } from '../platform/audio';
 import type { Tracker } from '../platform/analytics';
-import { RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
+import { LESSON_GUARD, RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
 import { BrakeSpray, CarveCloud, Particles, Puffs } from './effects';
 import type { Input } from '../platform/input';
 import { Controls } from './controls';
@@ -14,6 +14,7 @@ import type { ResultCardData } from '../render/share';
 import type { ScoreEntry, Store } from './storage';
 import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
 import type { GameView } from './view';
+import { lessonLines, lessonSeen, markSeen, nextLesson, tutorialOn, type Lesson } from './tutorial';
 
 export interface GameDeps {
   store: Store;
@@ -40,6 +41,10 @@ export class Game implements GameView {
   seed = '';
   sim!: Sim;
   result: RunResult | null = null;
+  /** The tutorial lesson stopping the run right now (see `state/tutorial.ts`), or null. */
+  lesson: Lesson | null = null;
+  /** Seconds the current lesson has been up. */
+  private lessonT = 0;
 
   readonly particles = new Particles(512);
   readonly puffs = new Puffs();
@@ -217,6 +222,7 @@ export class Game implements GameView {
     this.camY = this.sim.rider.y - this.camOff;
     this.settleBlend();
     this.result = null;
+    this.lesson = null;
     this.phase = 'title';
     this.controls.reset();
     if (play) this.begin();
@@ -231,6 +237,26 @@ export class Game implements GameView {
     this.deps.announce?.('Run started.');
     this.runsStarted++;
     this.deps.analytics?.track(runStartEvent(this.runsStarted, this.runSetup()));
+    const stats = this.progress.stats;
+    if (tutorialOn(stats) && !lessonSeen(stats.lessons, 'steer')) {
+      this.showLesson({ id: 'steer', lines: lessonLines('steer', this.touch), target: null });
+    }
+  }
+
+  /** Stop the run on a lesson, and remember it was shown. */
+  private showLesson(lesson: Lesson): void {
+    this.lesson = lesson;
+    this.lessonT = 0;
+    const p = this.deps.store.progress();
+    p.stats.lessons = markSeen(p.stats.lessons, lesson.id);
+    this.deps.store.saveProgress();
+    this.deps.input.releaseAll();
+    this.deps.announce?.(`${lesson.lines.join('. ').toLowerCase()}.`);
+  }
+
+  /** Go on from a lesson, once it has been up long enough to have been read. */
+  dismissLesson(): void {
+    if (this.lesson && this.lessonT >= LESSON_GUARD) this.lesson = null;
   }
 
   /** How this run is played, for analytics. */
@@ -241,11 +267,15 @@ export class Game implements GameView {
   update(dt: number): void {
     this.settleBlend();
     this.controls.handleInput();
-    if (this.phase !== 'paused') this.animT += dt;
-    if (this.feedback.hitStop > 0) {
+    if (this.lesson && this.phase === 'playing') {
+      // The run holds still under a lesson: nothing steps, nothing animates.
+      this.lessonT += dt;
+    } else if (this.feedback.hitStop > 0) {
+      this.animT += dt;
       this.feedback.coolHitStop(dt);
       this.feedback.stepToasts(dt);
     } else {
+      if (this.phase !== 'paused') this.animT += dt;
       switch (this.phase) {
         case 'playing':
           this.stepPlaying();
@@ -271,7 +301,7 @@ export class Game implements GameView {
       hx: r.hx,
       tuck: sim.tuck,
       air: r.air,
-      active: this.phase === 'playing' && this.feedback.hitStop <= 0,
+      active: this.phase === 'playing' && this.feedback.hitStop <= 0 && !this.lesson,
       drift: sim.surface.drift,
       brake: r.brake,
     });
@@ -330,7 +360,15 @@ export class Game implements GameView {
     const rand = this.deps.rand ?? Math.random;
     this.spray.step(sim.rider, this.particles, rand);
     this.cloud.step(sim.rider, this.puffs, this.particles, rand);
-    if (sim.crashed) this.phase = 'crashed';
+    if (sim.crashed) {
+      this.phase = 'crashed';
+      return;
+    }
+    const stats = this.progress.stats;
+    if (tutorialOn(stats)) {
+      const lesson = nextLesson(sim, stats.lessons, this.touch);
+      if (lesson) this.showLesson(lesson);
+    }
   }
 
   private stepCrashed(): void {

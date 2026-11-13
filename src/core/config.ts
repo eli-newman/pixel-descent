@@ -69,8 +69,18 @@ export const RIDER_SCALE = 0.85;
 /** Board length in px: it runs from the rider's feet along the heading to the nose. Gameplay (the spin pivot) and drawing share it. */
 export const BOARD_LEN = Math.round(23 * RIDER_SCALE);
 
-/** A player's first runs label the slope ("CRASH" over a tree, "SLOWS" over a bush, "+30" over a star), so a new player learns what each thing does. Counted from `Stats.hintRuns`. */
-export const HINT_RUNS = 3;
+/**
+ * The first-run tutorial (`state/tutorial.ts`): a lesson stops the run once, the first time its thing comes up, on
+ * a player's first TUTORIAL_RUNS runs (so a returning player never sees it). It shows when the thing is between
+ * LESSON_AHEAD_MIN and LESSON_AHEAD_MAX px below the rider: on screen, with room to act on the lesson. A tap counts
+ * only after LESSON_GUARD seconds, so a thumb already on its way down does not skip one unread. The first
+ * LESSON_FREE_RIDE px of a run ride free, so the steering lesson is never followed at once by another stop.
+ */
+export const TUTORIAL_RUNS = 3;
+export const LESSON_AHEAD_MIN = 70;
+export const LESSON_AHEAD_MAX = 150;
+export const LESSON_GUARD = 0.4;
+export const LESSON_FREE_RIDE = 60;
 
 /**
  * Properties sent with each analytics event, most important first. Vercel Web Analytics allows 2 on Pro and 8 on

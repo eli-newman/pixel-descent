@@ -23,6 +23,15 @@ function events(sent: Sent[]): { name: string; data: Record<string, unknown> }[]
 test.describe('analytics', () => {
   test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
+  // A returning player, past the first-run tutorial: these runs ride straight into a tree with no lesson stopping them.
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      const key = 'pixel-descent:v2:progress';
+      if (localStorage.getItem(key) === null)
+        localStorage.setItem(key, JSON.stringify({ stats: { runs: 3 } }));
+    });
+  });
+
   test('a shared link: from-share page view, two runs and a share, with no seed anywhere', async ({
     page,
   }) => {

@@ -32,27 +32,23 @@ body {
 }
 
 /*
- * Two layers: the slope (#game), which runs past the frame to the screen's edges (main.ts sets its top and height) and
- * is slid up by the camera's fraction of a pixel so it scrolls smoothly, and the HUD and menus (#ui) on top, which fill
- * the frame and never move. Touches go through #ui to #game. The body clips whatever runs past the screen.
+ * Two layers, both drawn at the screen's own resolution by main.ts: the slope (#game), which covers the whole screen
+ * and carries its own smooth scroll, and the HUD and menus (#ui) on top, which fill the frame and never move. Touches
+ * go through #ui to #game.
  */
-#game,
+#game {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: block;
+}
+
 #ui {
   position: absolute;
   left: 0;
   top: 0;
   display: block;
   width: 100%;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  image-rendering: pixelated;
-}
-
-#game {
-  will-change: transform;
-}
-
-#ui {
   height: 100%;
   pointer-events: none;
 }
@@ -61,7 +57,8 @@ body {
  * Menus sit straight on the slope, so behind them the whole screen fades towards the snow's own tone (black, or the
  * white of colour mode) and the rider and trees never fight with the words: lightly for pause and game over, where
  * the run still matters, and almost all the way for SCORES, GEAR and GOALS. The main title shows the mountains as
- * they are.
+ * they are and fades only the slope under its menu. Under a tutorial lesson it fades lightly too, with a hole (main.ts sets the clip path) over the thing
+ * the lesson is about.
  */
 #wash {
   position: fixed;
@@ -76,8 +73,19 @@ body {
 }
 
 #stage[data-phase='paused'] #wash,
-#stage[data-phase='over'] #wash {
+#stage[data-phase='over'] #wash,
+#stage[data-phase='playing'][data-lesson='on'] #wash {
   display: block;
+}
+
+/* The main title keeps its mountains and rider clear and calms only the slope under the menu. */
+#stage[data-phase='title'][data-screen='main'] #wash {
+  display: block;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0%) 36%, rgb(0 0 0 / 80%) 46%);
+}
+
+#stage[data-phase='title'][data-screen='main'][data-color='on'] #wash {
+  background: linear-gradient(to bottom, rgb(247 249 252 / 0%) 36%, rgb(247 249 252 / 85%) 46%);
 }
 
 #stage[data-phase='title']:not([data-screen='main']) #wash {

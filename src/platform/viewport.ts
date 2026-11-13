@@ -66,12 +66,3 @@ export function fitCanvas(
     Math.min(MAX_EXTRA_ROWS, Math.max(0, Math.ceil((css * dpr) / scale)));
   return { scale, cssW, cssH, left, top, above: rows(top), below: rows(viewH - top - cssH) };
 }
-
-/**
- * The CSS transform that slides the slope layer up by the camera's fraction of a logical pixel, snapped to whole
- * device pixels so the art stays crisp. At a scale of 6 that is six even steps per logical pixel instead of one jump.
- */
-export function slideTransform(frac: number, scale: number, dpr: number): string {
-  const device = Math.round(Math.min(1, Math.max(0, frac)) * scale);
-  return device === 0 ? '' : `translateY(${-device / dpr}px)`;
-}

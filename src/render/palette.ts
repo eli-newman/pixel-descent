@@ -5,7 +5,7 @@ import { GREY, OFF, pack, SOFT_GREY, WHITE, YELLOW } from './framebuffer';
  * to the colour that role always had, so the black and white game is pixel for pixel what it was. `COLOR` is the
  * daytime look: white snow, dark green pines, grey and brown rock, a grey track. The UI sits straight on the slope
  * with no cards behind it, so its words and frames take their colours from here too: white and yellow on the black
- * slope, dark ink and red on the white one, each with a one pixel edge in the opposite tone.
+ * slope, dark ink and yellow on the white one, each with an edge that sets it off from the snow.
  */
 export interface Palette {
   readonly color: boolean;
@@ -35,10 +35,18 @@ export interface Palette {
   readonly riderHalo: number;
   /** The yellow flash on whatever ended the run. */
   readonly hit: number;
-  /** UI words and frames, the highlighted ones (score, PLAY, labels), and the edge drawn around both. */
+  /**
+   * UI words and frames and the edge drawn around them, and the highlighted ones (score, PLAY, the tutorial) with
+   * theirs. Highlights are yellow in both looks: on the white snow a yellow word needs a dark edge to read, and at
+   * the smallest size that edge fills the letters in, so there a highlight is `uiHotSmall` (dark ink) instead. With
+   * `uiHotShadow` a highlighted word's edge is a drop shadow rather than an outline (see `drawTextShadow`).
+   */
   readonly ui: number;
-  readonly uiHot: number;
   readonly uiEdge: number;
+  readonly uiHot: number;
+  readonly uiHotEdge: number;
+  readonly uiHotSmall: number;
+  readonly uiHotShadow: boolean;
 }
 
 export const MONO: Palette = {
@@ -60,8 +68,11 @@ export const MONO: Palette = {
   riderHalo: OFF,
   hit: YELLOW,
   ui: WHITE,
-  uiHot: YELLOW,
   uiEdge: OFF,
+  uiHot: YELLOW,
+  uiHotEdge: OFF,
+  uiHotSmall: YELLOW,
+  uiHotShadow: false,
 };
 
 /** Colour mode only: the named colours of the daytime slope. */
@@ -121,7 +132,6 @@ export const C = {
   riderHalo: pack(0x1b, 0x1f, 0x2a),
   // the UI on the white slope: dark ink, and a warm red for what matters most
   ink: pack(0x1b, 0x22, 0x33),
-  inkHot: pack(0xc8, 0x32, 0x2b),
 } as const;
 
 export const COLOR: Palette = {
@@ -143,8 +153,11 @@ export const COLOR: Palette = {
   riderHalo: C.riderHalo,
   hit: YELLOW,
   ui: C.ink,
-  uiHot: C.inkHot,
   uiEdge: C.snow,
+  uiHot: YELLOW,
+  uiHotEdge: C.ink,
+  uiHotSmall: C.ink,
+  uiHotShadow: true,
 };
 
 /** The palette for a colour setting. */

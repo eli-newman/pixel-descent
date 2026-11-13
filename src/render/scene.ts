@@ -17,7 +17,6 @@ import { MONO, paletteFor, type Palette } from './palette';
 import { drawRider, drawWipeout, type RiderStyle } from './riderSprite';
 import { getColorSprite, getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
-import { drawHints } from './hints';
 import { hudRect, riderZ, type Rect } from './layout';
 import { TrackPainter } from './track';
 
@@ -91,7 +90,6 @@ export class SceneRenderer {
 
     this.drawParticles(g, cam);
     // Labels sit on things in the world, so they scroll with it.
-    drawHints(fb, g, this.top);
     return fb;
   }
 
