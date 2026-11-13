@@ -12,6 +12,10 @@ export interface FrameBox {
   h: number;
 }
 
+/** A cliff's rock reaches this far over its lip line (the snow cap on a high step) and this far under it (the deepest face). */
+const CLIFF_ABOVE = 5;
+const CLIFF_FACE = 24;
+
 /** Room left around the thing a lesson points at, inside its marker. */
 const PAD = 3;
 
@@ -46,7 +50,16 @@ export function lessonTarget(g: GameView): FrameBox | null {
     }
     case 'ramps': {
       const r = sim.ramps.find((e) => e.id === t.id);
-      if (r) box = { x0: r.x - r.half, y0: r.y - RAMP_ROWS, x1: r.x + r.half, y1: r.y + 2 };
+      if (r && r.kind === 'cliff' && r.segs.length > 0) {
+        // the rock chunks only: from the highest lip to below the deepest face
+        const x0 = Math.min(...r.segs.map((c) => c.x0));
+        const x1 = Math.max(...r.segs.map((c) => c.x1)) - 1;
+        const top = Math.min(...r.segs.map((c) => c.dy));
+        const low = Math.max(...r.segs.map((c) => c.dy));
+        box = { x0, y0: r.y + top - CLIFF_ABOVE, x1, y1: r.y + low + CLIFF_FACE };
+      } else if (r) {
+        box = { x0: r.x - r.half, y0: r.y - RAMP_ROWS, x1: r.x + r.half, y1: r.y + 2 };
+      }
       break;
     }
   }

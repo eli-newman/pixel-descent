@@ -14,7 +14,7 @@ import type { SimView } from './view';
  * only on a player's first `TUTORIAL_RUNS` runs. The sim is not stepped while a lesson is up, so a run plays out the
  * same with or without it.
  */
-export type LessonId = 'steer' | 'crash' | 'slow' | 'star' | 'jump';
+export type LessonId = 'steer' | 'crash' | 'slow' | 'star' | 'jump' | 'cliff';
 
 /** What a lesson points at: a thing on the slope by its list and id, or nothing (the steering lesson). */
 export interface LessonTarget {
@@ -30,7 +30,14 @@ export interface Lesson {
 }
 
 /** One bit per lesson in `Stats.lessons`, in the order a run usually meets them. */
-export const LESSON_ORDER: readonly LessonId[] = ['steer', 'crash', 'slow', 'star', 'jump'];
+export const LESSON_ORDER: readonly LessonId[] = [
+  'steer',
+  'crash',
+  'slow',
+  'star',
+  'jump',
+  'cliff',
+];
 export const ALL_LESSONS = (1 << LESSON_ORDER.length) - 1;
 
 function bit(id: LessonId): number {
@@ -65,6 +72,8 @@ export function lessonLines(id: LessonId, touch: boolean): readonly string[] {
       return touch
         ? ['RIDE OVER JUMPS', 'SWIPE TO SPIN OR FLIP', 'TAP TO GRAB']
         : ['RIDE OVER JUMPS', 'SPACE SPIN  W S FLIP', 'X TO GRAB'];
+    case 'cliff':
+      return ['CLIFFS DROP YOU', 'INTO BIG AIR', 'LAND IT FOR A BONUS'];
   }
 }
 
@@ -95,7 +104,13 @@ export function nextLesson(sim: SimView, seen: number, touch: boolean): Lesson |
     if (!p.taken) things.push({ id: 'star', target: { list: 'pickups', id: p.id }, y: p.y });
   }
   for (const r of sim.ramps) {
-    if (!r.used) things.push({ id: 'jump', target: { list: 'ramps', id: r.id }, y: r.y });
+    if (!r.used) {
+      things.push({
+        id: r.kind === 'cliff' ? 'cliff' : 'jump',
+        target: { list: 'ramps', id: r.id },
+        y: r.y,
+      });
+    }
   }
   let best: { id: LessonId; target: LessonTarget; y: number } | null = null;
   for (const t of things) {
