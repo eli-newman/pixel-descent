@@ -2,11 +2,6 @@ import { START_X, START_Y } from '../core/config';
 
 export type Face = 1 | -1;
 
-export interface Surface {
-  /** Heavy snow: no tuck, speed bleeds off towards a crawl. */
-  drift: boolean;
-}
-
 export interface RiderState {
   /** Board tail position in world space. */
   x: number;

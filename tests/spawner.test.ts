@@ -132,7 +132,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(kickers / all).toBeLessThan(0.9);
   });
 
-  it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of drifts', () => {
+  it('keeps jumps fair: room after each landing, off risk lanes', () => {
     const offenders: string[] = [];
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
@@ -156,13 +156,6 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         for (const l of s.lanes) {
           if (l.y1 >= r.y - 60 && l.y0 <= r.landEnd + 60)
             offenders.push(`${seed} ${r.id}: on a lane`);
-        }
-        for (const p of batch.patches) {
-          if (Math.abs(p.y - r.y) < p.ry + 40)
-            offenders.push(`${seed} ${r.id}: patch ${p.id} at the lip`);
-          // A line's run-ups are plain snow too, so a drift never breaks it.
-          if (r.lineIdx < r.lineLen - 1 && p.y + p.ry > r.y && p.y - p.ry < r.landEnd)
-            offenders.push(`${seed} ${r.id}: patch ${p.id} inside a line`);
         }
         // A kicker sits inside the open path, so riding the path lines you up with it.
         const distM = (r.y - START_Y) / PX_PER_M;
@@ -251,14 +244,10 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(lanes).toBeGreaterThan(20);
   });
 
-  it('keeps patches off lanes and stars out of solid obstacles', () => {
+  it('keeps stars out of solid obstacles', () => {
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
       const batch = s.advance(START_Y + 40000);
-      expect(batch.patches.some((p) => p.kind === 'drift')).toBe(true);
-      for (const p of batch.patches) {
-        expect(s.laneAt(p.y)).toBeNull();
-      }
       const buried: string[] = [];
       for (const star of batch.pickups) {
         for (const o of batch.obstacles) {
@@ -272,7 +261,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('stays winnable at maximum speed and high distance, with jumps and drifts', () => {
+  it('stays winnable at maximum speed and high distance, with jumps', () => {
     for (const seed of seeds) {
       const sim = new Sim(seed, { forceSpeed: true });
       runBot(sim, 7000);
@@ -282,7 +271,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('stays winnable for a bot that is slowed by drifts (no forced speed)', () => {
+  it('stays winnable for a bot at its own speed (no forced speed)', () => {
     for (const seed of seeds.slice(0, 6)) {
       const sim = new Sim(seed);
       runBot(sim, 4000);
@@ -290,7 +279,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('is deterministic for lanes, ramps and patches regardless of chunking', () => {
+  it('is deterministic for lanes and ramps regardless of chunking', () => {
     const whole = new Spawner(hashSeed('feat'));
     whole.advance(20000);
     const parts = new Spawner(hashSeed('feat'));
@@ -300,7 +289,6 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(n).toBeGreaterThan(5);
     expect(parts.ramps.slice(0, n)).toEqual(whole.ramps.slice(0, n));
     expect(parts.lanes.slice(0, 5)).toEqual(whole.lanes.slice(0, 5));
-    expect(parts.patches.slice(0, 10)).toEqual(whole.patches.slice(0, 10));
   });
 
   it('keeps the open path wide enough for speed: wider than the old formula at distance', () => {
@@ -315,18 +303,19 @@ describe('mountain world is stable', () => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
       // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
       // ids started at 1,000,000, so those are put back here. Refreshed on purpose only when the course
-      // design changes (last: ice removed, with every other object where it was; drift ids moved up), never to get green.
+      // design changes (last: deep snow removed and bushes made solid, which dropped `touched` from obstacles; every
+      // tree, rock, bush, star and jump stayed where it was, checked on 6 seeds over 60000 px), never to get green.
       const old = {
         obstacles: b.obstacles,
         pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
         gates: [],
         ramps: b.ramps,
-        patches: b.patches,
+        patches: [],
         props: [],
       };
       return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
-    expect(fp('alpha')).toEqual([103026582, 726, 28]);
-    expect(fp('k3m9qa')).toEqual([1418971424, 674, 31]);
+    expect(fp('alpha')).toEqual([122788692, 726, 28]);
+    expect(fp('k3m9qa')).toEqual([498870801, 674, 31]);
   });
 });

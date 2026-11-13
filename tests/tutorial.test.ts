@@ -197,7 +197,7 @@ describe('the first-run tutorial', () => {
     }
   });
 
-  it('calls a thing a crash only if touching it really ends the run', () => {
+  it('points the crash lesson at trees and rocks that really end the run, and never at a bush', () => {
     const obstacle = (kind: ObstacleKind, size: number): Obstacle => ({
       id: 7,
       kind,
@@ -207,7 +207,6 @@ describe('the first-run tutorial', () => {
       y: 400,
       half: 9,
       judged: false,
-      touched: false,
     });
     for (const [kind, size] of [
       ['tree', 22],
@@ -216,10 +215,12 @@ describe('the first-run tutorial', () => {
       ['bush', 1],
     ] as const) {
       const o = obstacle(kind, size);
-      const sim = { rider: { y: 300 }, obstacles: [o], patches: [], pickups: [], ramps: [] };
+      const sim = { rider: { y: 300 }, obstacles: [o], pickups: [], ramps: [] };
       const lesson = nextLesson(sim as never, 0, true);
       const hit = testObstacle({ x: 100, y: 392 }, o);
-      expect(lesson?.id, kind).toBe(hit === 'crash' ? 'crash' : 'slow');
+      expect(hit, kind).toBe('crash');
+      // A bush crashes too, but the lesson names trees and rocks, so it is never the one marked.
+      expect(lesson?.id, kind).toBe(kind === 'bush' ? undefined : 'crash');
     }
   });
 

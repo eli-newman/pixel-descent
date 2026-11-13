@@ -27,14 +27,14 @@ export interface Palette {
   readonly powder: number;
   readonly spray: number;
   readonly star: number;
-  /** Deep snow: its humps. */
-  readonly drift: number;
   /** The rider: body, board or skis, and the one pixel halo that keeps them readable on anything. */
   readonly riderBody: number;
   readonly riderBoard: number;
   readonly riderHalo: number;
   /** The yellow flash on whatever ended the run. */
   readonly hit: number;
+  /** The little birds that circle a fallen rider's head. */
+  readonly bird: number;
   /**
    * UI words and frames and the edge drawn around them, and the highlighted ones (score, PLAY, the tutorial) with
    * theirs. Highlights are yellow in both looks: on the white snow a yellow word needs a dark edge to read, and at
@@ -62,11 +62,11 @@ export const MONO: Palette = {
   powder: WHITE,
   spray: WHITE,
   star: WHITE,
-  drift: WHITE,
   riderBody: WHITE,
   riderBoard: WHITE,
   riderHalo: OFF,
   hit: YELLOW,
+  bird: WHITE,
   ui: WHITE,
   uiEdge: OFF,
   uiHot: YELLOW,
@@ -87,7 +87,6 @@ export const C = {
   powder: pack(0xc9, 0xd2, 0xdc),
   spray: pack(0xb3, 0xc0, 0xcf),
   star: pack(0xe8, 0xa3, 0x17),
-  drift: pack(0xa9, 0xb9, 0xcc),
   // packed snow on a kicker, lit to shaded, and its orange marker poles
   snowLit: pack(0xfb, 0xfd, 0xff),
   snowMid: pack(0xe6, 0xee, 0xf6),
@@ -130,8 +129,10 @@ export const C = {
   riderBody: pack(0xd8, 0x38, 0x3a),
   riderBoard: pack(0x2d, 0x5f, 0xa8),
   riderHalo: pack(0x1b, 0x1f, 0x2a),
-  // the UI on the white slope: dark ink, and a warm red for what matters most
+  // the UI on the white slope: dark ink
   ink: pack(0x1b, 0x22, 0x33),
+  // bluebirds circling a fallen rider
+  bird: pack(0x3a, 0x86, 0xd6),
 } as const;
 
 export const COLOR: Palette = {
@@ -147,11 +148,11 @@ export const COLOR: Palette = {
   powder: C.powder,
   spray: C.spray,
   star: C.star,
-  drift: C.drift,
   riderBody: C.riderBody,
   riderBoard: C.riderBoard,
   riderHalo: C.riderHalo,
   hit: YELLOW,
+  bird: C.bird,
   ui: C.ink,
   uiEdge: C.snow,
   uiHot: YELLOW,

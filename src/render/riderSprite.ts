@@ -516,6 +516,68 @@ export function drawWipeout(
   set.stamp(fb, pal);
 }
 
+/** Seconds a wipeout tumbles before the rider lies still and the birds come. */
+export const WIPEOUT_SETTLE = 0.9;
+
+/** Where a wiped out rider's head comes to rest, drawn by `drawWipeout` at (x, y) facing `face`. */
+export function wipeoutHead(x: number, y: number, face: 1 | -1): { x: number; y: number } {
+  // At rest the body has turned a quarter past two whole turns about the pivot (0, -6): it lies on its side, and
+  // the head (about (0, -12.5) on the body) ends up level with the pivot, out to the side it fell towards.
+  return { x: x + Math.round(6.5 * face), y: y - 6 };
+}
+
+/** Rows of a bird seen from the front, wings up and wings down: a small body with a wing out to each side. */
+const BIRD_UP = ['X.....X', '.X...X.', '..XXX..'];
+const BIRD_DOWN = ['..XXX..', '.X...X.', 'X.....X'];
+
+function birdPixels(rows: readonly string[]): ReadonlyArray<readonly [number, number]> {
+  const out: Array<readonly [number, number]> = [];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === 'X') out.push([x - 3, y - 1]);
+  });
+  return out;
+}
+const BIRD_FRAMES = [birdPixels(BIRD_UP), birdPixels(BIRD_DOWN)];
+
+/** How many birds circle a fallen rider, how wide and how flat their ring is, how fast they go round and flap. */
+const BIRDS = 3;
+const BIRD_RX = 10;
+const BIRD_RY = 3;
+const BIRD_ABOVE = 8;
+const OUTLINE: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+const BIRD_TURN = 3.2;
+const BIRD_FLAP = 9;
+
+/**
+ * Cartoon birds circling over a fallen rider's head (`head`, from `wipeoutHead`), at time `t` in seconds: a flat
+ * ring of `BIRDS`, each flapping between wings up and wings down, with the rider's halo around them so they read
+ * over trees.
+ */
+export function drawDizzyBirds(
+  fb: Framebuffer,
+  head: Readonly<{ x: number; y: number }>,
+  t: number,
+  pal: Readonly<Palette> = MONO,
+): void {
+  const cy = head.y - BIRD_ABOVE;
+  for (let i = 0; i < BIRDS; i++) {
+    const a = t * BIRD_TURN + (i * Math.PI * 2) / BIRDS;
+    const bx = Math.round(head.x + Math.cos(a) * BIRD_RX);
+    const by = Math.round(cy + Math.sin(a) * BIRD_RY);
+    const shape = BIRD_FRAMES[Math.floor(t * BIRD_FLAP + i * 1.5) % 2] ?? [];
+    // A one pixel outline (no corners), so the bird keeps its shape and does not turn into a blob.
+    for (const [dx, dy] of shape) {
+      for (const [ox, oy] of OUTLINE) fb.put(bx + dx + ox, by + dy + oy, pal.riderHalo);
+    }
+    for (const [dx, dy] of shape) fb.put(bx + dx, by + dy, pal.bird);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The skier. Kept apart from the snowboarder above: it shares the mask, the helmet, headgear and
 // face cut, and the flip squash, nothing else. The skis start on the track head (the tail

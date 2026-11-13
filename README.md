@@ -4,7 +4,7 @@ Play at https://powline.vercel.app
 
 A pixel-art downhill snowboard (or ski) game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track, or in colour (where the UI turns to dark ink, and its highlights stay yellow with a dark shadow): white snow, dark green pines with snow on them and brown trunks, dark grey and brown rocks with snow caps, natural rock cliffs, packed snow jumps with orange marker poles, and a light track pressed into the snow. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
 
-Carve down an endless mountain, dodge trees and rocks, graze bushes, grab risk-lane stars, hit kickers. **Go straight to go fast, carve to stay alive.**
+Carve down an endless mountain, dodge trees, rocks and bushes, grab risk-lane stars, hit kickers. **Go straight to go fast, carve to stay alive.**
 
 ## Run
 
@@ -70,17 +70,16 @@ Going **straight downhill** (heading share under 0.32) accelerates the rider wel
 | Cruising speed (base) | `85 + 150 (1 - e^(-d/1000))` px/s, the original difficulty ramp                         |
 | Top speed (straight)  | `min(340, 1.18 x cruise + 100)`: 200 at the start, 306 at 1000 m, 340 from about 1500 m |
 | Hard cap              | 340 px/s (the old cap was about 235)                                                    |
-| Bush hit / wall       | speed x 0.55 / speed x e^(-2t) while pinned against the edge                            |
-| Snowdrift             | speed crawls to 42% of cruising                                                         |
+| Wall                  | speed x e^(-2t) while pinned against the edge                                           |
 | Camera lookahead      | the rider rises from 118 px to 86 px below the top as the tuck builds                   |
 
 Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top speed) and scales points per metre, near misses, combos and tricks. The world is built so it stays fair at speed: the guaranteed open path gets wider with the top speed (up to +7 px), its segments get longer and gentler with distance, landing zones are sized for the fastest possible jump, and a test drives a path-following bot at the top speed for 7000 m on 12 seeds.
 
 ### Rest of the rules
 
-- Trees, dead trees and rocks wipe you out. Pebbles are harmless. Bushes slow you down.
-- **Reading the slope**: anything that stands up out of the snow casts a checkered shadow, and solid white ones (pines, bare dead trees, angular cracked rocks) crash you. A bush is a cluster of three round puffs speckled with dark leaf holes: it slows you, never stops you. Pebbles lie flat (two pixels tall, no shadow) and you ride straight over them. Things lying on the snow have no shadow: deep snow and stars.
-- **First-run tutorial**: a new player's first run stops, once each, the first time something new comes up: at the start to teach steering and braking, then at the first tree or rock (they end your run), the first bush or deep snow (they slow you down), the first star, the first jump (and what to do in the air) and the first cliff (a big drop, with a bonus for landing it). The rest of the screen fades, the thing itself is marked and left clear, and a few big yellow words say what it does. Tap or press Space to go on. Each lesson shows once, is remembered between visits, and only for players on their first 3 runs, so returning players never see it. The run holds still under a lesson and plays out exactly as it would without one.
+- Trees, dead trees, rocks and bushes wipe you out. Pebbles are harmless.
+- **Reading the slope**: anything that stands up out of the snow casts a checkered shadow, and solid white ones (pines, bare dead trees, angular cracked rocks) crash you. A bush (a cluster of three round puffs speckled with dark leaf holes) crashes you too. Pebbles lie flat (two pixels tall, no shadow) and you ride straight over them. Stars lie on the snow and have no shadow.
+- **First-run tutorial**: a new player's first run stops, once each, the first time something new comes up: at the start to teach steering and braking, then at the first tree or rock (they end your run), the first star, the first jump (and what to do in the air) and the first cliff (a big drop, with a bonus for landing it). The rest of the screen fades, the thing itself is marked and left clear, and a few big yellow words say what it does. Tap or press Space to go on. Each lesson shows once, is remembered between visits, and only for players on their first 3 runs, so returning players never see it. The run holds still under a lesson and plays out exactly as it would without one.
 - Risk-lane stars (solid five-point stars) are +30, and every metre counts 1 times the speed multiplier.
 - A near miss (skimming a solid obstacle) scores +25 times the combo (up to x5) times the speed multiplier. A bar under the toast shows the combo timer draining.
 - **Jumps** come about every 85 m (a takeoff every 3 to 4 s at cruising speed, the first one about 45 m below the start), so the middle of a run never goes quiet. About eight in ten are **kickers**: a wide outlined ramp on the open path, with two arrows on its face pointing down the hill and a thick lip, so it cannot be mistaken for a tree, rock, bush or drift. The rest are cliffs. Kickers launch you. Nothing can hit you in the air, and the ground below a jump is always clear. A jump never shares ground with a risk lane, its run-up is never on a drift, and the next jump only comes at least 300 px (about 37 m) after the last landing zone ends. When a risk lane falls due it is fitted into the gap before the next jump. A shadow shows where you will land. Land with the board pointing downhill (heading under 0.35) for a clean landing (+6 speed); a sloppy landing (up to 0.7) costs 40% of your speed and your combo; landing sideways, or off the rotation, is a bail and a crash.
@@ -95,7 +94,7 @@ Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top
 - **Cliffs**: a rock ledge made of 2-4 chunks at slightly different heights, or sometimes a single chunk hugging one side of the screen. Only the rock drops you; the open slope between and beside the chunks is a way down. Every cliff is seeded, so no two look alike.
 - **Spin score**: paid on a clean landing, times the speed multiplier. 180 = 30, 360 = 70, 540 = 120, 720 = 180 points. The toast shows the degrees ("360!") when the spin finishes, and each landed spin counts as one trick for the stats, achievements and gear unlocks. A cliff drop still adds its own +75 bonus.
 - **Brake**: hold left and right together (A+D or both arrows). The board swings sideways, snow sprays up and you plow down to a crawl (about 30% of cruise speed) while still sliding downhill. Release to carve again. Not available in the air. On touch, hold one finger on each side (they need not land together). Lift one and the finger still down steers its way at once, so you can slide and then turn straight out of it.
-- **Snowdrifts** (rows of little humps of deep snow): heavy snow, you crawl. Neither kills you.
+- **Wipeouts**: once the tumble is over, three little birds circle the rider's head, flapping, until the next run.
 - **Risk lane**: a narrow side line next to the path with a trail of stars worth 30 each, flanked by trees. The lane, and the strips leading in and out of it, are always clear.
 - An all-time top 10, a top 10 for today's daily course and your best score are kept in `localStorage`. Your best counts across every course.
 - Achievements and challenges (50 close calls, 1000 m without lane stars, 10 tricks, 25 lane stars) unlock boards and riders on the GEAR screen: stripe, dots and twin tip boards, beanie, scarf and ears riders.
@@ -111,7 +110,7 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 
 - `src/sim/sim.ts` - the whole rule set as a pure class: feed it a seed and inputs at the fixed step and it always plays the same run. The game and the tests both run it. Produces `events` each step.
 - `src/sim/rider.ts`, `riderState.ts`, `speed.ts`, `tricks.ts`, `pose.ts` - the rider step (heading, braking, walls), its state, the speed model (`cruiseSpeed`, `topSpeed`, tuck and scrub, air time), spins, flips and grabs, and the pose the renderer draws.
-- `src/sim/landing.ts`, `src/sim/world.ts` - landing judgement and payout; the live object lists, culling, surface and ramp checks.
+- `src/sim/landing.ts`, `src/sim/world.ts` - landing judgement and payout; the live object lists, culling and ramp checks.
 - `src/sim/score.ts`, `src/sim/collision.ts`, `src/sim/trail.ts`, `src/core/rng.ts`, `src/core/detMath.ts` - scoring and combos, hit boxes and near-miss rules, an allocation-free trail, seeded PRNG and the daily seed, and an `exp` that gives the same bits in every browser, so a seed is the same course everywhere.
 - `src/sim/spawner.ts` - deterministic endless course generator with independent seeded streams. A wandering guaranteed-open path keeps every course winnable; kickers, jump lines, risk lanes and drifts are planned so they never break that guarantee. `src/sim/lines.ts` follows the jump line being ridden and pays its multiplier and bonus.
 - `src/state/progress.ts`, `src/state/storage.ts` - achievements, challenges and gear; localStorage access (every call guarded) for boards, settings and progress.
@@ -125,4 +124,4 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 
 ## Removed features
 
-Checkpoint gates, plain path stars, the ghost rider (with its replay recording), the avalanche, ice patches and the first-run labels over slope objects (replaced by the tutorial) were removed from the code. Each is recoverable from a git tag: `archive/checkpoints`, `archive/path-stars`, `archive/ghost`, `archive/avalanche`, `archive/ice`, `archive/slope-labels`. Courses kept their drifts, jumps and lanes when ice went. The PHOTO FINISH achievement went with the avalanche; older saves keep the record but it is no longer listed or counted.
+Checkpoint gates, plain path stars, the ghost rider (with its replay recording), the avalanche, ice patches, deep snow (snowdrifts) and the first-run labels over slope objects (replaced by the tutorial) were removed from the code. Each is recoverable from a git tag: `archive/checkpoints`, `archive/path-stars`, `archive/ghost`, `archive/avalanche`, `archive/ice`, `archive/deep-snow`, `archive/slope-labels`. Courses kept every tree, rock, bush, star, jump and lane when ice and deep snow went, so shared links open the same courses. Bushes used to slow you down; they now crash you like everything else solid (they were always kept off the open path and out of jump landings, so every course stays fair). The PHOTO FINISH achievement went with the avalanche; older saves keep the record but it is no longer listed or counted.

@@ -2,7 +2,7 @@ import { W } from '../core/config';
 import type { DeepReadonly, GameView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
-import type { Obstacle, Patch, Ramp } from '../sim/types';
+import type { Obstacle, Ramp } from '../sim/types';
 import { BACKDROP_H, buildBackdrop } from './backdrop';
 import { OFF, type Framebuffer } from './framebuffer';
 import {
@@ -50,7 +50,6 @@ export class SceneRenderer {
     if (!pal.color) this.drawSky(cam);
     this.drawBackdrop(cam);
     this.drawFlecks(cam, hudRect(g.settings.bigHud));
-    for (const p of sim.patches) this.drawPatch(p, cam);
     for (const r of sim.ramps) {
       if (r.kind === 'cliff') this.drawCliff(r, cam);
       else this.drawRamp(r, cam);
@@ -168,28 +167,6 @@ export class SceneRenderer {
     }
   }
 
-  /** A snowdrift is rows of little humps. It does not look like an obstacle. */
-  private drawPatch(p: DeepReadonly<Patch>, cam: number): void {
-    const cy = p.y - cam;
-    if (cy + p.ry < -2 || cy - p.ry > this.fb.h + 2) return;
-    const fb = this.fb;
-    const pal = this.pal;
-    for (let dy = -p.ry; dy <= p.ry; dy++) {
-      const k = Math.sqrt(Math.max(0, 1 - (dy / p.ry) * (dy / p.ry)));
-      const hw = Math.round(p.rx * k);
-      for (let dx = -hw; dx <= hw; dx++) {
-        // deep snow: staggered rows of little humps, open in between, so it reads as soft lumpy
-        // snow and never as a solid mound you could hit
-        const row = Math.floor((dy + p.ry) / 4);
-        const ly = (dy + p.ry) % 4;
-        const lx = (dx + p.rx + row * 3 + p.variant) % 6;
-        const inner = Math.abs(dx) < hw - 1 && dy < p.ry;
-        const hump = (ly === 1 && lx >= 1 && lx <= 3) || (ly === 2 && (lx === 0 || lx === 4));
-        if (inner && hump) fb.put(p.x + dx, cy + dy, pal.drift);
-      }
-    }
-  }
-
   /**
    * A cliff seen from above, built from chunks of rock along a wandering line. Each chunk is a blocky
    * wall: a snow cap on a stepped lip, broken horizontal strata with short joints between them, and
@@ -263,7 +240,7 @@ export class SceneRenderer {
    * A kicker seen from behind, as you ride up to it: an outlined trapezoid that widens toward a thick
    * lip, with two arrows on its face pointing downhill (the way you ride over it) and a hard shadow
    * past the lip. Nothing else on the hill has straight edges and arrows, so it never reads as a
-   * tree, rock, bush or drift, and the cliffs' warning chevrons point the other way.
+   * tree, rock or bush, and the cliffs' warning chevrons point the other way.
    */
   private drawRamp(r: DeepReadonly<Ramp>, cam: number): void {
     const ly = r.y - cam;

@@ -14,8 +14,6 @@ export interface Obstacle {
   half: number;
   /** Already judged for a near miss. */
   judged: boolean;
-  /** A bush that already slowed the rider. */
-  touched: boolean;
 }
 
 export interface Pickup {
@@ -62,23 +60,8 @@ export interface CliffSeg {
   dy: number;
 }
 
-export type PatchKind = 'drift';
-
-/** An ellipse of snowdrift (heavy, slow snow). Not an obstacle: it never kills. */
-export interface Patch {
-  id: number;
-  kind: PatchKind;
-  x: number;
-  y: number;
-  /** Radii of the ellipse. */
-  rx: number;
-  ry: number;
-  variant: number;
-}
-
 export interface SpawnBatch {
   obstacles: Obstacle[];
   pickups: Pickup[];
   ramps: Ramp[];
-  patches: Patch[];
 }

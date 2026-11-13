@@ -67,9 +67,6 @@ export class FakeSfx {
   nearMiss(): void {
     this.calls.push('near');
   }
-  bush(): void {
-    this.calls.push('bush');
-  }
   launch(): void {
     this.calls.push('launch');
   }

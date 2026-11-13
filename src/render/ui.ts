@@ -16,7 +16,13 @@ import { Framebuffer } from './framebuffer';
 import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
 import { LESSON_LINE, lessonTarget, lessonTop } from './lesson';
 import { MONO, paletteFor } from './palette';
-import { drawRider, type RiderStyle } from './riderSprite';
+import {
+  drawDizzyBirds,
+  drawRider,
+  WIPEOUT_SETTLE,
+  wipeoutHead,
+  type RiderStyle,
+} from './riderSprite';
 import type { RiderPose } from '../sim/pose';
 
 const CX = W / 2;
@@ -164,6 +170,16 @@ export function renderUi(fb: Framebuffer, g: GameView): void {
 
 function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
+  // Birds circle a fallen rider's head once the tumble is over. On this layer, so the game over fade never dims
+  // them; the camera holds still after a crash, so they stay on him. drawWipeout is drawn at the same spot.
+  if (sim.crashed && sim.crashT >= WIPEOUT_SETTLE) {
+    const head = wipeoutHead(
+      Math.round(g.riderX),
+      Math.round(g.riderY - g.camYi) + 10,
+      sim.crashFace,
+    );
+    drawDizzyBirds(fb, head, g.animT, paletteFor(g.settings.color));
+  }
   const big = g.settings.bigHud;
   const s1 = big ? 3 : 2;
   const s2 = big ? 2 : 1;

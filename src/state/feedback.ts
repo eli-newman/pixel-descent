@@ -66,9 +66,6 @@ export class Feedback {
         this.buzz(12);
         break;
       }
-      case 'bush':
-        sfx.bush();
-        break;
       case 'launch':
         sfx.launch();
         if (e.cliff) this.showToast('DROP!', 1, true);

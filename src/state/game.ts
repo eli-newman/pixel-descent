@@ -302,7 +302,6 @@ export class Game implements GameView {
       tuck: sim.tuck,
       air: r.air,
       active: this.phase === 'playing' && this.feedback.hitStop <= 0 && !this.lesson,
-      drift: sim.surface.drift,
       brake: r.brake,
     });
   }

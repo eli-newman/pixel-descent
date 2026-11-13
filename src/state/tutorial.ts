@@ -14,11 +14,11 @@ import type { SimView } from './view';
  * only on a player's first `TUTORIAL_RUNS` runs. The sim is not stepped while a lesson is up, so a run plays out the
  * same with or without it.
  */
-export type LessonId = 'steer' | 'crash' | 'slow' | 'star' | 'jump' | 'cliff';
+export type LessonId = 'steer' | 'crash' | 'star' | 'jump' | 'cliff';
 
 /** What a lesson points at: a thing on the slope by its list and id, or nothing (the steering lesson). */
 export interface LessonTarget {
-  list: 'obstacles' | 'patches' | 'pickups' | 'ramps';
+  list: 'obstacles' | 'pickups' | 'ramps';
   id: number;
 }
 
@@ -30,14 +30,7 @@ export interface Lesson {
 }
 
 /** One bit per lesson in `Stats.lessons`, in the order a run usually meets them. */
-export const LESSON_ORDER: readonly LessonId[] = [
-  'steer',
-  'crash',
-  'slow',
-  'star',
-  'jump',
-  'cliff',
-];
+export const LESSON_ORDER: readonly LessonId[] = ['steer', 'crash', 'star', 'jump', 'cliff'];
 export const ALL_LESSONS = (1 << LESSON_ORDER.length) - 1;
 
 function bit(id: LessonId): number {
@@ -64,8 +57,6 @@ export function lessonLines(id: LessonId, touch: boolean): readonly string[] {
       return [touch ? 'HOLD A SIDE TO STEER' : 'A AND D TO STEER', 'HOLD BOTH TO BRAKE'];
     case 'crash':
       return ['TREES AND ROCKS', 'END YOUR RUN'];
-    case 'slow':
-      return ['BUSHES AND DEEP', 'SNOW SLOW YOU DOWN'];
     case 'star':
       return ['GRAB STARS', 'FOR POINTS'];
     case 'jump':
@@ -91,15 +82,10 @@ export function nextLesson(sim: SimView, seen: number, touch: boolean): Lesson |
   if (sim.rider.y < START_Y + LESSON_FREE_RIDE) return null;
   const things: Array<{ id: LessonId; target: LessonTarget; y: number }> = [];
   for (const o of sim.obstacles) {
-    if (isPebble(o.kind, o.size)) continue;
-    things.push({
-      id: o.kind === 'bush' ? 'slow' : 'crash',
-      target: { list: 'obstacles', id: o.id },
-      y: o.y,
-    });
+    // The lesson names trees and rocks, so it points at one of those, never a bush.
+    if (isPebble(o.kind, o.size) || o.kind === 'bush') continue;
+    things.push({ id: 'crash', target: { list: 'obstacles', id: o.id }, y: o.y });
   }
-  for (const p of sim.patches)
-    things.push({ id: 'slow', target: { list: 'patches', id: p.id }, y: p.y });
   for (const p of sim.pickups) {
     if (!p.taken) things.push({ id: 'star', target: { list: 'pickups', id: p.id }, y: p.y });
   }

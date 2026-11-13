@@ -4,7 +4,7 @@ import type { Obstacle, ObstacleKind } from '../src/sim/types';
 import { getSprite, type Sprite } from '../src/render/sprites';
 
 function obstacle(kind: ObstacleKind, size: number): Obstacle {
-  return { id: 1, kind, size, variant: 0, x: 100, y: 200, half: 9, judged: false, touched: false };
+  return { id: 1, kind, size, variant: 0, x: 100, y: 200, half: 9, judged: false };
 }
 
 /** The highest filled row in every column of a sprite: its top silhouette, left to right. */

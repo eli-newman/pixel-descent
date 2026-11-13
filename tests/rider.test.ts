@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MAX_SPEED, STEP } from '../src/core/config';
 import { poseOf } from '../src/sim/pose';
 import { launch, riderZ, stepRider } from '../src/sim/rider';
-import { createRider, type RiderState, type Surface } from '../src/sim/riderState';
+import { createRider, type RiderState } from '../src/sim/riderState';
 import {
   airTime,
   cruiseSpeed,
@@ -21,16 +21,8 @@ import {
   startTrick,
 } from '../src/sim/tricks';
 
-const flat: Surface = { drift: false };
-
-function run(
-  r: RiderState,
-  steer: number,
-  seconds: number,
-  dist = 800,
-  surface: Surface = flat,
-): void {
-  const env = { cruise: cruiseSpeed(dist), top: topSpeed(dist), surface };
+function run(r: RiderState, steer: number, seconds: number, dist = 800): void {
+  const env = { cruise: cruiseSpeed(dist), top: topSpeed(dist) };
   for (let i = 0; i < seconds / STEP; i++) stepRider(r, steer, STEP, env);
 }
 
@@ -71,7 +63,6 @@ describe('speed model', () => {
         stepRider(r, steer * sign, STEP, {
           cruise: cruiseSpeed(800),
           top: topSpeed(800),
-          surface: flat,
         });
         r.x = 90;
       }
@@ -95,7 +86,6 @@ describe('speed model', () => {
       stepRider(carver, steer, STEP, {
         cruise: cruiseSpeed(800),
         top: topSpeed(800),
-        surface: flat,
       });
     }
     expect(straight.y).toBeGreaterThan(carver.y + 100);
@@ -106,13 +96,6 @@ describe('speed model', () => {
     r.speed = 30;
     run(r, 0, 3);
     expect(r.speed).toBeGreaterThan(cruiseSpeed(800));
-  });
-
-  it('turns a snowdrift into a crawl', () => {
-    const drift = createRider();
-    drift.speed = topSpeed(800);
-    run(drift, 0, 3, 800, { drift: true });
-    expect(drift.speed).toBeLessThan(cruiseSpeed(800) * 0.6);
   });
 
   it('maps the tuck to a score multiplier from x1 to x2.5', () => {
@@ -134,7 +117,7 @@ describe('air and tricks', () => {
     let peak = 0;
     let steps = 0;
     while (!r.landed && steps < 1000) {
-      stepRider(r, 0, STEP, { cruise: 150, top: 300, surface: flat });
+      stepRider(r, 0, STEP, { cruise: 150, top: 300 });
       peak = Math.max(peak, riderZ(r));
       steps++;
     }
@@ -148,11 +131,11 @@ describe('air and tricks', () => {
     const r = createRider();
     r.speed = 250;
     launch(r);
-    for (let i = 0; i < 30; i++) stepRider(r, 1, STEP, { cruise: 150, top: 300, surface: flat });
+    for (let i = 0; i < 30; i++) stepRider(r, 1, STEP, { cruise: 150, top: 300 });
     expect(r.speed).toBe(250);
   });
 
-  const env = { cruise: 150, top: 300, surface: flat };
+  const env = { cruise: 150, top: 300 };
 
   /** Fly a whole jump holding a steer value; returns the rider as it touched down. */
   function fly(speed: number, cliff: boolean, steer: (r: RiderState) => number): RiderState {

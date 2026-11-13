@@ -38,11 +38,6 @@ export function lessonTarget(g: GameView): FrameBox | null {
       }
       break;
     }
-    case 'patches': {
-      const p = sim.patches.find((e) => e.id === t.id);
-      if (p) box = { x0: p.x - p.rx, y0: p.y - p.ry, x1: p.x + p.rx, y1: p.y + p.ry };
-      break;
-    }
     case 'pickups': {
       const p = sim.pickups.find((e) => e.id === t.id);
       if (p) box = { x0: p.x - 4, y0: p.y - 4, x1: p.x + 4, y1: p.y + 4 };

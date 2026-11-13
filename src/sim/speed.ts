@@ -1,6 +1,6 @@
 import { MAX_SPEED } from '../core/config';
 import { detExp } from '../core/detMath';
-import type { RiderState, Surface } from './riderState';
+import type { RiderState } from './riderState';
 
 /**
  * The speed model. Everything but `stepSpeed` also sizes the course (the spawner imports it), so it
@@ -68,20 +68,12 @@ export function maxFlightPx(speed: number, cliff = false): number {
 export interface SpeedEnv {
   cruise: number;
   top: number;
-  surface: Surface;
 }
 
-/** Ground speed update: tuck acceleration, carve scrub and drifts. */
+/** Ground speed update: tuck acceleration and carve scrub. */
 export function stepSpeed(r: RiderState, dt: number, env: SpeedEnv): void {
   const c = Math.abs(r.hx);
-  const { cruise, top, surface } = env;
-  if (surface.drift) {
-    // Heavy snow drags the rider down to a crawl, whatever the heading.
-    const crawl = Math.max(MIN_SPEED, cruise * 0.42);
-    if (r.speed > crawl) r.speed += (crawl - r.speed) * Math.min(1, 2.4 * dt);
-    else r.speed = Math.min(crawl, r.speed + ACCEL * 0.5 * dt);
-    return;
-  }
+  const { cruise, top } = env;
   const straight = clamp01(1 - c / TUCK_HX);
   const carveSpeed = cruise * (1 - CARVE_LOSS * clamp01(c / MAX_HX));
   const target = carveSpeed + (top - carveSpeed) * straight;

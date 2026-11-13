@@ -43,7 +43,6 @@ export type SimView = DeepReadonly<
     | 'obstacles'
     | 'pickups'
     | 'ramps'
-    | 'patches'
     | 'crashed'
     | 'crashT'
     | 'crashFace'
