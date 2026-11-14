@@ -106,8 +106,7 @@ export function drawTextCentered(
  * Text with an `edge` that follows the letters, so it stays readable over snow, trees and sky with no box behind it.
  * Every glyph block paints the pixels around it in `edge` first (one pixel deep, two from scale 3 up), then the
  * letters go on top. The edge fills the gaps inside and between the letters, so it must be the tone of the background
- * the text is meant for (black under white text on the black slope, snow under dark text on the white one), never a
- * contrast colour.
+ * the text is meant for (black on the black slope), never a contrast colour.
  */
 export function drawTextHalo(
   fb: Framebuffer,
@@ -122,25 +121,6 @@ export function drawTextHalo(
   eachPixel(text, x, y, scale, (px, py) =>
     fb.fillRect(px - e, py - e, scale + 2 * e, scale + 2 * e, edge),
   );
-  drawText(fb, text, x, y, color, scale);
-}
-
-/**
- * Text with a drop shadow in `shadow`, down and to the right by about half a letter pixel. For light letters on a
- * light background (yellow on white snow): a full outline would fill the two pixel gaps inside letters at twice the
- * size, while a shadow leaves every gap half open and still draws the letter's shape.
- */
-export function drawTextShadow(
-  fb: Framebuffer,
-  text: string,
-  x: number,
-  y: number,
-  color: number,
-  scale: number,
-  shadow: number,
-): void {
-  const o = Math.ceil(scale / 2);
-  drawText(fb, text, x + o, y + o, shadow, scale);
   drawText(fb, text, x, y, color, scale);
 }
 

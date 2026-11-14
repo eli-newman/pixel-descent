@@ -26,13 +26,13 @@ describe('run analytics', () => {
     playToOver(rig);
     const { game, analytics } = rig;
     expect(analytics.names()).toEqual(['Run Start', 'Run End']);
-    expect(analytics.events[0]?.data).toEqual({ run: '1', setup: 'board mono normal' });
+    expect(analytics.events[0]?.data).toEqual({ run: '1', setup: 'board normal' });
     const res = game.result;
     if (!res) throw new Error('no result');
     expect(analytics.events[1]?.data).toEqual({
       metres: distBucket(res.dist),
       score: scoreBucket(res.score),
-      setup: 'board mono normal',
+      setup: 'board normal',
       run: '1',
     });
 
@@ -45,15 +45,14 @@ describe('run analytics', () => {
     expect(analytics.events[2]?.data['run']).toBe('2');
   });
 
-  it('labels skis, colour and the daily course', () => {
+  it('labels skis and the daily course', () => {
     const { game, analytics } = makeGame();
     game.update(1 / 120);
     game.press('gear');
     game.press('skis');
     game.press('back');
-    game.press('color');
     game.press('daily');
-    expect(analytics.events.at(-1)?.data).toEqual({ run: '1', setup: 'skis color daily' });
+    expect(analytics.events.at(-1)?.data).toEqual({ run: '1', setup: 'skis daily' });
   });
 
   it('never sends the seed, the score to the point or anything but short labels', () => {

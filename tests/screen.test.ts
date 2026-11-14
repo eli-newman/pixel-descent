@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { Framebuffer } from '../src/render/framebuffer';
+import { Framebuffer, OFF, WHITE, YELLOW } from '../src/render/framebuffer';
 import { drawTextHalo } from '../src/render/font';
 import { hudRect } from '../src/render/layout';
-import { C, COLOR } from '../src/render/palette';
 import { SceneRenderer } from '../src/render/scene';
 import { renderUi } from '../src/render/ui';
 import { makeGame } from './helpers/fakes';
@@ -16,13 +15,12 @@ function rows(fb: Framebuffer, from: number, count: number): number[] {
 }
 
 describe('a phone filled edge to edge', () => {
-  it('draws the slope above and below the frame, lined up with it to the pixel, in both looks', () => {
+  it('draws the slope above and below the frame, lined up with it to the pixel', () => {
     const offenders: string[] = [];
     let above = 0;
     let below = 0;
-    for (const color of [false, true]) {
+    {
       const { game, input } = makeGame('screen');
-      if (color) game.press('color');
       input.push('start');
       game.update(1 / 120);
       expect(game.phase).toBe('playing');
@@ -35,7 +33,7 @@ describe('a phone filled edge to edge', () => {
         const a = rows(frame.render(game), 0, H);
         const out = tall.render(game);
         const b = rows(out, 30, H);
-        if (a.some((c, k) => c !== b[k])) offenders.push(`${color ? 'colour' : 'mono'} step ${i}`);
+        if (a.some((c, k) => c !== b[k])) offenders.push(`step ${i}`);
         // and the extra rows hold the slope (trees, flecks, the track), not an empty band
         if (new Set(rows(out, 0, 30)).size > 1) above++;
         if (new Set(rows(out, 30 + H, 45)).size > 1) below++;
@@ -48,10 +46,9 @@ describe('a phone filled edge to edge', () => {
 
   it('carries the sky on above the start area on the title', () => {
     const { game } = makeGame('screen');
-    game.press('color');
     game.update(1 / 120);
     const out = new SceneRenderer(new Framebuffer(W, 40 + H), 40).render(game);
-    expect(new Set(rows(out, 0, 30))).toEqual(new Set([COLOR.sky]));
+    expect(new Set(rows(out, 0, 30))).toEqual(new Set([OFF]));
   });
 });
 
@@ -59,18 +56,18 @@ describe('text without boxes', () => {
   it('outlines the letters instead of filling a box behind them', () => {
     const fb = new Framebuffer(20, 9);
     fb.clear(0);
-    // T: a bar over a stem. A box would also darken the corners under the bar, beside the stem.
-    drawTextHalo(fb, 'T', 2, 2, C.ink, 1, C.snow);
-    expect(fb.get(1, 1)).toBe(C.snow);
-    expect(fb.get(2, 2)).toBe(C.ink);
+    // T: a bar over a stem. A box would also fill the corners under the bar, beside the stem. The edge is drawn in
+    // yellow here only so it can be told apart from the empty buffer.
+    drawTextHalo(fb, 'T', 2, 2, WHITE, 1, YELLOW);
+    expect(fb.get(1, 1)).toBe(YELLOW);
+    expect(fb.get(2, 2)).toBe(WHITE);
     expect(fb.get(1, 7)).toBe(0);
     expect(fb.get(5, 7)).toBe(0);
   });
 
-  it('leaves most of the score corner open to the slope while riding, in both looks', () => {
-    for (const color of [false, true]) {
+  it('leaves most of the score corner open to the slope while riding', () => {
+    {
       const { game, input } = makeGame('screen');
-      if (color) game.press('color');
       input.push('start');
       for (let i = 0; i < 120 * 3; i++) game.update(1 / 120);
       const fb = new Framebuffer(W, H);

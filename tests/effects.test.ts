@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { H, STEP, W } from '../src/core/config';
-import { Framebuffer } from '../src/render/framebuffer';
-import { COLOR } from '../src/render/palette';
+import { Framebuffer, WHITE } from '../src/render/framebuffer';
 import { SceneRenderer } from '../src/render/scene';
 import { createRider, type RiderState } from '../src/sim/riderState';
 import { CarveCloud, Particles, Puffs } from '../src/state/effects';
@@ -167,9 +166,8 @@ describe('the carve cloud', () => {
     expect(p.count).toBe(160);
   });
 
-  it('draws a cloud in the slope powder colours, and starts each run without one', () => {
+  it('draws a cloud in white, and starts each run without one', () => {
     const { game, input } = makeGame('cloud');
-    game.settings.color = true;
     input.push('start');
     for (let i = 0; i < 6; i++) game.update(STEP);
     const r = game.sim.rider;
@@ -185,7 +183,7 @@ describe('the carve cloud', () => {
     const colors = new Set<number>();
     for (let i = 0; i < before.length; i++) if (before[i] !== plain[i]) colors.add(before[i] ?? 0);
     expect(colors.size).toBeGreaterThan(0);
-    expect([...colors].every((c) => c === COLOR.powder || c === COLOR.spray)).toBe(true);
+    expect([...colors]).toEqual([WHITE]);
     game.newRun('cloud-2');
     expect(game.puffs.count).toBe(0);
   });

@@ -1,7 +1,5 @@
 :root {
   --yellow: #f5d742;
-  /* The UI's ink on the white slope in colour mode (C.ink in src/render/palette.ts). */
-  --ink: #1b2233;
 }
 
 * {
@@ -53,8 +51,7 @@ body {
 }
 
 /*
- * Menus sit straight on the slope, so behind them the whole screen fades towards the snow's own tone (black, or the
- * white of colour mode) and the rider and trees never fight with the words: lightly for pause and game over, where
+ * Menus sit straight on the slope, so behind them the whole screen fades towards the snow's own black, and the rider and trees never fight with the words: lightly for pause and game over, where
  * the run still matters, and almost all the way for SCORES, GEAR and GOALS. The main title shows the mountains as
  * they are and fades only the slope under its menu. Under a tutorial lesson it fades lightly too, with a hole (main.ts sets the clip path) over the thing
  * the lesson is about.
@@ -65,10 +62,6 @@ body {
   display: none;
   pointer-events: none;
   background: rgb(0 0 0 / 60%);
-}
-
-#stage[data-color='on'] #wash {
-  background: rgb(247 249 252 / 70%);
 }
 
 #stage[data-phase='paused'] #wash,
@@ -83,17 +76,9 @@ body {
   background: linear-gradient(to bottom, rgb(0 0 0 / 0%) 36%, rgb(0 0 0 / 80%) 46%);
 }
 
-#stage[data-phase='title'][data-screen='main'][data-color='on'] #wash {
-  background: linear-gradient(to bottom, rgb(247 249 252 / 0%) 36%, rgb(247 249 252 / 85%) 46%);
-}
-
 #stage[data-phase='title']:not([data-screen='main']) #wash {
   display: block;
   background: rgb(0 0 0 / 88%);
-}
-
-#stage[data-phase='title'][data-color='on']:not([data-screen='main']) #wash {
-  background: rgb(247 249 252 / 90%);
 }
 
 /* Reads the device safe-area insets (notch, home bar) as padding, so the script can fit inside them. */
@@ -136,10 +121,6 @@ body {
 .hud-btn:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
-}
-
-#stage[data-color='on'] .hud-btn {
-  color: var(--ink);
 }
 
 /* On touch screens the pause button appears while it is useful; keyboard and mouse use keys. */

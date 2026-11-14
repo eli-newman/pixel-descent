@@ -11,11 +11,10 @@ import {
   riderIndex,
   type GearDef,
 } from '../state/progress';
-import { drawTextHalo, drawTextShadow, textWidth } from './font';
-import { Framebuffer } from './framebuffer';
+import { drawTextHalo, textWidth } from './font';
+import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
 import { LESSON_LINE, lessonTarget, lessonTop } from './lesson';
-import { MONO, paletteFor } from './palette';
 import {
   drawDizzyBirds,
   drawRider,
@@ -28,37 +27,22 @@ import type { RiderPose } from '../sim/pose';
 const CX = W / 2;
 
 /**
- * The UI colours of the frame being drawn (`Palette.ui`, `uiHot` and their edges), set at the start of every
- * `renderUi`. Nothing in the UI sits on a box: the slope shows through everywhere, and every word and frame carries
- * an edge that sets it off from the slope, so it reads over trees, rocks and sky.
+ * The UI's colours: white words and frames, yellow for what matters (score, PLAY, the tutorial), each with a black
+ * edge. Nothing in the UI sits on a box: the slope shows through everywhere, and every word and frame carries an
+ * edge that sets it off from the slope, so it reads over trees, rocks and sky.
  */
-let INK = MONO.ui;
-let HOT = MONO.uiHot;
-let EDGE = MONO.uiEdge;
-let HOT_EDGE = MONO.uiHotEdge;
-let HOT_SMALL = MONO.uiHotSmall;
-let HOT_SHADOW = MONO.uiHotShadow;
-
-/** A highlight at the smallest font size is `uiHotSmall`: in colour a dark edge would fill its letters in. */
-function sized(color: number, scale: number): number {
-  return color === HOT && scale === 1 ? HOT_SMALL : color;
-}
-
-function edgeOf(color: number): number {
-  return color === HOT ? HOT_EDGE : EDGE;
-}
+const INK = WHITE;
+const HOT = YELLOW;
+const EDGE = OFF;
 
 function frame(fb: Framebuffer, x: number, y: number, w: number, h: number, color: number): void {
-  const edge = edgeOf(color);
-  fb.strokeRect(x - 1, y - 1, w + 2, h + 2, edge);
-  if (w > 2 && h > 2) fb.strokeRect(x + 1, y + 1, w - 2, h - 2, edge);
+  fb.strokeRect(x - 1, y - 1, w + 2, h + 2, EDGE);
+  if (w > 2 && h > 2) fb.strokeRect(x + 1, y + 1, w - 2, h - 2, EDGE);
   fb.strokeRect(x, y, w, h, color);
 }
 
 function text(fb: Framebuffer, t: string, x: number, y: number, color = INK, scale = 1): void {
-  const c = sized(color, scale);
-  if (c === HOT && HOT_SHADOW) drawTextShadow(fb, t, x, y, c, scale, HOT_EDGE);
-  else drawTextHalo(fb, t, x, y, c, scale, edgeOf(c));
+  drawTextHalo(fb, t, x, y, color, scale, EDGE);
 }
 
 function textC(fb: Framebuffer, t: string, cx: number, y: number, color = INK, scale = 1): void {
@@ -110,8 +94,6 @@ function labelOf(g: GameView, id: ButtonId): string {
       return `AUTO PAUSE ${on(g.settings.autoPause)}`;
     case 'manual':
       return `MANUAL SPIN ${on(g.settings.manualSpin)}`;
-    case 'color':
-      return `COLOR ${on(g.settings.color)}`;
     case 'again':
       return 'NEW RUN';
     case 'retry':
@@ -142,13 +124,6 @@ function drawButton(
 
 /** Heads-up display, title, pause and game over screens, all drawn into the low-res buffer. */
 export function renderUi(fb: Framebuffer, g: GameView): void {
-  const pal = paletteFor(g.settings.color);
-  INK = pal.ui;
-  HOT = pal.uiHot;
-  EDGE = pal.uiEdge;
-  HOT_EDGE = pal.uiHotEdge;
-  HOT_SMALL = pal.uiHotSmall;
-  HOT_SHADOW = pal.uiHotShadow;
   switch (g.phase) {
     case 'title':
       drawTitle(fb, g);
@@ -178,7 +153,7 @@ function drawHud(fb: Framebuffer, g: GameView): void {
       Math.round(g.riderY - g.camYi) + 10,
       sim.crashFace,
     );
-    drawDizzyBirds(fb, head, g.animT, paletteFor(g.settings.color));
+    drawDizzyBirds(fb, head, g.animT);
   }
   const big = g.settings.bigHud;
   const s1 = big ? 3 : 2;
@@ -230,7 +205,6 @@ function drawLesson(fb: Framebuffer, g: GameView): void {
 /** Corner marks around a box, each arm a few pixels long, with the usual edge. */
 function corners(fb: Framebuffer, x: number, y: number, w: number, h: number, color: number): void {
   const arm = Math.max(3, Math.min(6, Math.floor(Math.min(w, h) / 3)));
-  const edge = edgeOf(color);
   const marks: Array<[number, number, number, number]> = [];
   for (const [cx, dx] of [
     [x, 1],
@@ -244,7 +218,7 @@ function corners(fb: Framebuffer, x: number, y: number, w: number, h: number, co
       marks.push([cx, dy > 0 ? cy : cy - arm + 1, 1, arm]);
     }
   }
-  for (const [mx, my, mw, mh] of marks) fb.fillRect(mx - 1, my - 1, mw + 2, mh + 2, edge);
+  for (const [mx, my, mw, mh] of marks) fb.fillRect(mx - 1, my - 1, mw + 2, mh + 2, EDGE);
   for (const [mx, my, mw, mh] of marks) fb.fillRect(mx, my, mw, mh, color);
 }
 
@@ -449,7 +423,6 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   textC(fb, 'GEAR', CX, 12, INK, 2);
   const skis = g.progress.gear.kit === 'skis';
   const style: RiderStyle = { board: g.boardIdx, rider: g.riderIdx, skis };
-  const palette = paletteFor(g.settings.color);
   // A rider doing a slow carve, drawn at twice the scale and centred in the gap between the kit buttons and the rows.
   const a = (62 * Math.PI) / 180;
   const pose: RiderPose = {
@@ -468,10 +441,10 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   };
   // Measured on a still frame, so animated headgear never nudges the whole preview.
   PREVIEW.clear();
-  drawRider(PREVIEW, pose, { style, time: 0, palette });
+  drawRider(PREVIEW, pose, { style, time: 0 });
   const box = litBox(PREVIEW);
   PREVIEW.clear();
-  drawRider(PREVIEW, pose, { style, time: g.animT, palette });
+  drawRider(PREVIEW, pose, { style, time: g.animT });
   if (box) {
     const midX = Math.round((box.x0 + box.x1 + 1) / 2);
     const midY = Math.round((box.y0 + box.y1 + 1) / 2);
@@ -525,9 +498,9 @@ function drawPause(fb: Framebuffer, g: GameView): void {
   drawButtons(fb, g);
   // The spin mode is fixed for a run, so a change made here waits for the next one.
   if (g.settings.manualSpin !== (g.sim.opts.manualSpin === true)) {
-    textC(fb, 'SPIN MODE STARTS NEXT RUN', CX, 232, HOT);
+    textC(fb, 'SPIN MODE STARTS NEXT RUN', CX, 208, HOT);
   }
-  textC(fb, 'P, ESC OR TAP TO RESUME', CX, 242, HOT);
+  textC(fb, 'P, ESC OR TAP TO RESUME', CX, 218, HOT);
 }
 
 function drawOver(fb: Framebuffer, g: GameView): void {

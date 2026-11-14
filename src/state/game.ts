@@ -261,7 +261,7 @@ export class Game implements GameView {
 
   /** How this run is played, for analytics. */
   private runSetup(): RunSetup {
-    return { kit: this.progress.gear.kit, color: this.settings.color, daily: this.daily };
+    return { kit: this.progress.gear.kit, daily: this.daily };
   }
 
   update(dt: number): void {

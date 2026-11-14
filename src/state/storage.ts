@@ -30,8 +30,6 @@ export interface Settings {
   haptics: boolean;
   /** Manual spin: the arrows turn the rider freely in the air. Off by default (assisted spins). */
   manualSpin: boolean;
-  /** Colour mode: white snow, green pines, grey and brown rock. Off by default (the white on black look). */
-  color: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -41,7 +39,6 @@ export const DEFAULT_SETTINGS: Settings = {
   autoPause: true,
   haptics: true,
   manualSpin: false,
-  color: false,
 };
 
 /** The board of one daily course. Only the newest day is kept, as older ones are never shown. */

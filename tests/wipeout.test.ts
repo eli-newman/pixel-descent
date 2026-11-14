@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { H, W } from '../src/core/config';
-import { Framebuffer } from '../src/render/framebuffer';
-import { C, MONO } from '../src/render/palette';
+import { Framebuffer, WHITE } from '../src/render/framebuffer';
 import { WIPEOUT_SETTLE, wipeoutHead } from '../src/render/riderSprite';
 import { renderUi } from '../src/render/ui';
 import type { Game } from '../src/state/game';
@@ -10,9 +9,8 @@ import { makeGame } from './helpers/fakes';
 const STEP = 1 / 120;
 
 /** Ride straight down a course until the rider crashes. */
-function crashed(color: boolean): Game {
+function crashed(): Game {
   const { game, input } = makeGame('zq7secret42');
-  if (color) game.press('color');
   input.push('start');
   for (let i = 0; i < 120 * 60 && !game.sim.crashed; i++) game.update(STEP);
   expect(game.sim.crashed).toBe(true);
@@ -31,11 +29,11 @@ function birdPixels(game: Game, bird: number): Array<[number, number]> {
 }
 
 describe('birds over a fallen rider', () => {
-  it('circle his head once the tumble is over, flapping, until the next run, in both looks', () => {
-    for (const color of [false, true]) {
-      const game = crashed(color);
-      const bird = color ? C.bird : MONO.bird;
-      // none while he is still tumbling (in black and white the score is white too, so look only near him)
+  it('circle his head once the tumble is over, flapping, until the next run', () => {
+    {
+      const game = crashed();
+      const bird = WHITE;
+      // none while he is still tumbling (the score is white too, so look only near him)
       const near = (pts: Array<[number, number]>): Array<[number, number]> => {
         const head = wipeoutHead(
           Math.round(game.riderX),

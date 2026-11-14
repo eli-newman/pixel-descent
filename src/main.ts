@@ -4,8 +4,7 @@ import { Game } from './state/game';
 import { Input } from './platform/input';
 import { Loop } from './platform/loop';
 import { normalizeSeed } from './core/rng';
-import { cssColor, Framebuffer } from './render/framebuffer';
-import { paletteFor } from './render/palette';
+import { Framebuffer } from './render/framebuffer';
 import { lessonTarget } from './render/lesson';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
@@ -118,7 +117,6 @@ const uiFb = new Framebuffer(W, H);
 const uiImage = new ImageData(uiFb.data, W, H);
 /** The last layout. */
 let fit: Fit = fitCanvas(W, H, 1);
-let colorOn: boolean | null = null;
 
 /** Both layers go through `SharpCanvas`: crisp at any scale, and the slope's slide is drawn into its own pixels. */
 function render(alpha: number): void {
@@ -126,13 +124,6 @@ function render(alpha: number): void {
   scene.render(game);
   uiFb.clear(0);
   renderUi(uiFb, game);
-  const color = game.settings.color;
-  if (color !== colorOn) {
-    colorOn = color;
-    // Wherever the slope does not reach (beside it on a wide screen), the page is its snow.
-    document.body.style.background = cssColor(paletteFor(color).snow);
-    stage.dataset['color'] = color ? 'on' : 'off';
-  }
   slopeLayer.draw(image, slideRows(game.camFrac, fit.scale));
   uiLayer.draw(uiImage);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;

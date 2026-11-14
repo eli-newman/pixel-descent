@@ -1,8 +1,7 @@
 import { BOARD_LEN } from '../core/config';
 import { hash2 } from '../core/rng';
 import type { TrailView } from '../state/view';
-import type { Framebuffer } from './framebuffer';
-import { MONO, type Palette } from './palette';
+import { GREY, SOFT_GREY, WHITE, type Framebuffer } from './framebuffer';
 
 /** Past this gap between recorded points the rider was in the air, so the track breaks instead of joining up. */
 const GAP = 6;
@@ -34,8 +33,6 @@ const POWDER_GRAINS = 3;
 const SPILL_GRAINS = 3;
 const SPILL_DENSITY = 0.3;
 const SPILL_REACH = 3;
-/** Share of the groove's floor broken up by loose powder (`trackGrain`). */
-const GROOVE_GRAIN = 0.2;
 /** Points between the two stretches of already travelled path compared to judge a turn for powder. */
 const POWDER_SPAN = 7;
 /**
@@ -76,12 +73,16 @@ export class TrackPainter {
   private skis = false;
   private start = 0;
   private end = 0;
-  private pal: Palette = MONO;
+
+  /**
+   * `powder` is the colour of the snow thrown out of turns and spilled along the track. It is white in the game, the
+   * same as the line; tests give it a colour of its own to tell the two apart.
+   */
+  constructor(private readonly powder: number = WHITE) {}
 
   /** `skis` draws the two thin lines of a pair of skis instead of the board's one. */
-  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false, pal: Palette = MONO): void {
+  draw(fb: Framebuffer, t: TrailView, cam: number, skis = false): void {
     this.skis = skis;
-    this.pal = pal;
     this.reserve(t.count);
     let start = 0;
     for (let i = 1; i <= t.count; i++) {
@@ -165,12 +166,12 @@ export class TrackPainter {
       // Each ski's line is centred on its own path, a real perpendicular away from the middle, so the pair stays
       // evenly apart where the spans swap between rows and columns. It swells outwards, keeping the gap open.
       const off = SKI_GAP / 2 + (w - SKI_WIDTH) / 2;
-      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, -off);
-      this.span(fb, i, cam, -w / 2, w / 2, this.pal.track, off);
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, -off);
+      this.span(fb, i, cam, -w / 2, w / 2, WHITE, off);
       return;
     }
     const half = this.width(i - 1) / 2;
-    this.span(fb, i, cam, -half, half, this.pal.track);
+    this.span(fb, i, cam, -half, half, WHITE);
   }
 
   private skiWidth(i: number): number {
@@ -196,8 +197,8 @@ export class TrackPainter {
     const off = this.skis
       ? (SKI_GAP / 2 + (w - SKI_WIDTH) / 2) * (positive === along >= 0 ? -1 : 1)
       : 0;
-    if (positive) this.span(fb, i, cam, half - 1, half + reach, this.pal.trackShadow, off);
-    else this.span(fb, i, cam, -half - reach, -half + 1, this.pal.trackShadow, off);
+    if (positive) this.span(fb, i, cam, half - 1, half + reach, GREY, off);
+    else this.span(fb, i, cam, -half - reach, -half + 1, GREY, off);
   }
 
   /**
@@ -229,14 +230,9 @@ export class TrackPainter {
       for (let d = from; d <= to; d++) {
         const wx = steep ? d : Math.round(x);
         const wy = steep ? Math.round(y) : d;
-        fb.put(wx, wy - cam, color === this.pal.track ? this.groove(wx, wy) : color);
+        fb.put(wx, wy - cam, color);
       }
     }
-  }
-
-  /** The groove's floor at a world pixel: packed snow broken up by loose powder, fixed to the snow so it never shimmers. */
-  private groove(wx: number, wy: number): number {
-    return hash2(wx * 5 + 3, wy * 3 + 7) < GROOVE_GRAIN ? this.pal.trackGrain : this.pal.track;
   }
 
   /**
@@ -259,9 +255,9 @@ export class TrackPainter {
       const x = Math.round((this.x[i] ?? 0) + ty * side * lands * thrown);
       const y = Math.round((this.y[i] ?? 0) - tx * side * lands * thrown);
       if (y - cam < -8 || y - cam > fb.h + 8) continue;
-      fb.put(x, y - cam, this.pal.powder);
+      fb.put(x, y - cam, this.powder);
       if (hash2(ix + grain, iy + 29) < 0.35) {
-        fb.put(Math.round(x + tx), Math.round(y + ty) - cam, this.pal.powder);
+        fb.put(Math.round(x + tx), Math.round(y + ty) - cam, this.powder);
       }
     }
   }
@@ -293,7 +289,7 @@ export class TrackPainter {
       const lands = BASE_WIDTH / 2 + SWELL + 2 + hash2(iy, ix + grain * 17) * 4 * depth;
       const x = Math.round((this.x[i] ?? 0) + dx * lands * thrown);
       const y = Math.round((this.y[i] ?? 0) + dy * lands * thrown);
-      if (y - cam >= -8 && y - cam <= fb.h + 8) fb.put(x, y - cam, this.pal.powder);
+      if (y - cam >= -8 && y - cam <= fb.h + 8) fb.put(x, y - cam, this.powder);
     }
   }
 
@@ -382,7 +378,7 @@ export class TrackPainter {
       for (let v = 0; v <= across; v++) {
         const g = v / Math.max(1, across);
         const fromRim = (noseSunward ? 1 - g : g) * len;
-        const color = fromRim < reach ? this.pal.trackSoft : this.pal.track;
+        const color = fromRim < reach ? SOFT_GREY : WHITE;
         fb.put(
           Math.round(fromX + (toX - fromX) * g),
           Math.round(fromY + (toY - fromY) * g) - cam,

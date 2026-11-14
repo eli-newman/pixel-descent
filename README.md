@@ -2,7 +2,7 @@
 
 Play at https://powline.vercel.app
 
-A pixel-art downhill snowboard (or ski) game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track, or in colour (where the UI turns to dark ink, and its highlights stay yellow with a dark shadow): white snow, dark green pines with snow on them and brown trunks, dark grey and brown rocks with snow caps, natural rock cliffs, packed snow jumps with orange marker poles, and a light track pressed into the snow. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
+A pixel-art downhill snowboard (or ski) game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
 
 Carve down an endless mountain, dodge trees, rocks and bushes, grab risk-lane stars, hit kickers. **Go straight to go fast, carve to stay alive.**
 
@@ -30,7 +30,7 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 Powline counts visits and a few game events with [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy), which sets no cookies and stores nothing on your device, so there is no consent banner. What it sends:
 
 - a page view (page, referring site, country, browser, OS and device type, as Vercel collects them); a visit from a shared link is reported as the page `/from-share`,
-- **Run Start**: which run of this visit it is (1, 2, 3, 4-5, 6-10, 11+) and the setup (board or skis, mono or color, normal or daily),
+- **Run Start**: which run of this visit it is (1, 2, 3, 4-5, 6-10, 11+) and the setup (board or skis, normal or daily),
 - **Run End**: the distance and the score, each in a coarse band (for example 250-499 m),
 - **Share**: which way the share went (Web Share with the image or the link, clipboard, download, cancelled).
 
@@ -55,7 +55,6 @@ Never sent: seeds, share links, exact scores, names, saved data, or any identifi
 | Sound on / off     | M (sound is ON by default)     | SOUND button on the title and pause menus |
 | Big HUD, music     | H, U (music is OFF by default) | Pause menu                                |
 | Manual spin on/off | G (default OFF)                | MANUAL SPIN button, pause menu            |
-| Colour on / off    | Menus (default OFF)            | COLOR button on the title and pause menus |
 
 ## Mechanics
 
@@ -101,7 +100,7 @@ Risk and reward: the speed multiplier goes from x1 (cruising speed) to x2.5 (top
 - **Skis**: the top of the GEAR screen picks BOARD or SKIS (open to everyone, remembered between visits, a snowboard by default). Skiing is a look, not a different game: the speed, steering, tricks, landings and scores are exactly the same, so the same course and inputs give the same run. The skier has two skis and poles, brakes with a hockey stop, and leaves two thin parallel lines in the snow instead of the board's one. Board looks carry over to the skis (stripes, dots, twin tips) and rider looks to the skier. The share text says "on skis".
 - The game has one calm look on every device, so phone and desktop match: no screen shake, zoom punches, snowfall, speed lines, panel slide or blinking. Braking throws up a light spray, a hard carve at speed throws a cloud of powder out of the turn that hangs behind you and thins away, and even running straight the board leaves a wake of powder behind it.
 - On a phone the slope fills the whole screen, edge to edge: the picture is scaled to the screen's width, the score sits just under the notch, and the slope carries on above and below the HUD (so a taller phone sees a little further ahead). On a desktop it keeps whole, crisp pixels in the middle of the window. Each layer is drawn at the screen's own resolution, blown up to a whole scale and shrunk to fit in one smooth pass by the game itself, never by the browser, so it is sharp on every phone and every pixel stays the same size as things scroll past, and the slope's smooth scroll is drawn into the same picture, so the two never arrive a frame apart.
-- Nothing in the HUD or menus sits on a black box: words carry a thin edge in the snow's own tone, so they read over trees and rocks, and frames are lines. Highlights (the score, PLAY, lessons) are yellow in both looks; on the white snow of colour mode big yellow words get a dark drop shadow and small ones turn dark ink. Menu buttons use double-size letters wherever every label on the screen fits. Behind pause and game over the slope fades back a little, behind SCORES, GEAR and GOALS almost all the way, and on the title only the slope under the menu fades, so the mountains stay clear. The controls are taught by the first-run tutorial rather than listed on the title.
+- Nothing in the HUD or menus sits on a black box: words carry a thin edge in the snow's own tone, so they read over trees and rocks, and frames are lines. Highlights (the score, PLAY, lessons) are yellow. Menu buttons use double-size letters wherever every label on the screen fits. Behind pause and game over the slope fades back a little, behind SCORES, GEAR and GOALS almost all the way, and on the title only the slope under the menu fades, so the mountains stay clear. The controls are taught by the first-run tutorial rather than listed on the title.
 - Toasts and the combo meter sit near the top of the screen; while a high jump carries the rider up through them they move lower down, so they never hide the trick they name.
 
 ## Architecture
@@ -124,4 +123,4 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 
 ## Removed features
 
-Checkpoint gates, plain path stars, the ghost rider (with its replay recording), the avalanche, ice patches, deep snow (snowdrifts) and the first-run labels over slope objects (replaced by the tutorial) were removed from the code. Each is recoverable from a git tag: `archive/checkpoints`, `archive/path-stars`, `archive/ghost`, `archive/avalanche`, `archive/ice`, `archive/deep-snow`, `archive/slope-labels`. Courses kept every tree, rock, bush, star, jump and lane when ice and deep snow went, so shared links open the same courses. Bushes used to slow you down; they now crash you like everything else solid (they were always kept off the open path and out of jump landings, so every course stays fair). The PHOTO FINISH achievement went with the avalanche; older saves keep the record but it is no longer listed or counted.
+Checkpoint gates, plain path stars, the ghost rider (with its replay recording), the avalanche, ice patches, deep snow (snowdrifts), the first-run labels over slope objects (replaced by the tutorial) and colour mode (one look for launch: black and white) were removed from the code. Each is recoverable from a git tag: `archive/checkpoints`, `archive/path-stars`, `archive/ghost`, `archive/avalanche`, `archive/ice`, `archive/deep-snow`, `archive/slope-labels`, `archive/color`. Courses kept every tree, rock, bush, star, jump and lane when ice and deep snow went, so shared links open the same courses. Bushes used to slow you down; they now crash you like everything else solid (they were always kept off the open path and out of jump landings, so every course stays fair). The PHOTO FINISH achievement went with the avalanche; older saves keep the record but it is no longer listed or counted.

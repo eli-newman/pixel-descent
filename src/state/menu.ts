@@ -8,7 +8,6 @@ export type ButtonId =
   | 'gear'
   | 'goals'
   | 'sound'
-  | 'color'
   | 'back'
   | 'tabTop'
   | 'tabDaily'
@@ -48,12 +47,11 @@ function b(id: ButtonId, x: number, y: number, w: number, h: number, accent = fa
 
 /**
  * The title's grid is wider than the other menus' (80 px buttons, 8 px from the edges), so even SOUND OFF fits at
- * twice the font size; the score and gear tabs share it.
+ * twice the font size; the score and gear tabs share it. DAILY runs the full width under PLAY.
  */
 const TITLE: UiButton[] = [
   b('play', 8, 172, 164, 26, true),
-  b('daily', 8, 202, 80, MIN_TOUCH),
-  b('color', 92, 202, 80, MIN_TOUCH),
+  b('daily', 8, 202, 164, MIN_TOUCH),
   b('scores', 8, 228, 80, MIN_TOUCH),
   b('gear', 92, 228, 80, MIN_TOUCH),
   b('goals', 8, 254, 80, MIN_TOUCH),
@@ -87,7 +85,6 @@ const PAUSE: UiButton[] = [
   b('hud', 14, 152, 74, MIN_TOUCH),
   b('autopause', 92, 152, 74, MIN_TOUCH),
   b('manual', 14, 178, 152, MIN_TOUCH),
-  b('color', 14, 204, 152, MIN_TOUCH),
 ];
 
 /** Top of the game over panel. The camera keeps the crash site above this line. */

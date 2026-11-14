@@ -67,10 +67,10 @@ test.describe('analytics', () => {
     const sent = await sentAnalytics(page);
     const evs = events(sent);
     expect(evs.map((e) => e.name)).toEqual(['Run Start', 'Run End', 'Share', 'Run Start']);
-    expect(evs[0]?.data).toEqual({ run: '1', setup: 'board mono normal' });
+    expect(evs[0]?.data).toEqual({ run: '1', setup: 'board normal' });
     expect(Object.keys(evs[1]?.data ?? {})).toEqual(['metres', 'score']);
     expect(evs[2]?.data).toEqual({ via: 'clipboard' });
-    expect(evs[3]?.data).toEqual({ run: '2', setup: 'board mono normal' });
+    expect(evs[3]?.data).toEqual({ run: '2', setup: 'board normal' });
     for (const s of sent) expect(new URL(s.url).pathname).toBe('/from-share');
 
     expect(JSON.stringify(sent)).not.toContain(SEED);
