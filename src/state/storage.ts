@@ -1,6 +1,13 @@
 import { LEGACY_BEST_KEY, SAVE_PREFIX } from '../core/config';
 import { isDailySeed } from '../core/rng';
-import { createProgress, sanitiseGear, type Progress } from './progress';
+import { loadDayGoals } from './goals';
+import { createProgress, sanitiseGear, type Progress, type Stats } from './progress';
+import { isDay } from './streak';
+
+/** The stats saved as a local day (YYYY-MM-DD) rather than a number. */
+function isDayKey(k: keyof Stats): k is 'lastDay' {
+  return k === 'lastDay';
+}
 
 /** The slice of the Storage API the game needs, so tests can pass a fake. */
 export interface StorageLike {
@@ -270,9 +277,11 @@ export class Store {
     const p = createProgress();
     if (raw && typeof raw === 'object') {
       if (raw.stats && typeof raw.stats === 'object') {
-        for (const k of Object.keys(p.stats) as Array<keyof Progress['stats']>) {
-          const v = raw.stats[k];
-          if (typeof v === 'number' && Number.isFinite(v)) p.stats[k] = v;
+        for (const k of Object.keys(p.stats) as Array<keyof Stats>) {
+          const v: unknown = raw.stats[k];
+          if (isDayKey(k)) {
+            if (isDay(v)) p.stats[k] = v;
+          } else if (typeof v === 'number' && Number.isFinite(v)) p.stats[k] = v;
         }
       }
       if (raw.achievements && typeof raw.achievements === 'object') {
@@ -285,6 +294,7 @@ export class Store {
         if (typeof raw.gear.rider === 'string') p.gear.rider = raw.gear.rider;
         if (raw.gear.kit === 'skis') p.gear.kit = 'skis';
       }
+      p.goals = loadDayGoals(raw.goals);
     }
     sanitiseGear(p);
     this.prog = p;

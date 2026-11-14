@@ -36,8 +36,10 @@ export class Feedback {
     this.streak = 0;
   }
 
-  showToast(text: string, ttl: number, hot: boolean): void {
-    this.toasts = [{ text, ttl, max: ttl, hot }];
+  showToast(text: string, ttl: number, hot: boolean, sub?: string): void {
+    this.toasts = [
+      sub === undefined ? { text, ttl, max: ttl, hot } : { text, ttl, max: ttl, hot, sub },
+    ];
   }
 
   stepToasts(dt: number): void {

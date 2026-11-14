@@ -23,6 +23,8 @@ function run(over: Partial<RunSummary> = {}): RunSummary {
     nearMisses: 0,
     tricks: 0,
     landings: 0,
+    grabs: 0,
+    lines: 0,
     maxCombo: 0,
     sendItTime: 0,
     topSpeed: 100,

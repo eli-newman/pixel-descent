@@ -9,6 +9,7 @@ import {
   boardIndex,
   challengeDone,
   riderIndex,
+  type Challenge,
   type GearDef,
 } from '../state/progress';
 import { drawTextHalo, textWidth } from './font';
@@ -388,15 +389,20 @@ function drawMain(fb: Framebuffer, g: GameView): void {
   else textC(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, INK, 2);
   drawButtons(fb, g);
   const daily = g.dailyBest;
-  textC(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 284, INK);
-  const c = nextChallenge(g);
+  const day = daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET';
+  // The streak sits quietly beside it, and only once there is one to speak of.
+  textC(fb, g.streak >= 2 ? `${day}  ${g.streak} DAY STREAK` : day, CX, 284, INK);
+  const c = nextChallenge(g, g.dailyGoals) ?? nextChallenge(g, CHALLENGES);
   if (c) textC(fb, `${c.name} ${c.value}/${c.target}`, CX, 296, HOT);
 }
 
-/** The unfinished challenge closest to done. */
-function nextChallenge(g: GameView): { name: string; value: number; target: number } | null {
+/** The unfinished goal of a list closest to done. */
+function nextChallenge(
+  g: GameView,
+  list: readonly Readonly<Challenge>[],
+): { name: string; value: number; target: number } | null {
   let best: { name: string; value: number; target: number; f: number } | null = null;
-  for (const c of CHALLENGES) {
+  for (const c of list) {
     if (challengeDone(c, g.progress)) continue;
     const v = Math.min(c.target, Math.floor(c.value(g.progress)));
     const f = v / c.target;
@@ -506,25 +512,34 @@ function drawGear(fb: Framebuffer, g: GameView): void {
   textC(fb, 'UNLOCK GEAR BY PLAYING', CX, 270);
 }
 
+/** A goal's name and progress over its bar, yellow once done. */
+function goalRow(fb: Framebuffer, g: GameView, c: Readonly<Challenge>, y: number): void {
+  const v = Math.min(c.target, Math.floor(c.value(g.progress)));
+  const done = challengeDone(c, g.progress);
+  const count = done ? 'DONE' : `${v}/${c.target}`;
+  text(fb, c.name, 16, y, done ? HOT : INK);
+  text(fb, count, W - 16 - textWidth(count), y, INK);
+  frame(fb, 16, y + 8, W - 32, 5, INK);
+  fb.fillRect(17, y + 9, Math.round(((W - 34) * v) / c.target), 3, done ? HOT : INK);
+}
+
+/** Rows of the GOALS screen: today's three goals, the challenges, then the achievements. */
+const GOAL_ROW = 18;
+const TODAY_Y = 32;
+const CHALLENGES_Y = 102;
+const ACHIEVEMENTS_Y = 190;
+
 function drawGoals(fb: Framebuffer, g: GameView): void {
   textC(fb, 'GOALS', CX, 12, INK, 2);
-  text(fb, 'CHALLENGES', 16, 32, HOT);
-  CHALLENGES.forEach((c, i) => {
-    const y = 44 + i * 20;
-    const v = Math.min(c.target, Math.floor(c.value(g.progress)));
-    const done = challengeDone(c, g.progress);
-    text(fb, c.name, 16, y, done ? HOT : INK);
-    text(
-      fb,
-      done ? 'DONE' : `${v}/${c.target}`,
-      W - 16 - textWidth(done ? 'DONE' : `${v}/${c.target}`),
-      y,
-      INK,
-    );
-    frame(fb, 16, y + 8, W - 32, 5, INK);
-    fb.fillRect(17, y + 9, Math.round(((W - 34) * v) / c.target), 3, done ? HOT : INK);
-  });
-  text(fb, `ACHIEVEMENTS ${g.achievementCount}/${ACHIEVEMENTS.length}`, 16, 134, HOT);
+  text(fb, 'TODAY', 16, TODAY_Y, HOT);
+  if (g.streak >= 2) {
+    const s = `${g.streak} DAY STREAK`;
+    text(fb, s, W - 16 - textWidth(s), TODAY_Y, INK);
+  }
+  g.dailyGoals.forEach((c, i) => goalRow(fb, g, c, TODAY_Y + 12 + i * GOAL_ROW));
+  text(fb, 'CHALLENGES', 16, CHALLENGES_Y, HOT);
+  CHALLENGES.forEach((c, i) => goalRow(fb, g, c, CHALLENGES_Y + 12 + i * GOAL_ROW));
+  text(fb, `ACHIEVEMENTS ${g.achievementCount}/${ACHIEVEMENTS.length}`, 16, ACHIEVEMENTS_Y, HOT);
   let firstOpen = '';
   ACHIEVEMENTS.forEach((a, i) => {
     const col = i % 2;
@@ -532,11 +547,13 @@ function drawGoals(fb: Framebuffer, g: GameView): void {
     const got = g.progress.achievements[a.id] !== undefined;
     if (!got && firstOpen === '') firstOpen = a.desc;
     const x = 16 + col * 80;
-    const y = 148 + row * 14;
+    const y = ACHIEVEMENTS_Y + 12 + row * 11;
     text(fb, got ? '*' : '-', x, y, got ? HOT : INK);
     text(fb, a.name, x + 8, y, INK);
   });
-  textC(fb, firstOpen !== '' ? `NEXT: ${firstOpen}` : 'ALL ACHIEVEMENTS EARNED', CX, 240, HOT);
+  textC(fb, firstOpen !== '' ? `NEXT: ${firstOpen}` : 'ALL ACHIEVEMENTS EARNED', CX, 258, HOT);
+  const s = g.progress.stats;
+  textC(fb, `BEST STREAK ${s.bestStreak}  PERFECT DAYS ${g.progress.goals.days}`, CX, 270, INK);
   drawButtons(fb, g);
 }
 
@@ -576,6 +593,11 @@ function drawOver(fb: Framebuffer, g: GameView): void {
   }
   // new achievements and gear take turns in one line
   const news: string[] = [
+    ...(res.streak === null
+      ? []
+      : [res.streak > 1 ? `${res.streak} DAY STREAK` : 'STREAK STARTED']),
+    ...res.goals.map((c) => `DONE: ${c.name}`),
+    ...(res.allGoals ? ['ALL 3 GOALS DONE TODAY'] : []),
     ...res.achievements.map((a) => `GOAL: ${a.name}`),
     ...res.gear.map((u) => `UNLOCKED: ${u.name}`),
   ];

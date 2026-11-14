@@ -95,3 +95,48 @@ export const LESSON_GUARD = 1;
  * Pro with the Web Analytics Plus add-on (Hobby has no custom events at all). Raise it to 8 after buying Plus.
  */
 export const ANALYTICS_MAX_PROPS = 2;
+
+/**
+ * The daily-ride streak (`state/streak.ts`): a finished run on the daily course keeps it going for that local day.
+ * Up to STREAK_GRACE days may be missed in a row without losing it; missing more starts a new streak at 1 on the
+ * next daily run. A best streak of STREAK_UNLOCK days unlocks a rider look.
+ */
+export const STREAK_GRACE = 1;
+export const STREAK_UNLOCK = 7;
+
+/**
+ * The three daily goals (`state/goals.ts`): one short, one medium and one long goal a day, picked from these pools by
+ * the local date. `stat` is what a run counts (`dist` metres, `score`, `stars`, `tricks`, `landings` clean landings,
+ * `grabs` landed grabs, `lines` jump lines landed clean; `nearMisses` and `maxCombo` also work). `best` goals take the
+ * best single run of the day, the rest add up every run of the day. A short goal is about one ordinary run, a medium
+ * one a few runs or a good run, a long one a whole session. Sized from what the sim pays: a clean landing about every
+ * 100 m, a clean line every 600 m or so from 150 m, risk lane stars about 80 per 1000 m on offer. Bots in
+ * `tests/goals.test.ts` reach every goal in its tier's runs (short 1 run of 600 m, medium 3 of 900 m, long 6 of
+ * 1600 m). Close calls and combos are left out: the open path keeps them rare (well under one a run off a risk lane),
+ * so no fair number fits a day, and the 50 CLOSE CALLS challenge and COMBO KING already ask for them.
+ */
+export const GOAL_POOLS = {
+  short: [
+    { stat: 'dist', best: false, target: 500 },
+    { stat: 'dist', best: true, target: 300 },
+    { stat: 'stars', best: false, target: 10 },
+    { stat: 'landings', best: false, target: 3 },
+    { stat: 'tricks', best: false, target: 2 },
+  ],
+  medium: [
+    { stat: 'dist', best: false, target: 2000 },
+    { stat: 'stars', best: false, target: 30 },
+    { stat: 'landings', best: false, target: 10 },
+    { stat: 'tricks', best: false, target: 8 },
+    { stat: 'grabs', best: false, target: 3 },
+    { stat: 'score', best: true, target: 2000 },
+  ],
+  long: [
+    { stat: 'dist', best: false, target: 5000 },
+    { stat: 'dist', best: true, target: 1500 },
+    { stat: 'stars', best: false, target: 60 },
+    { stat: 'tricks', best: false, target: 20 },
+    { stat: 'lines', best: false, target: 2 },
+    { stat: 'score', best: true, target: 5000 },
+  ],
+} as const;

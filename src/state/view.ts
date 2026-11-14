@@ -3,7 +3,7 @@ import type { Sim } from '../sim/sim';
 import type { Trail } from '../sim/trail';
 import type { Toast } from './feedback';
 import type { Phase, Screen } from './menu';
-import type { Progress } from './progress';
+import type { Challenge, Progress } from './progress';
 import type { RunResult } from './runReport';
 import type { ScoreEntry, Settings } from './storage';
 import type { Lesson } from './tutorial';
@@ -85,6 +85,10 @@ export interface GameView {
   readonly dailyBest: number;
   readonly topRuns: readonly Readonly<ScoreEntry>[];
   readonly dailyRuns: readonly Readonly<ScoreEntry>[];
+  /** The daily streak as it stands today (0 once it can no longer be kept going). Never a seed or a date. */
+  readonly streak: number;
+  /** Today's three goals, short, medium and long, in the `Challenge` shape: `value(progress)` is the saved progress. */
+  readonly dailyGoals: readonly DeepReadonly<Challenge>[];
   readonly touch: boolean;
   readonly achievementCount: number;
   readonly boardIdx: number;
