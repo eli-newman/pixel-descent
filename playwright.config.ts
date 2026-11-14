@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/** The project has no @types/node: this is the one Node API the config reads. */
+declare const process: { env: Record<string, string | undefined> };
+
 /** `E2E_PORT` lets several checkouts run the suite at once. */
 const PORT = Number(process.env['E2E_PORT'] ?? 4179);
 /** Course generation must be identical in every engine, so that one test runs in all three. */
