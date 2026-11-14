@@ -4,6 +4,7 @@ import type { SimInput } from '../sim/sim';
 import { menuButtons, type ButtonId, type Phase, type Screen } from './menu';
 import { BOARDS, cycleGear, RIDERS, type Kit } from './progress';
 import type { Store } from './storage';
+import type { NextAction } from './telemetry';
 
 /** What the controls can ask the game to do. */
 export interface ControlsHost {
@@ -24,6 +25,8 @@ export interface ControlsHost {
   togglePause(): void;
   share(): Promise<void>;
   setManualSpin(on: boolean): void;
+  /** What the player did from the game over screen, for analytics (ignored in any other phase). */
+  noteNext(action: NextAction): void;
 }
 
 export interface ControlsDeps {
@@ -132,7 +135,7 @@ export class Controls {
         host.togglePause();
         break;
       case 'over':
-        if (host.overReady) host.newRun(host.freshSeed(), true);
+        if (host.overReady) this.again();
         break;
       default:
         break;
@@ -166,6 +169,7 @@ export class Controls {
     retry: () => {
       const { phase } = this.host;
       if (phase === 'over' || phase === 'paused' || phase === 'crashed') {
+        this.host.noteNext('retry');
         this.host.newRun(this.host.seed, true);
       }
     },
@@ -196,7 +200,13 @@ export class Controls {
     this.focusVisible = this.focusVisible && host.phase !== 'title';
     const bt = menuButtons(this)[this.focus] ?? menuButtons(this)[0];
     if (bt) this.press(bt.id);
-    else if (host.phase === 'over' && host.overReady) host.newRun(host.freshSeed(), true);
+    else if (host.phase === 'over' && host.overReady) this.again();
+  }
+
+  /** A new run on a fresh course from the game over screen. */
+  private again(): void {
+    this.host.noteNext('again');
+    this.host.newRun(this.host.freshSeed(), true);
   }
 
   private backAction(): void {
@@ -241,14 +251,22 @@ export class Controls {
     resume: () => this.host.togglePause(),
     restart: () => this.host.newRun(this.host.seed, true),
     quit: () => this.host.newRun(this.host.freshSeed()),
-    menu: () => this.host.newRun(this.host.freshSeed()),
+    menu: () => {
+      this.host.noteNext('menu');
+      this.host.newRun(this.host.freshSeed());
+    },
     again: () => {
-      if (this.host.overReady) this.host.newRun(this.host.freshSeed(), true);
+      if (this.host.overReady) this.again();
     },
     retry: () => {
-      if (this.host.overReady) this.host.newRun(this.host.seed, true);
+      if (!this.host.overReady) return;
+      this.host.noteNext('retry');
+      this.host.newRun(this.host.seed, true);
     },
-    share: () => void this.host.share(),
+    share: () => {
+      this.host.noteNext('share');
+      void this.host.share();
+    },
   };
 
   private setMuted(muted: boolean): void {

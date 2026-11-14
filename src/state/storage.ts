@@ -5,8 +5,8 @@ import { createProgress, sanitiseGear, type Progress, type Stats } from './progr
 import { isDay } from './streak';
 
 /** The stats saved as a local day (YYYY-MM-DD) rather than a number. */
-function isDayKey(k: keyof Stats): k is 'lastDay' {
-  return k === 'lastDay';
+function isDayKey(k: keyof Stats): k is 'lastDay' | 'firstDay' {
+  return k === 'lastDay' || k === 'firstDay';
 }
 
 /** The slice of the Storage API the game needs, so tests can pass a fake. */
@@ -297,8 +297,16 @@ export class Store {
       p.goals = loadDayGoals(raw.goals);
     }
     sanitiseGear(p);
+    // Saves from before `firstDay` have played on or before the earliest day they recorded anything.
+    if (p.stats.firstDay === '' && p.stats.runs > 0) p.stats.firstDay = this.earliestDay(p);
     this.prog = p;
     return p;
+  }
+
+  /** The earliest day an achievement was earned or an all-time run was played, or '' if none is known. */
+  private earliestDay(p: Progress): string {
+    const days = [...Object.values(p.achievements), ...this.topRuns().map((e) => e.date)];
+    return days.filter((d) => isDay(d)).sort()[0] ?? '';
   }
 
   saveProgress(): void {

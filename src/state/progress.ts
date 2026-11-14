@@ -46,6 +46,11 @@ export interface Stats {
   lastDay: string;
   streak: number;
   bestStreak: number;
+  /**
+   * The local day of the player's first finished run, `YYYY-MM-DD` as `dayString` writes it, or '' before it. The game
+   * keeps it for itself; analytics only sends the days since it, in a band.
+   */
+  firstDay: string;
 }
 
 /** What the rider stands on. Both are open to everyone and only change the look: the rules are the same. */
@@ -83,6 +88,7 @@ export function createProgress(): Progress {
       lastDay: '',
       streak: 0,
       bestStreak: 0,
+      firstDay: '',
     },
     achievements: {},
     gear: { board: 'classic', rider: 'classic', kit: 'snowboard' },
@@ -195,8 +201,9 @@ export interface RunOutcome {
   allGoals: boolean;
 }
 
-function addStats(p: Progress, run: RunSummary): void {
+function addStats(p: Progress, run: RunSummary, day: string): void {
   const s = p.stats;
+  if (s.firstDay === '') s.firstDay = day;
   s.runs += 1;
   s.totalDist += run.dist;
   s.bestDist = Math.max(s.bestDist, run.dist);
@@ -211,7 +218,7 @@ function addStats(p: Progress, run: RunSummary): void {
 /** Fold a finished run into the progress (mutates it) and report what it unlocked. */
 export function applyRun(p: Progress, run: RunSummary, day: string): RunOutcome {
   const gearBefore = new Set([...BOARDS, ...RIDERS].filter((g) => g.unlocked(p)).map((g) => g.id));
-  addStats(p, run);
+  addStats(p, run, day);
   const streak = rideStreak(p.stats, run.seed, day);
   const goals = addRunToGoals(p.goals, run, day);
   const newAchievements: Achievement[] = [];

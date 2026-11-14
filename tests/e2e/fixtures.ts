@@ -1,4 +1,6 @@
-import { test as base, type Page } from '@playwright/test';
+import { expect, test as base, type Page } from '@playwright/test';
+import { INGEST_PATH } from '../../src/core/config';
+import type { BatchBody } from '../../src/platform/posthog';
 
 /** What the stand-in Vercel script recorded: each page view or event after the game's `beforeSend`. */
 export interface Sent {
@@ -39,8 +41,49 @@ export const test = base.extend({
   },
 });
 
-export { expect } from '@playwright/test';
+export { expect };
 
 export function sentAnalytics(page: Page): Promise<Sent[]> {
   return page.evaluate(() => (window as unknown as { __vaSent?: Sent[] }).__vaSent ?? []);
+}
+
+/**
+ * The page view, once the stand-in script has sent it. Game events queued while the script loaded (Day Active, Game
+ * Loaded) may come before it.
+ */
+export async function pageView(page: Page): Promise<Sent | undefined> {
+  const find = async () => (await sentAnalytics(page)).find((s) => s.type === 'pageview');
+  await expect.poll(find).toBeDefined();
+  return find();
+}
+
+/**
+ * Every batch the page posts to the ingest route (`platform/posthog.ts`), as the browser sent it. Start collecting
+ * before the page loads.
+ */
+export function collectBeacons(page: Page): BatchBody[] {
+  const out: BatchBody[] = [];
+  page.on('request', (r) => {
+    if (r.method() !== 'POST' || new URL(r.url()).pathname !== `/${INGEST_PATH}`) return;
+    try {
+      out.push(JSON.parse(r.postData() ?? '') as BatchBody);
+    } catch {
+      out.push({ api_key: 'unreadable', batch: [] });
+    }
+  });
+  return out;
+}
+
+/** What the ingest function sent on to the stand-in PostHog in `scripts/serve-output.mjs`, from every test so far. */
+export async function forwardedBatches(page: Page): Promise<BatchBody[]> {
+  return (await (await page.request.get('/__posthog/batches')).json()) as BatchBody[];
+}
+
+/** Act as if the player switched away: the page reports hidden and fires `visibilitychange`, which sends the batch. */
+export async function hidePage(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
 }

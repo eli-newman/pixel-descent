@@ -93,7 +93,7 @@ describe('dare card', () => {
   it('keeps the order of the looks that dare links send by place', () => {
     // Links already sent name a look by its place in these lists: add new ones at the end, never reorder.
     expect(BOARDS.map((b) => b.id)).toEqual(['classic', 'stripe', 'dots', 'twin']);
-    expect(RIDERS.map((r) => r.id)).toEqual(['classic', 'beanie', 'scarf', 'ears']);
+    expect(RIDERS.map((r) => r.id)).toEqual(['classic', 'beanie', 'scarf', 'ears', 'antlers']);
   });
 });
 

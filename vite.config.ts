@@ -8,13 +8,26 @@ declare const process: { env: Record<string, string | undefined> };
  * else, so `npm run dev`, unit tests and copies of `dist/` on other hosts never load a script. `vercelConfig` is the
  * script and endpoint paths Vercel passes at build time (read by `analyticsConfig` in `src/platform/analytics.ts`).
  * Dev uses Vercel's debug script, which logs to the console and sends nothing.
+ *
+ * PostHog joins in when the build also has a project key, `VITE_POSTHOG_KEY` (`posthogConfig` in
+ * `src/platform/posthog.ts` checks it). Events go to `INGEST_PATH` (`src/core/config.ts`) on this site, or to
+ * `VITE_POSTHOG_ENDPOINT` for a copy of the game served from elsewhere (an app's web view would use
+ * https://powline.vercel.app/flurry). Never in dev: Vite's dev server has no ingest function.
  */
-function analytics(mode: string): { debug: boolean; vercelConfig: string } | null {
+function analytics(mode: string): {
+  debug: boolean;
+  vercelConfig: string;
+  posthogKey: string;
+  posthogEndpoint: string;
+} | null {
   const env = process.env;
   if (env['VERCEL'] !== '1' && env['VITE_ANALYTICS'] !== '1') return null;
+  const debug = mode === 'development';
   return {
-    debug: mode === 'development',
+    debug,
     vercelConfig: env['VERCEL_OBSERVABILITY_CLIENT_CONFIG'] ?? '',
+    posthogKey: debug ? '' : (env['VITE_POSTHOG_KEY'] ?? '').trim(),
+    posthogEndpoint: env['VITE_POSTHOG_ENDPOINT'] ?? '',
   };
 }
 

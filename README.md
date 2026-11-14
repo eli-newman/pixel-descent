@@ -29,16 +29,22 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 
 ## Privacy
 
-Powline counts visits and a few game events with [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy), which sets no cookies and stores nothing on your device, so there is no consent banner. What it sends:
+Powline counts visits and a few game events. There are no cookies, no consent banner, no account and no ad tracking. Two services receive data:
 
-- a page view (page, referring site, country, browser, OS and device type, as Vercel collects them); a visit from a shared link is reported as the page `/from-share`,
-- **Run Start**: which run of this visit it is (1, 2, 3, 4-5, 6-10, 11+) and the setup (board or skis, normal or daily),
-- **Run End**: the distance and the score, each in a coarse band (for example 250-499 m),
-- **Share**: which way the share went (Web Share with the image or the link, clipboard, download, cancelled).
+- [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy) counts page views (page, referring site, country, browser, OS and device type, as Vercel collects them; a visit from a shared link is reported as the page `/from-share`) and receives the game events below, cut to their first two details.
+- [PostHog](https://posthog.com/privacy) Cloud EU (servers in Frankfurt) receives the game events with all their details, once the site has a PostHog key. The game sends them to its own address (`/flurry`), and Powline's server passes them on, adding only a country code and dropping your IP address and every browser header, so PostHog never sees your IP. PostHog is told to keep no person profile and look up no location.
 
-A run on a friend's dare is set up as `dare` (instead of normal or daily).
+The game events, each a short label or a coarse band, never an exact number:
 
-Never sent: seeds, share or dare links, exact scores, names, saved data, or any identifier. The address sent drops every query value except `utm_*` campaign tags. Analytics only runs in builds made by Vercel (`VERCEL=1`) or with `VITE_ANALYTICS=1`, so `npm run dev`, the tests and copies of `dist/` on other hosts load nothing. If the script is blocked, the game does not notice.
+- **Game Loaded** (how the page was opened: directly, a dare link, a broken dare link, an old course link; load time in a band such as 1-2s) and **Day Active** (the first event of each day in a visit, with the week you first played, such as 2026-W46),
+- **Run Started** and **Run Ended**: normal, daily, dare or tutorial course, board or skis, which run of your life and of this visit it is (1, 2, 3, 4-5, 6-10, 11+), how it ended (a crash, quitting, leaving the page), what you hit, the distance in a band (for example 250-499 m), and whether it was a new best, close to it, or neither,
+- **Next Action** (what you pressed after a run), **Run Shared** (which way a share went), **Dare Result** (beat, tied or short of a friend's dare, and tries in a band), **Unlock Earned** (which achievement or gear),
+- the tutorial: **Lesson Shown**, **Lesson Done** and **Tutorial Ended**,
+- **Session Ended**, each time the page is hidden: runs and visible time so far, in bands (for example 1-3m).
+
+Every event also says whether this is your first visit, how many days since your first run (0, 1, 2-6, 7, 8-29, 30, 31+), and whether the visit came from a shared link. When the page loads it makes a random number that links one visit's events together. It exists only while the tab is open, is never saved, and is different on every visit, so it cannot follow you from one visit to the next.
+
+Never sent: seeds, share or dare links, exact scores, distances or times, names, saved data, or anything stored to recognise you. The address sent to Vercel drops every query value except `utm_*` campaign tags. The game saves the day of your first run with your scores and stats, on your device only, for the game's own use (analytics reads only the days since it, in a band). Analytics only runs in builds made by Vercel (`VERCEL=1`) or with `VITE_ANALYTICS=1`, so `npm run dev`, the tests and copies of `dist/` on other hosts send nothing to either service. If either is blocked, the game does not notice.
 
 ## Controls
 
