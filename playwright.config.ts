@@ -12,10 +12,11 @@ export default defineConfig({
     { name: 'firefox', use: { ...devices['Desktop Firefox'] }, testMatch: COURSE_SPEC },
     { name: 'webkit', use: { ...devices['Desktop Safari'] }, testMatch: COURSE_SPEC },
   ],
-  // Test the production bundle, the same thing that gets deployed: with analytics on, as Vercel builds it.
+  // Test what gets deployed: the production bundle with analytics on, as Vercel builds it, in the Build Output layout
+  // Vercel serves (the static game plus the dare page and card functions), routed the way Vercel routes it.
   // tests/e2e/fixtures.ts stands in for the Vercel script, which only exists on a Vercel deployment.
   webServer: {
-    command: `VITE_ANALYTICS=1 npx vite build && npx vite preview --port ${PORT} --strictPort`,
+    command: `VITE_ANALYTICS=1 npx vite build && node scripts/vercel-output.mjs && node scripts/serve-output.mjs ${PORT}`,
     url: `http://localhost:${PORT}/`,
     reuseExistingServer: false,
   },

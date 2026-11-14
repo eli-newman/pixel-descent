@@ -4,7 +4,7 @@ import { touchDown, type LandEvent } from './landing';
 import { LineTracker, type LineEvent } from './lines';
 import { poseOf } from './pose';
 import { launch, stepRider } from './rider';
-import { createRider, type RiderState, type Surface } from './riderState';
+import { createRider, type RiderState } from './riderState';
 import { hashSeed } from '../core/rng';
 import {
   addDistance,
@@ -20,8 +20,8 @@ import { cruiseSpeed, speedMultiplier, topSpeed, tuckFraction } from './speed';
 import { Trail } from './trail';
 import { Spawner } from './spawner';
 import { startFlip, startSnap, startTrick } from './tricks';
-import type { Obstacle, Patch, Pickup, Ramp } from './types';
-import { addBatch, cullAbove, surfaceAt, takeRamp } from './world';
+import type { Obstacle, Pickup, Ramp } from './types';
+import { addBatch, cullAbove, takeRamp } from './world';
 
 /** One step of player input. `steer` is quantised in the sim, so the same inputs reproduce a run exactly. */
 export interface SimInput {
@@ -66,7 +66,6 @@ export type CrashCause = 'obstacle' | 'bail';
 export type SimEvent =
   | { type: 'star'; x: number; y: number; value: number; lane: boolean }
   | { type: 'near'; pts: number; combo: number }
-  | { type: 'bush'; x: number; y: number }
   | { type: 'launch'; cliff: boolean }
   | { type: 'spin'; deg: number }
   /** A flip came to rest on a full turn in the air: `deg` is signed (positive is a backflip). */
@@ -107,7 +106,6 @@ export class Sim {
   ramps: Ramp[] = [];
   /** True while airborne after a cliff drop, so a clean landing pays the drop bonus. */
   cliffJump = false;
-  patches: Patch[] = [];
   /** Events of the latest step. Cleared at the start of each step; read them right after. */
   readonly events: SimEvent[] = [];
 
@@ -125,8 +123,6 @@ export class Sim {
   /** Seconds spent at 90 percent or more of the tuck range (for the "send it" achievement). */
   sendItTime = 0;
   topSpeedSeen = 0;
-  /** Current surface under the rider. */
-  readonly surface: Surface = { ice: false, drift: false };
   /** The jump line being ridden, if any. */
   private readonly lines = new LineTracker();
   private crashVx = 0;
@@ -189,7 +185,6 @@ export class Sim {
     const cruise = cruiseSpeed(dist);
     const top = topSpeed(dist);
     if (this.opts.forceSpeed) r.speed = top;
-    surfaceAt(this.patches, r.x, r.y, this.surface);
     if (input.trick) {
       const q = quantiseSteer(input.steer);
       const dir = q >= 0.5 ? 1 : q <= -0.5 ? -1 : r.spinDir !== 0 ? r.spinDir : r.face;
@@ -203,7 +198,6 @@ export class Sim {
     stepRider(r, quantiseSteer(input.steer), dt, {
       cruise,
       top,
-      surface: this.surface,
       flip,
       brake: input.brake === true,
       manual: this.opts.manualSpin === true,
@@ -278,11 +272,6 @@ export class Sim {
       if (hit === 'crash') {
         this.startCrash('obstacle', o);
         return true;
-      }
-      if (hit === 'slow' && !o.touched) {
-        o.touched = true;
-        r.speed = Math.max(28, r.speed * 0.55);
-        this.events.push({ type: 'bush', x: r.x, y: r.y + 8 });
       }
       if (!o.judged && crossedY(prevY, curY, o.y)) {
         o.judged = true;

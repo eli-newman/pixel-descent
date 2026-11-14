@@ -3,7 +3,7 @@ import { H, SAVE_PREFIX, W } from '../src/core/config';
 import { Framebuffer, GREY, WHITE } from '../src/render/framebuffer';
 import { drawRider, drawWipeout, type RiderStyle } from '../src/render/riderSprite';
 import { TrackPainter } from '../src/render/track';
-import { PROBE } from './helpers/probe';
+import { POWDER } from './helpers/probe';
 import { poseOf, type RiderPose } from '../src/sim/pose';
 import { headingAngle } from '../src/sim/rider';
 import { createRider } from '../src/sim/riderState';
@@ -171,7 +171,7 @@ function trailFrom(path: (y: number) => number, from = 10, to = 310): Trail {
 
 function paintSkis(t: Trail): Framebuffer {
   const fb = new Framebuffer(W, H);
-  new TrackPainter().draw(fb, t, 0, true, PROBE);
+  new TrackPainter(POWDER).draw(fb, t, 0, true);
   return fb;
 }
 

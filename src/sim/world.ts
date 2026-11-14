@@ -1,6 +1,6 @@
 import { crossedY } from './collision';
-import type { RiderState, Surface } from './riderState';
-import type { Obstacle, Patch, Pickup, Ramp, SpawnBatch } from './types';
+import type { RiderState } from './riderState';
+import type { Obstacle, Pickup, Ramp, SpawnBatch } from './types';
 
 /** The live objects around the rider. */
 export interface WorldLists {
@@ -8,7 +8,6 @@ export interface WorldLists {
   obstacles: Obstacle[];
   pickups: Pickup[];
   ramps: Ramp[];
-  patches: Patch[];
 }
 
 /** Remove, in place, every element a predicate rejects. No new array is made. */
@@ -36,7 +35,6 @@ export function addBatch(world: WorldLists, batch: SpawnBatch): void {
   for (const o of batch.obstacles) insertByY(world.obstacles, o);
   for (const p of batch.pickups) world.pickups.push(p);
   for (const ramp of batch.ramps) world.ramps.push(ramp);
-  for (const p of batch.patches) world.patches.push(p);
 }
 
 /** Drop everything that has scrolled above `top`. In place, so a run allocates almost nothing. */
@@ -46,22 +44,6 @@ export function cullAbove(world: WorldLists, top: number): void {
   if (drop > 0) world.obstacles.splice(0, drop);
   compact(world.pickups, (p) => p.y > top && !p.taken);
   compact(world.ramps, (q) => q.landEnd > top);
-  compact(world.patches, (p) => p.y + p.ry > top);
-}
-
-/** Fill `out` with the surface under the rider's board at (x, y). */
-export function surfaceAt(patches: readonly Patch[], x: number, y: number, out: Surface): void {
-  const cy = y + 8;
-  out.ice = false;
-  out.drift = false;
-  for (const p of patches) {
-    if (Math.abs(p.y - cy) > p.ry) continue;
-    const dx = (x - p.x) / p.rx;
-    const dy = (cy - p.y) / p.ry;
-    if (dx * dx + dy * dy >= 1) continue;
-    if (p.kind === 'ice') out.ice = true;
-    else out.drift = true;
-  }
 }
 
 /** The ramp the rider just rode over and launches from, if any. Marks every ramp crossed as used. */

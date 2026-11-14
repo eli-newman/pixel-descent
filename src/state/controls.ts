@@ -1,6 +1,5 @@
 import type { Sfx } from '../platform/audio';
 import type { Action, Input } from '../platform/input';
-import { randomSeedString } from '../core/rng';
 import type { SimInput } from '../sim/sim';
 import { menuButtons, type ButtonId, type Phase, type Screen } from './menu';
 import { BOARDS, cycleGear, RIDERS, type Kit } from './progress';
@@ -15,6 +14,11 @@ export interface ControlsHost {
   readonly overReady: boolean;
   /** The rider is in the air: input treats a quick tap as a grab. */
   readonly airborne: boolean;
+  /** A tutorial lesson is stopping the run: the next tap or key goes on. */
+  readonly lessonWaiting: boolean;
+  dismissLesson(): void;
+  /** The course for a new run (the tutorial's own for a new player). */
+  freshSeed(): string;
   begin(): void;
   newRun(seed: string, play?: boolean): void;
   togglePause(): void;
@@ -81,9 +85,29 @@ export class Controls {
 
   handleInput(): void {
     for (const item of this.deps.input.drain()) {
+      if (this.onLesson(item.kind === 'tap' ? null : item.action)) continue;
       if (item.kind === 'tap') this.handleTap(item.x, item.y);
       else this.handleAction(item.action);
     }
+  }
+
+  /**
+   * Under a tutorial lesson a tap, Space, Enter or a trick key goes on (once the lesson has been up long enough),
+   * and nothing else but pause, mute and the like reaches the run. True when the item was used here.
+   */
+  private onLesson(action: Action | null): boolean {
+    if (!this.playing || !this.host.lessonWaiting) return false;
+    if (
+      action === null ||
+      action === 'start' ||
+      action === 'trick' ||
+      action === 'up' ||
+      action === 'down'
+    ) {
+      this.host.dismissLesson();
+      return true;
+    }
+    return false;
   }
 
   private handleTap(x: number, y: number): void {
@@ -108,7 +132,7 @@ export class Controls {
         host.togglePause();
         break;
       case 'over':
-        if (host.overReady) host.newRun(randomSeedString(), true);
+        if (host.overReady) host.newRun(host.freshSeed(), true);
         break;
       default:
         break;
@@ -172,7 +196,7 @@ export class Controls {
     this.focusVisible = this.focusVisible && host.phase !== 'title';
     const bt = menuButtons(this)[this.focus] ?? menuButtons(this)[0];
     if (bt) this.press(bt.id);
-    else if (host.phase === 'over' && host.overReady) host.newRun(randomSeedString(), true);
+    else if (host.phase === 'over' && host.overReady) host.newRun(host.freshSeed(), true);
   }
 
   private backAction(): void {
@@ -208,7 +232,6 @@ export class Controls {
     hud: () => this.toggleSetting('bigHud'),
     autopause: () => this.toggleSetting('autoPause'),
     manual: () => this.toggleSetting('manualSpin'),
-    color: () => this.toggleSetting('color'),
     snowboard: () => this.setKit('snowboard'),
     skis: () => this.setKit('skis'),
     boardPrev: () => this.cycleGear('board', -1),
@@ -217,10 +240,10 @@ export class Controls {
     riderNext: () => this.cycleGear('rider', 1),
     resume: () => this.host.togglePause(),
     restart: () => this.host.newRun(this.host.seed, true),
-    quit: () => this.host.newRun(randomSeedString()),
-    menu: () => this.host.newRun(randomSeedString()),
+    quit: () => this.host.newRun(this.host.freshSeed()),
+    menu: () => this.host.newRun(this.host.freshSeed()),
     again: () => {
-      if (this.host.overReady) this.host.newRun(randomSeedString(), true);
+      if (this.host.overReady) this.host.newRun(this.host.freshSeed(), true);
     },
     retry: () => {
       if (this.host.overReady) this.host.newRun(this.host.seed, true);
@@ -236,7 +259,7 @@ export class Controls {
     announce?.(muted ? 'Sound off.' : 'Sound on.');
   }
 
-  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause' | 'manualSpin' | 'color'): void {
+  private toggleSetting(key: 'music' | 'bigHud' | 'autoPause' | 'manualSpin'): void {
     const { store, sfx, announce } = this.deps;
     const next = !store.settings()[key];
     store.saveSettings({ [key]: next });

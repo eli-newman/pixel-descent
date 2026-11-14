@@ -276,6 +276,50 @@ describe('touch gestures', () => {
     expect(input.steer()).toBe(-1);
     input.dispose();
   });
+
+  it('a second thumb brakes however late it lands, and lifting either one turns that way at once', () => {
+    // Hold right, put the left thumb down a while later: the slip slide. Then roll off one thumb to turn.
+    const clock = { t: 0 };
+    const { input, down, up } = touchInput(clock);
+    down({ id: 1, x: 300, y: 300, t: 0 });
+    clock.t = 300;
+    expect(input.steer()).toBe(1);
+    down({ id: 2, x: 100, y: 300, t: 600 });
+    clock.t = 600;
+    expect(input.brake()).toBe(true);
+    expect(input.steer()).toBe(0);
+    clock.t = 900;
+    expect(input.brake()).toBe(true);
+    expect(input.steer()).toBe(0);
+    // Lift the right thumb: the left one, still down, steers left at once.
+    up({ id: 1, x: 300, y: 300, t: 900 });
+    expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(-1);
+    // A right thumb lands again: brake. Lift the left one: right at once.
+    down({ id: 3, x: 310, y: 300, t: 1200 });
+    clock.t = 1200;
+    expect(input.brake()).toBe(true);
+    up({ id: 2, x: 100, y: 300, t: 1400 });
+    clock.t = 1400;
+    expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(1);
+    up({ id: 3, x: 310, y: 300, t: 1500 });
+    expect(input.steer()).toBe(0);
+    input.dispose();
+  });
+
+  it('the finger left after a two finger brake steers its side at once', () => {
+    const clock = { t: 0 };
+    const { input, down, up } = touchInput(clock);
+    down({ id: 1, x: 100, y: 300, t: 0 });
+    down({ id: 2, x: 300, y: 300, t: 20 });
+    clock.t = 300;
+    expect(input.brake()).toBe(true);
+    up({ id: 1, x: 100, y: 300, t: 300 });
+    expect(input.brake()).toBe(false);
+    expect(input.steer()).toBe(1);
+    input.dispose();
+  });
 });
 
 /**

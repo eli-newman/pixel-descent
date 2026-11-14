@@ -42,10 +42,7 @@ function ride(game: Game, input: FakeInput): void {
   game.update(DT);
 }
 
-function capture(
-  kit: 'snowboard' | 'skis' = 'snowboard',
-  color = false,
-): {
+function capture(kit: 'snowboard' | 'skis' = 'snowboard'): {
   frames: Record<string, string>;
   spun: boolean;
   flipped: boolean;
@@ -57,7 +54,6 @@ function capture(
     frames[name] = hash(draw(game, scene));
   };
 
-  if (color) game.press('color');
   game.update(DT);
   shot('title');
   for (const screen of ['scores', 'gear', 'goals'] as const) {
@@ -125,38 +121,38 @@ describe('golden frames', () => {
     ).toEqual([]);
     expect(frames).toMatchInlineSnapshot(`
       {
-        "air": "b511b57d",
-        "crash-hit": "0ffc3114",
-        "crash-tumble": "c9f66604",
-        "flip": "8c36ef7c",
-        "over": "063242bf",
-        "paused": "1cc09956",
-        "ride-10s": "5f9c6d0f",
-        "ride-12s": "8133e9d5",
-        "ride-14s": "7f211a6e",
-        "ride-16s": "c4f8aaec",
-        "ride-18s": "845a7907",
-        "ride-20s": "27254c56",
-        "ride-22s": "0e3c04bc",
-        "ride-24s": "63d4528f",
-        "ride-26s": "b181dc40",
-        "ride-28s": "6b2f6c73",
-        "ride-2s": "cd16e8f9",
-        "ride-30s": "81095b2c",
-        "ride-32s": "adca2084",
-        "ride-34s": "1b2d2271",
-        "ride-36s": "14a27fa6",
-        "ride-38s": "29408e49",
-        "ride-40s": "d680b6f2",
-        "ride-4s": "49c9b255",
-        "ride-6s": "afdf426c",
-        "ride-8s": "32dcbcf1",
-        "spin": "369f3185",
-        "start": "1827df37",
-        "title": "cdb9c71d",
-        "title-gear": "31f4dbb4",
-        "title-goals": "e9135c03",
-        "title-scores": "4c029d3b",
+        "air": "fc11686d",
+        "crash-hit": "9d85a072",
+        "crash-tumble": "a225b6c5",
+        "flip": "f70fb5b0",
+        "over": "4baadfd4",
+        "paused": "bfab106c",
+        "ride-10s": "cb725416",
+        "ride-12s": "a668f3dd",
+        "ride-14s": "ceb798fb",
+        "ride-16s": "ddcff474",
+        "ride-18s": "388eea36",
+        "ride-20s": "308480cc",
+        "ride-22s": "6f92c629",
+        "ride-24s": "00c4f212",
+        "ride-26s": "f04680c9",
+        "ride-28s": "6fe86e6b",
+        "ride-2s": "e4598300",
+        "ride-30s": "daffe41e",
+        "ride-32s": "b8677ac6",
+        "ride-34s": "9f799f4e",
+        "ride-36s": "e9d2e69a",
+        "ride-38s": "a57f9904",
+        "ride-40s": "17f3b30d",
+        "ride-4s": "f7066f3c",
+        "ride-6s": "d17c5bb7",
+        "ride-8s": "e3b1fd1b",
+        "spin": "14f49224",
+        "start": "e26fd10c",
+        "title": "0dfed2f8",
+        "title-gear": "c62f51c0",
+        "title-goals": "39cdbb03",
+        "title-scores": "7474a8dc",
       }
     `);
   });
@@ -166,92 +162,49 @@ describe('golden frames', () => {
     expect(spun).toBe(true);
     expect(flipped).toBe(true);
     const board = capture().frames;
-    // The title and menus behind the GEAR screen are the same; every frame with the rider in it is not.
+    // The title and SCORES come before GEAR picks the skis, so they are the same; every frame after it shows the
+    // skier (GOALS too: menus have no card, so the slope and its rider show through).
     const same = Object.keys(frames).filter((k) => frames[k] === board[k]);
-    expect(same.sort()).toEqual(['title', 'title-goals', 'title-scores']);
+    expect(same.sort()).toEqual(['title', 'title-scores']);
     expect(frames).toMatchInlineSnapshot(`
       {
-        "air": "3727768d",
-        "crash-hit": "12e694a4",
-        "crash-tumble": "0e70865d",
-        "flip": "4a7599c4",
-        "over": "5d3619da",
-        "paused": "b610aa40",
-        "ride-10s": "8b2bfed4",
-        "ride-12s": "1be72584",
-        "ride-14s": "e207b3fb",
-        "ride-16s": "2e47edcb",
-        "ride-18s": "27defe0f",
-        "ride-20s": "c4b67179",
-        "ride-22s": "3b2fcb81",
-        "ride-24s": "3ed8cf9e",
-        "ride-26s": "3a715f48",
-        "ride-28s": "1552ef73",
-        "ride-2s": "fb709da8",
-        "ride-30s": "f4a6919b",
-        "ride-32s": "50ecbde1",
-        "ride-34s": "db3ab0b5",
-        "ride-36s": "a139b0eb",
-        "ride-38s": "cf71f051",
-        "ride-40s": "2ddc5976",
-        "ride-4s": "273e5436",
-        "ride-6s": "9177ca5c",
-        "ride-8s": "e67c6351",
-        "spin": "e05b7ef4",
-        "start": "e412232e",
-        "title": "cdb9c71d",
-        "title-gear": "da556ec2",
-        "title-goals": "e9135c03",
-        "title-scores": "4c029d3b",
+        "air": "4b76f74d",
+        "crash-hit": "9cf0c4e2",
+        "crash-tumble": "12167fe5",
+        "flip": "191141d1",
+        "over": "b5862c20",
+        "paused": "95997015",
+        "ride-10s": "0cbbad05",
+        "ride-12s": "c3552ac4",
+        "ride-14s": "ea354ebe",
+        "ride-16s": "723c64cb",
+        "ride-18s": "bf2f3c6e",
+        "ride-20s": "ac6afc7a",
+        "ride-22s": "7f798e88",
+        "ride-24s": "31f57a7a",
+        "ride-26s": "8bfa9737",
+        "ride-28s": "8d272cca",
+        "ride-2s": "9b383739",
+        "ride-30s": "1a9daf03",
+        "ride-32s": "2bf365f6",
+        "ride-34s": "bf272d67",
+        "ride-36s": "2ea4436b",
+        "ride-38s": "32477ea5",
+        "ride-40s": "061597fe",
+        "ride-4s": "531fe49b",
+        "ride-6s": "edf5b036",
+        "ride-8s": "4ac85ada",
+        "spin": "3dd1517d",
+        "start": "3dbbf2f5",
+        "title": "0dfed2f8",
+        "title-gear": "273460f0",
+        "title-goals": "c25abb96",
+        "title-scores": "7474a8dc",
       }
     `);
   });
 
   it('is repeatable', () => {
     expect(capture().frames).toEqual(capture().frames);
-  });
-
-  it('draws the same run in colour, with every frame different from black and white', () => {
-    const { frames, spun, flipped } = capture('snowboard', true);
-    expect(spun).toBe(true);
-    expect(flipped).toBe(true);
-    const mono = capture().frames;
-    expect(Object.keys(frames).filter((k) => frames[k] === mono[k])).toEqual([]);
-    expect(frames).toMatchInlineSnapshot(`
-      {
-        "air": "39fdeb8d",
-        "crash-hit": "7527df54",
-        "crash-tumble": "ba84b45c",
-        "flip": "70646afe",
-        "over": "96b8ce78",
-        "paused": "df3f5725",
-        "ride-10s": "220ebfec",
-        "ride-12s": "c43126d6",
-        "ride-14s": "2ce98e8d",
-        "ride-16s": "370530a1",
-        "ride-18s": "35c309b5",
-        "ride-20s": "65967238",
-        "ride-22s": "3f6a3192",
-        "ride-24s": "5674664a",
-        "ride-26s": "bbb118b4",
-        "ride-28s": "e93aa9d2",
-        "ride-2s": "fab1481d",
-        "ride-30s": "2d0c71ea",
-        "ride-32s": "9586ff5f",
-        "ride-34s": "a4496dc4",
-        "ride-36s": "f6b0d60d",
-        "ride-38s": "173d72a5",
-        "ride-40s": "a4625ce7",
-        "ride-4s": "39f33438",
-        "ride-6s": "37195c2a",
-        "ride-8s": "ecf24231",
-        "spin": "dbd0ce72",
-        "start": "d1d16f9a",
-        "title": "a5ff0c76",
-        "title-gear": "30bb93e8",
-        "title-goals": "fea8c3d3",
-        "title-scores": "7e5089ef",
-      }
-    `);
   });
 });

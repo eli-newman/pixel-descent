@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { H, STEP, W } from '../src/core/config';
-import { Framebuffer, YELLOW } from '../src/render/framebuffer';
+import { Framebuffer, OFF, WHITE, YELLOW } from '../src/render/framebuffer';
 import { riderBox } from '../src/render/layout';
 import { SceneRenderer } from '../src/render/scene';
 import { renderUi } from '../src/render/ui';
-import { COLOR, MONO } from '../src/render/palette';
 import { drawRider } from '../src/render/riderSprite';
 import { poseOf } from '../src/sim/pose';
 import { headingAngle, launch } from '../src/sim/rider';
@@ -265,30 +264,26 @@ describe('the grab pose', () => {
     set: (r: ReturnType<typeof createRider>) => void,
     grab: boolean,
     skis: boolean,
-    color: boolean,
   ): Framebuffer => {
     const r = createRider();
     r.air = true;
     set(r);
     r.grab = grab;
-    const pal = color ? COLOR : MONO;
     const fb = new Framebuffer(W, H);
-    fb.clear(pal.snow);
-    drawRider(fb, poseOf(r, 90, 160, 0), { style: { board: 0, rider: 0, skis }, palette: pal });
+    fb.clear(OFF);
+    drawRider(fb, poseOf(r, 90, 160, 0), { style: { board: 0, rider: 0, skis } });
     return fb;
   };
 
   const same = (a: Framebuffer, b: Framebuffer): boolean => a.data.every((v, i) => v === b.data[i]);
 
-  it('is drawn in every board, ski, stance, colour, spin and flip combination', () => {
+  it('is drawn in every board, ski, stance, spin and flip combination', () => {
     const missing: string[] = [];
     for (const skis of [false, true]) {
-      for (const color of [false, true]) {
-        for (const { name, set } of cases()) {
-          const grabbed = draw(set, true, skis, color);
-          if (same(grabbed, draw(set, false, skis, color))) {
-            missing.push(`${skis ? 'skis' : 'board'} ${color ? 'colour' : 'mono'} ${name}`);
-          }
+      for (const { name, set } of cases()) {
+        const grabbed = draw(set, true, skis);
+        if (same(grabbed, draw(set, false, skis))) {
+          missing.push(`${skis ? 'skis' : 'board'} ${name}`);
         }
       }
     }
@@ -297,19 +292,16 @@ describe('the grab pose', () => {
 
   it('only uses the rider colours, and the skier grab is its own drawing', () => {
     const stray: string[] = [];
+    const allowed = new Set([OFF, WHITE]);
     for (const skis of [false, true]) {
-      for (const color of [false, true]) {
-        const pal = color ? COLOR : MONO;
-        const allowed = new Set([pal.snow, pal.riderBody, pal.riderBoard, pal.riderHalo]);
-        for (const { name, set } of cases()) {
-          const px = new Uint32Array(draw(set, true, skis, color).data.buffer);
-          if (px.some((v) => !allowed.has(v))) stray.push(`${skis} ${color} ${name}`);
-        }
+      for (const { name, set } of cases()) {
+        const px = new Uint32Array(draw(set, true, skis).data.buffer);
+        if (px.some((v) => !allowed.has(v))) stray.push(`${skis} ${name}`);
       }
     }
     expect(stray).toEqual([]);
     const set = cases()[4]?.set ?? (() => {});
-    expect(same(draw(set, true, true, false), draw(set, true, false, false))).toBe(false);
+    expect(same(draw(set, true, true), draw(set, true, false))).toBe(false);
   });
 });
 

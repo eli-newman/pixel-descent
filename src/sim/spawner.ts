@@ -21,7 +21,7 @@ import { detExp } from '../core/detMath';
 import { obstacleBox } from './collision';
 import { maxFlightPx, topSpeed } from './speed';
 import { Rng } from '../core/rng';
-import type { CliffSeg, Obstacle, ObstacleKind, Patch, Ramp, SpawnBatch } from './types';
+import type { CliffSeg, Obstacle, ObstacleKind, Ramp, SpawnBatch } from './types';
 
 /** Nothing spawns in the rows right below the start gate. */
 export const FIRST_ROW_Y = START_Y + 70;
@@ -47,8 +47,6 @@ const LANDING_MARGIN = 110;
 const FIRST_RAMP_Y = START_Y + FIRST_JUMP_Y;
 /** Clear ground kept between a jump (lip or landing end) and a risk lane. */
 const LANE_JUMP_PAD = 60;
-/** Ice and drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
-const JUMP_PATCH_PAD = 40;
 /**
  * After the last kicker of a line the clear ground runs on until a rider who landed on the line's x can
  * be back inside the open path: steering in over LINE_TURN_IN px, then moving LINE_RETURN_SLOPE px
@@ -148,7 +146,6 @@ export class Spawner {
   private nextObstacleId = 1;
   private nextPickupId = 1;
   private nextRampId = 1;
-  private nextPatchId = 1;
   private nextRampY = FIRST_RAMP_Y;
   /** Where the clear ground of the last planned jump ends. Nothing new is planned above it. */
   private clearEnd = FIRST_ROW_Y;
@@ -156,7 +153,6 @@ export class Spawner {
   private nextPatchY = FIRST_PATCH_Y;
   private nextLaneStarLane = 0;
   private nextRampOut = 0;
-  private nextPatchOut = 0;
   private readonly bands: number[] = [START_X];
   /** Start y of each path band (bandStart[i] is where band i begins). */
   private readonly bandStart: number[] = [SAFE_LANE_END_Y];
@@ -164,7 +160,6 @@ export class Spawner {
   /** Planned features, in order of y. Public for the renderer, the sim and tests. */
   readonly lanes: Lane[] = [];
   readonly ramps: Ramp[] = [];
-  readonly patches: Patch[] = [];
 
   constructor(seed: number) {
     this.rng = new Rng(seed);
@@ -233,7 +228,6 @@ export class Spawner {
       obstacles: [],
       pickups: [],
       ramps: [],
-      patches: [],
     };
     this.planFeatures(toY + 60);
     this.planPatches(toY + 60);
@@ -253,12 +247,6 @@ export class Spawner {
       batch.ramps.push(r);
       this.nextRampOut++;
     }
-    while (this.nextPatchOut < this.patches.length) {
-      const p = this.patches[this.nextPatchOut];
-      if (!p || p.y >= toY) break;
-      batch.patches.push(p);
-      this.nextPatchOut++;
-    }
     return batch;
   }
 
@@ -275,20 +263,6 @@ export class Spawner {
       if (ok) return side;
     }
     return null;
-  }
-
-  private nearLane(y: number, pad: number): boolean {
-    for (const l of this.lanes) if (y >= l.y0 - pad && y <= l.y1 + pad) return true;
-    return false;
-  }
-
-  /** True when world y is within `pad` of a jump's lip, or of the run-ups between the kickers of a line. */
-  private nearJump(y: number, pad: number): boolean {
-    for (const r of this.ramps) {
-      if (Math.abs(r.y - y) < pad) return true;
-      if (r.lineIdx < r.lineLen - 1 && y > r.y - pad && y < r.landEnd + pad) return true;
-    }
-    return false;
   }
 
   /**
@@ -431,42 +405,29 @@ export class Spawner {
     return segs;
   }
 
-  /** Plan ice patches and snowdrifts up to `limit`. */
+  /**
+   * Plan snowdrifts up to `limit`. Ice patches were removed (tag `archive/ice`), but every draw they made is still
+   * made in the same order, so drifts, jumps and lanes stay where they were and a shared link opens the same course.
+   */
+  /**
+   * The stream that once placed ice and deep snow. Both were removed (tags `archive/ice`, `archive/deep-snow`), but
+   * its draws and the jump planning it triggers stay exactly as they were, so every course keeps its trees, jumps,
+   * lanes and stars where they always were and shared links still open the same course.
+   */
   private planPatches(limit: number): void {
     while (this.nextPatchY <= limit) {
       const y = Math.round(this.nextPatchY + this.patchRng.range(0, 120));
       this.nextPatchY = y + this.patchRng.range(230, 400);
+      // The same draws, in the same order, as when they placed a patch: kind, on the path, radii, side, slack, look.
       const ice = this.patchRng.chance(0.45);
-      const onPath = this.patchRng.chance(0.3);
-      const rx = Math.round(ice ? this.patchRng.range(18, 32) : this.patchRng.range(15, 26));
-      const ry = Math.round(ice ? this.patchRng.range(16, 26) : this.patchRng.range(12, 20));
-      const side = this.patchRng.chance(0.5) ? 1 : -1;
-      const slack = this.patchRng.range(0, 24);
-      const variant = this.patchRng.int(0, 3);
+      this.patchRng.chance(0.3);
+      const [rxMin, rxMax, ryMin, ryMax] = ice ? [18, 32, 16, 26] : [15, 26, 12, 20];
+      this.patchRng.range(rxMin, rxMax);
+      const ry = Math.round(this.patchRng.range(ryMin, ryMax));
+      this.patchRng.chance(0.5);
+      this.patchRng.range(0, 24);
+      this.patchRng.int(0, 3);
       this.planFeatures(y + ry + 80);
-      if (this.nearLane(y, ry + 30)) continue;
-      // Keep the run-up and the lip of every jump clean: no ice or drift drawn over it or slowing the rider into it.
-      if (this.nearJump(y, ry + JUMP_PATCH_PAD)) continue;
-      const distM = (y - START_Y) / PX_PER_M;
-      const centre = this.pathCenter(y);
-      let x: number;
-      if (onPath) {
-        // Ice on the path only where the path is nearly straight, so a loose board can still hold the line.
-        if (ice && Math.abs(this.pathCenter(y - ry) - this.pathCenter(y + ry)) > 12) continue;
-        x = centre + side * Math.min(8, slack / 3);
-      } else {
-        x = centre + side * (pathHalfWidth(distM) + rx + 4 + slack);
-      }
-      if (x < rx * 0.5 || x > W - rx * 0.5) x = Math.min(W - rx * 0.5, Math.max(rx * 0.5, x));
-      this.patches.push({
-        id: this.nextPatchId++,
-        kind: ice ? 'ice' : 'drift',
-        x: Math.round(x),
-        y,
-        rx,
-        ry,
-        variant,
-      });
     }
   }
 
@@ -536,7 +497,6 @@ export class Spawner {
       y: Math.round(y + rng.range(-3, 3)),
       half: pick.half,
       judged: false,
-      touched: false,
     };
     const box = obstacleBox(probe);
     const w = box ? (box.x1 - box.x0) / 2 : 0;

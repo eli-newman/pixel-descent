@@ -18,7 +18,7 @@ export const RIDER_CENTER_DY = 8;
 /** Passing a solid obstacle closer than this (in px) counts as a near miss. */
 export const NEAR_MISS_PX = 5;
 
-export type Hit = 'none' | 'slow' | 'crash';
+export type Hit = 'none' | 'crash';
 
 /** Rocks smaller than this are pebbles: decoration you ride over. The renderer draws them flat so they never pass for a rock. */
 export const PEBBLE_SIZE = 9;
@@ -71,12 +71,11 @@ export function testObstacle(rider: Point, o: Obstacle): Hit {
   if (!box) return 'none';
   const c = riderCenter(rider);
   if (!circleHitsBox(c.x, c.y, RIDER_RADIUS, box)) return 'none';
-  return o.kind === 'bush' ? 'slow' : 'crash';
+  return 'crash';
 }
 
 /** Horizontal clearance (px) between the rider circle and a solid obstacle, or null if not solid. */
 export function clearance(rider: Point, o: Obstacle): number | null {
-  if (o.kind === 'bush') return null;
   const box = obstacleBox(o);
   if (!box) return null;
   const c = riderCenter(rider);

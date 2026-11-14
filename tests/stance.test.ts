@@ -80,7 +80,6 @@ describe('stance', () => {
     const env = {
       cruise: cruiseSpeed(500),
       top: topSpeed(500),
-      surface: { ice: false, drift: false },
     };
     const ride = (stance: 1 | -1): RiderState => {
       const r = createRider();

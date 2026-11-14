@@ -28,8 +28,6 @@ export interface RideState {
   tuck: number;
   air: boolean;
   active: boolean;
-  ice: boolean;
-  drift: boolean;
   /** 0..1 swing of the board into a plowing stop. */
   brake: number;
 }
@@ -155,8 +153,7 @@ export class Sfx {
 
   /**
    * Called every frame. Wind rises in pitch and level with speed, and again with the straight-line
-   * tuck; the board hiss follows how hard the rider is carving and goes silent in the air; ice makes
-   * it brighter, a snowdrift muffles everything.
+   * tuck; the board hiss follows how hard the rider is carving and goes silent in the air.
    */
   ride(s: RideState): void {
     const ctx = this.ctx;
@@ -169,9 +166,8 @@ export class Sfx {
     const sp = s.active ? Math.min(1, s.speed / MAX_SPEED) : 0;
     const tuck = s.active ? s.tuck : 0;
     const carve = Math.min(1, Math.abs(s.hx) * 0.7 + Math.min(1, Math.abs(s.hv) / 3) * 0.6);
-    const muffle = s.drift ? 0.5 : 1;
     bed.wind.gain.setTargetAtTime(
-      s.active ? (0.012 + 0.066 * sp * sp + 0.026 * tuck * tuck) * muffle : 0,
+      s.active ? 0.012 + 0.066 * sp * sp + 0.026 * tuck * tuck : 0,
       now,
       0.12,
     );
@@ -179,14 +175,11 @@ export class Sfx {
     bed.windFilter.Q.setTargetAtTime(0.35 + 0.45 * tuck, now, 0.2);
     const grounded = s.active && !s.air;
     bed.hiss.gain.setTargetAtTime(
-      grounded
-        ? (0.003 + 0.03 * sp * carve + 0.05 * s.brake * (0.3 + sp)) * muffle * (s.ice ? 0.6 : 1)
-        : 0,
+      grounded ? 0.003 + 0.03 * sp * carve + 0.05 * s.brake * (0.3 + sp) : 0,
       now,
       0.08,
     );
-    bed.hissFilter.frequency.setTargetAtTime(s.ice ? 3200 : 1500, now, 0.1);
-    bed.rumble.gain.setTargetAtTime(grounded ? (0.015 + 0.035 * sp) * muffle : 0, now, 0.15);
+    bed.rumble.gain.setTargetAtTime(grounded ? 0.015 + 0.035 * sp : 0, now, 0.15);
     if (
       grounded &&
       Math.abs(s.hv) > HARD_TURN &&
@@ -315,10 +308,6 @@ export class Sfx {
   nearMiss(combo = 1): void {
     this.burst({ from: 300, to: 1400, q: 0.6, dur: 0.3, vol: 0.05, attack: 0.1 });
     this.chime(ladderFreq(523, Math.max(0, combo - 1)), 0.022, 0.28, 0.05);
-  }
-
-  bush(): void {
-    this.burst({ from: 1200, to: 400, q: 0.5, dur: 0.28, vol: 0.06, attack: 0.02 });
   }
 
   /** Kicker take-off: a rising whoosh. */

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_FRAME, STEP } from '../src/core/config';
 import { Loop } from '../src/platform/loop';
+import { makeGame } from './helpers/fakes';
 
 describe('Loop', () => {
   let queued: FrameRequestCallback | null = null;
@@ -53,6 +54,38 @@ describe('Loop', () => {
     new Loop(update, vi.fn()).start();
     frame(60_000);
     expect(update.mock.calls.length).toBeLessThanOrEqual(Math.ceil(MAX_FRAME / STEP));
+  });
+
+  it('tells the render how far it is into the next step', () => {
+    const render = vi.fn();
+    new Loop(() => {}, render).start();
+    frame(STEP * 3.25 * 1000);
+    expect(render).toHaveBeenLastCalledWith(expect.closeTo(0.25, 6));
+  });
+
+  it('scrolls the slope by an even amount every frame on a 90 Hz screen, not 1, 1, then 2 steps', () => {
+    // A 90 Hz display gets the 120 Hz steps 1, 1, 2 at a time. Drawn at the last whole step, the slope lurched every
+    // third frame; drawn at the screen's moment, it moves the same distance each frame.
+    const { game, input } = makeGame('smooth');
+    input.push('start');
+    const shown: number[] = [];
+    new Loop(
+      (dt) => game.update(dt),
+      (alpha) => {
+        game.setBlend(alpha);
+        shown.push(game.camYi + game.camFrac);
+      },
+    ).start();
+    for (let n = 1; n <= 300; n++) frame((n * 1000) / 90);
+    expect(game.phase).toBe('playing');
+    // Late in the run, when the speed has settled, compare each frame's move with its neighbours'.
+    const moves = shown
+      .slice(200)
+      .map((y, i, a) => (i === 0 ? 0 : y - (a[i - 1] ?? y)))
+      .slice(1);
+    const jolts = moves.slice(1).map((m, i) => Math.abs(m - (moves[i] ?? m)));
+    expect(Math.min(...moves)).toBeGreaterThan(0.5);
+    expect(Math.max(...jolts)).toBeLessThan(0.1);
   });
 
   it('stops: a late frame does nothing and starting twice queues one frame', () => {

@@ -76,10 +76,13 @@ export function analyticsConfig(json: string | undefined): AnalyticsConfig {
 /**
  * The URL reported with every page view and event: no hash and no query except `utm_*` campaign tags, so a seed
  * (`?seed=`) or a click id can never leave the page. A visit from a shared link is reported as `<dir>/from-share`.
+ * A dare link's path (`/c/<code>`) carries a seed too, so it is always cut back to the folder it is in.
  */
 export function cleanUrl(url: string, fromShare: boolean): string {
   try {
     const u = new URL(url);
+    const dare = /^(.*\/)c\/[^/]*\/?$/.exec(u.pathname);
+    if (dare) u.pathname = dare[1] ?? '/';
     const keep = new URLSearchParams();
     for (const [k, v] of u.searchParams) if (k.startsWith('utm_')) keep.append(k, v);
     u.search = keep.toString();

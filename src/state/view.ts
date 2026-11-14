@@ -1,3 +1,4 @@
+import type { Dare } from '../core/dare';
 import type { Sim } from '../sim/sim';
 import type { Trail } from '../sim/trail';
 import type { Toast } from './feedback';
@@ -5,6 +6,7 @@ import type { Phase, Screen } from './menu';
 import type { Progress } from './progress';
 import type { RunResult } from './runReport';
 import type { ScoreEntry, Settings } from './storage';
+import type { Lesson } from './tutorial';
 
 /** Readonly all the way down. Functions stay callable, so give views data, not mutating methods. */
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
@@ -42,7 +44,6 @@ export type SimView = DeepReadonly<
     | 'obstacles'
     | 'pickups'
     | 'ramps'
-    | 'patches'
     | 'crashed'
     | 'crashT'
     | 'crashFace'
@@ -53,6 +54,7 @@ export type SimView = DeepReadonly<
     | 'tuck'
     | 'mult'
     | 'comboLeft'
+    | 'runTime'
   >
 > & { readonly trail: TrailView };
 
@@ -63,12 +65,18 @@ export interface GameView {
   readonly scoreTab: 'top' | 'daily';
   readonly sim: SimView;
   readonly result: DeepReadonly<RunResult> | null;
+  /** The friend's run to beat, from a dare link, while the player is on its course. */
+  readonly dare: Readonly<Dare> | null;
   readonly focus: number;
   readonly focusVisible: boolean;
   readonly particles: ParticlesView;
   readonly puffs: PuffsView;
   readonly toasts: readonly Readonly<Toast>[];
   readonly camYi: number;
+  /** The camera's fraction of a pixel past `camYi` (0 to 1), and the rider drawn at the same moment. */
+  readonly camFrac: number;
+  readonly riderX: number;
+  readonly riderY: number;
   readonly animT: number;
   readonly settings: Readonly<Settings>;
   readonly progress: DeepReadonly<Progress>;
@@ -82,4 +90,12 @@ export interface GameView {
   readonly boardIdx: number;
   readonly riderIdx: number;
   readonly crashWord: string;
+  /** The tutorial lesson slowing or stopping the run, or null. */
+  readonly lesson: DeepReadonly<Lesson> | null;
+  /** How far the lesson's words have faded in (0 to 1): up while the run slows, down as it picks up again. */
+  readonly lessonShow: number;
+  /** Seconds the lesson has been up, for its animations. */
+  readonly lessonAge: number;
+  /** Whether a tap goes on from the lesson yet (`LESSON_GUARD`), so "TAP TO GO ON" shows only once it does. */
+  readonly lessonReady: boolean;
 }
