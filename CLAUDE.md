@@ -10,7 +10,7 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint .
 npm test            # vitest run (tests/)
 npm run check       # typecheck + lint + format check + vitest
-npm run test:e2e    # Playwright tests against the deployment layout, served locally (tests/e2e)
+npm run test:e2e    # Playwright tests against the deployment layout, served locally (tests/e2e; port 4179, or E2E_PORT)
 npm run build       # typecheck + vitest + vite build + .vercel/output, so a deploy cannot ship failing tests
 npm run format      # prettier
 ```

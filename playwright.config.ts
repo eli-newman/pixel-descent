@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4179;
+/** `E2E_PORT` lets several checkouts run the suite at once. */
+const PORT = Number(process.env['E2E_PORT'] ?? 4179);
 /** Course generation must be identical in every engine, so that one test runs in all three. */
 const COURSE_SPEC = 'course.spec.ts';
 
