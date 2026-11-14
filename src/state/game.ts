@@ -1,20 +1,35 @@
 import type { Sfx } from '../platform/audio';
 import type { Tracker } from '../platform/analytics';
 import type { Dare } from '../core/dare';
-import { LESSON_GUARD, RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
+import {
+  LESSON_EASE_IN,
+  LESSON_EASE_OUT,
+  LESSON_GUARD,
+  RIDER_SCREEN_Y,
+  RIDER_SCREEN_Y_FAST,
+  START_Y,
+  STEP,
+} from '../core/config';
 import { BrakeSpray, CarveCloud, Particles, Puffs } from './effects';
 import type { Input } from '../platform/input';
 import { Controls } from './controls';
 import { Feedback, type Toast } from './feedback';
 import type { ButtonId, Phase, Screen } from './menu';
 import { ACHIEVEMENTS, boardIndex, riderIndex } from './progress';
-import { dailySeed, isDailySeed, normalizeSeed, randomSeedString } from '../core/rng';
+import { dailySeed, isDailySeed, normalizeSeed } from '../core/rng';
 import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './runReport';
 import { Sim } from '../sim/sim';
 import type { ScoreEntry, Store } from './storage';
 import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
 import type { GameView } from './view';
-import { lessonLines, lessonSeen, markSeen, nextLesson, tutorialOn, type Lesson } from './tutorial';
+import {
+  freshSeed,
+  lessonReadyAt,
+  markSeen,
+  nextLesson,
+  tutorialOn,
+  type Lesson,
+} from './tutorial';
 
 export interface GameDeps {
   store: Store;
@@ -50,6 +65,18 @@ export class Game implements GameView {
   dare: Dare | null = null;
   /** Seconds the current lesson has been up. */
   private lessonT = 0;
+  /**
+   * Seconds since the player went on from the current lesson, or null while it is still up. The lesson stays (its
+   * words fading out) until the run is back to full speed.
+   */
+  private lessonOutT: number | null = null;
+  /** When the last lesson of this run went, in seconds of the run, or null. Spaces lessons out (`LESSON_GAP`). */
+  private lessonEnd: number | null = null;
+  /**
+   * Under a lesson the run slows down and stops: each frame adds its share of a sim step here, and the sim steps
+   * when it reaches one. Every step is the same fixed step, so the run is the same, only slower.
+   */
+  private slowAcc = 0;
 
   readonly particles = new Particles(512);
   readonly puffs = new Puffs();
@@ -87,7 +114,7 @@ export class Game implements GameView {
     deps.sfx.setMuted(this.settings.muted);
     deps.sfx.setMusic(this.settings.music);
     this.dare = dare ?? null;
-    this.newRun(dare?.seed ?? normalizeSeed(initialSeed) ?? randomSeedString());
+    this.newRun(dare?.seed ?? normalizeSeed(initialSeed) ?? this.freshSeed());
   }
 
   get screen(): Screen {
@@ -132,9 +159,15 @@ export class Game implements GameView {
     this.blendAlpha = Math.min(1, Math.max(0, alpha));
   }
 
+  /** How far the screen's moment lies from the step before the latest to the latest, slowed under a lesson. */
+  private get blend(): number {
+    if (!this.lesson) return this.blendAlpha;
+    return Math.min(1, this.slowAcc + this.blendAlpha * this.lessonScale);
+  }
+
   /** The camera at the screen's moment, in fractional pixels. */
   private get camView(): number {
-    return this.prevCamY + (this.camY - this.prevCamY) * this.blendAlpha;
+    return this.prevCamY + (this.camY - this.prevCamY) * this.blend;
   }
 
   /** The camera's whole pixel: the world is drawn from this row. */
@@ -149,11 +182,11 @@ export class Game implements GameView {
 
   /** The rider's board tail at the screen's moment, for drawing him in step with the camera. */
   get riderX(): number {
-    return this.prevRiderX + (this.sim.rider.x - this.prevRiderX) * this.blendAlpha;
+    return this.prevRiderX + (this.sim.rider.x - this.prevRiderX) * this.blend;
   }
 
   get riderY(): number {
-    return this.prevRiderY + (this.sim.rider.y - this.prevRiderY) * this.blendAlpha;
+    return this.prevRiderY + (this.sim.rider.y - this.prevRiderY) * this.blend;
   }
 
   /** Forget the previous step, after a jump cut such as a new run. */
@@ -231,6 +264,9 @@ export class Game implements GameView {
     this.settleBlend();
     this.result = null;
     this.lesson = null;
+    this.lessonOutT = null;
+    this.lessonEnd = null;
+    this.slowAcc = 0;
     this.phase = 'title';
     this.controls.reset();
     if (play) this.begin();
@@ -245,26 +281,55 @@ export class Game implements GameView {
     this.deps.announce?.('Run started.');
     this.runsStarted++;
     this.deps.analytics?.track(runStartEvent(this.runsStarted, this.runSetup()));
-    const stats = this.progress.stats;
-    if (tutorialOn(stats) && !lessonSeen(stats.lessons, 'steer')) {
-      this.showLesson({ id: 'steer', lines: lessonLines('steer', this.touch), target: null });
-    }
   }
 
-  /** Stop the run on a lesson, and remember it was shown. */
+  /** The course a new run starts on: the tutorial's own while it has lessons left (`freshSeed`). */
+  freshSeed(): string {
+    return freshSeed(this.progress.stats);
+  }
+
+  /** Slow the run to a stop on a lesson, and remember it was shown. */
   private showLesson(lesson: Lesson): void {
     this.lesson = lesson;
     this.lessonT = 0;
+    this.lessonOutT = null;
+    this.slowAcc = 0;
     const p = this.deps.store.progress();
     p.stats.lessons = markSeen(p.stats.lessons, lesson.id);
     this.deps.store.saveProgress();
     this.deps.input.releaseAll();
-    this.deps.announce?.(`${lesson.lines.join('. ').toLowerCase()}.`);
+    this.deps.announce?.(`${[lesson.title, ...lesson.lines].join('. ').toLowerCase()}.`);
   }
 
-  /** Go on from a lesson, once it has been up long enough to have been read. */
+  /** Go on from a lesson, once it has been up long enough to have been read: the run picks up speed again. */
   dismissLesson(): void {
-    if (this.lesson && this.lessonT >= LESSON_GUARD) this.lesson = null;
+    if (this.lessonWaiting && this.lessonT >= LESSON_GUARD) this.lessonOutT = 0;
+  }
+
+  /** A lesson is up and has not been gone on from: taps and keys go to it. */
+  get lessonWaiting(): boolean {
+    return this.lesson !== null && this.lessonOutT === null;
+  }
+
+  get lessonReady(): boolean {
+    return this.lessonWaiting && this.lessonT >= LESSON_GUARD;
+  }
+
+  get lessonAge(): number {
+    return this.lesson ? this.lessonT : 0;
+  }
+
+  /** How far the lesson's words have faded in: with the run slowing down, and out with it speeding up. */
+  get lessonShow(): number {
+    if (!this.lesson) return 0;
+    if (this.lessonOutT !== null) return 1 - Math.min(1, this.lessonOutT / LESSON_EASE_OUT);
+    return Math.min(1, this.lessonT / LESSON_EASE_IN);
+  }
+
+  /** The share of full speed the run goes at under a lesson: easing down to 0, then back up to 1. */
+  private get lessonScale(): number {
+    if (!this.lesson) return 1;
+    return 1 - smoothstep(this.lessonShow);
   }
 
   /** How this run is played, for analytics. */
@@ -273,12 +338,49 @@ export class Game implements GameView {
   }
 
   update(dt: number): void {
-    this.settleBlend();
     this.controls.handleInput();
     if (this.lesson && this.phase === 'playing') {
-      // The run holds still under a lesson: nothing steps, nothing animates.
-      this.lessonT += dt;
-    } else if (this.feedback.hitStop > 0) {
+      // Under a lesson the world runs slower, then stops, then picks up again: it steps only when a whole step has
+      // built up, and the screen draws between steps by the same measure (`blend`).
+      this.stepLesson(dt);
+      this.slowAcc += this.lessonScale;
+      if (this.slowAcc >= 1) {
+        this.slowAcc -= 1;
+        this.advance(STEP);
+      }
+    } else {
+      this.slowAcc = 0;
+      this.advance(dt);
+    }
+    const sim = this.sim;
+    const r = sim.rider;
+    this.deps.sfx.ride({
+      speed: r.speed,
+      hv: r.hv,
+      hx: r.hx,
+      tuck: sim.tuck,
+      air: r.air,
+      active: this.phase === 'playing' && this.feedback.hitStop <= 0 && this.lessonScale > 0.5,
+      brake: r.brake,
+    });
+  }
+
+  /** The lesson's clocks: it goes once the run is back to full speed, and the next waits `LESSON_GAP` after. */
+  private stepLesson(dt: number): void {
+    this.lessonT += dt;
+    if (this.lessonOutT === null) return;
+    this.lessonOutT += dt;
+    if (this.lessonOutT >= LESSON_EASE_OUT) {
+      this.lesson = null;
+      this.lessonOutT = null;
+      this.lessonEnd = this.sim.runTime;
+    }
+  }
+
+  /** One step of the world: the sim, the effects and the camera. */
+  private advance(dt: number): void {
+    this.settleBlend();
+    if (this.feedback.hitStop > 0) {
       this.animT += dt;
       this.feedback.coolHitStop(dt);
       this.feedback.stepToasts(dt);
@@ -301,17 +403,6 @@ export class Game implements GameView {
       }
     }
     this.updateCamera(dt);
-    const sim = this.sim;
-    const r = sim.rider;
-    this.deps.sfx.ride({
-      speed: r.speed,
-      hv: r.hv,
-      hx: r.hx,
-      tuck: sim.tuck,
-      air: r.air,
-      active: this.phase === 'playing' && this.feedback.hitStop <= 0 && !this.lesson,
-      brake: r.brake,
-    });
   }
 
   /** Run the action behind a button. */
@@ -372,11 +463,13 @@ export class Game implements GameView {
     this.cloud.step(sim.rider, this.puffs, this.particles, rand);
     if (sim.crashed) {
       this.phase = 'crashed';
+      this.lesson = null;
+      this.lessonOutT = null;
       return;
     }
     const stats = this.progress.stats;
-    if (tutorialOn(stats)) {
-      const lesson = nextLesson(sim, stats.lessons, this.touch);
+    if (!this.lesson && tutorialOn(stats)) {
+      const lesson = nextLesson(sim, stats.lessons, this.touch, lessonReadyAt(this.lessonEnd));
       if (lesson) this.showLesson(lesson);
     }
   }
@@ -412,4 +505,8 @@ export class Game implements GameView {
     this.camOff += (target - this.camOff) * Math.min(1, 2.5 * dt);
     this.camY = Math.max(START_Y - RIDER_SCREEN_Y, sim.rider.y - this.camOff);
   }
+}
+
+function smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
 }

@@ -135,7 +135,7 @@ function render(alpha: number): void {
   uiLayer.draw(uiImage);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
   if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
-  const lesson = game.lesson ? 'on' : 'off';
+  const lesson = game.lessonWaiting ? 'on' : 'off';
   if (stage.dataset['lesson'] !== lesson) stage.dataset['lesson'] = lesson;
   const hole = washHole();
   if (hole !== washClip) {

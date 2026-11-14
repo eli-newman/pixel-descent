@@ -54,6 +54,7 @@ export type SimView = DeepReadonly<
     | 'tuck'
     | 'mult'
     | 'comboLeft'
+    | 'runTime'
   >
 > & { readonly trail: TrailView };
 
@@ -89,6 +90,12 @@ export interface GameView {
   readonly boardIdx: number;
   readonly riderIdx: number;
   readonly crashWord: string;
-  /** The tutorial lesson stopping the run, or null. */
+  /** The tutorial lesson slowing or stopping the run, or null. */
   readonly lesson: DeepReadonly<Lesson> | null;
+  /** How far the lesson's words have faded in (0 to 1): up while the run slows, down as it picks up again. */
+  readonly lessonShow: number;
+  /** Seconds the lesson has been up, for its animations. */
+  readonly lessonAge: number;
+  /** Whether a tap goes on from the lesson yet (`LESSON_GUARD`), so "TAP TO GO ON" shows only once it does. */
+  readonly lessonReady: boolean;
 }

@@ -1,18 +1,22 @@
 import {
   LESSON_AHEAD_MAX,
   LESSON_AHEAD_MIN,
-  LESSON_FREE_RIDE,
-  START_Y,
+  LESSON_EASE_IN,
+  LESSON_FIRST,
+  LESSON_GAP,
   TUTORIAL_RUNS,
+  TUTORIAL_SEED,
 } from '../core/config';
+import { randomSeedString } from '../core/rng';
 import { isPebble } from '../sim/collision';
+import { headingY } from '../sim/rider';
 import type { SimView } from './view';
 
 /**
- * The first-run tutorial: instead of labels floating over the slope, the run stops the first time each kind of thing
- * comes up, marks it, says in a few big words what it does and goes on at a tap. Each lesson shows once ever, and
- * only on a player's first `TUTORIAL_RUNS` runs. The sim is not stepped while a lesson is up, so a run plays out the
- * same with or without it.
+ * The first-run tutorial: instead of labels floating over the slope, the run slows to a stop the first time each
+ * kind of thing comes up, marks it, says in a few big words what it does and goes on at a tap. Each lesson shows
+ * once ever, and only on a player's first `TUTORIAL_RUNS` runs. The sim only steps slower or not at all under a
+ * lesson, never differently, so a run plays out the same with or without it.
  */
 export type LessonId = 'steer' | 'crash' | 'star' | 'jump' | 'cliff';
 
@@ -22,10 +26,14 @@ export interface LessonTarget {
   id: number;
 }
 
-export interface Lesson {
-  id: LessonId;
-  /** Big words: two or three lines that fit across the frame at twice the font size. */
+/** What a lesson says: a one or two word title at three times the font size, and short lines at twice it. */
+export interface LessonText {
+  title: string;
   lines: readonly string[];
+}
+
+export interface Lesson extends LessonText {
+  id: LessonId;
   target: LessonTarget | null;
 }
 
@@ -50,40 +58,68 @@ export function tutorialOn(stats: { readonly runs: number; readonly lessons: num
   return stats.runs < TUTORIAL_RUNS && stats.lessons !== ALL_LESSONS;
 }
 
-/** The words of each lesson, for a touch screen or a keyboard. */
-export function lessonLines(id: LessonId, touch: boolean): readonly string[] {
+/** The words of each lesson, for a touch screen or a keyboard. The steering lesson also shows thumbs or keys. */
+export function lessonText(id: LessonId, touch: boolean): LessonText {
   switch (id) {
     case 'steer':
-      return [touch ? 'HOLD A SIDE TO STEER' : 'A AND D TO STEER', 'HOLD BOTH TO BRAKE'];
+      return touch
+        ? { title: 'STEER', lines: ['HOLD LEFT OR RIGHT', 'HOLD BOTH TO BRAKE'] }
+        : { title: 'STEER', lines: ['HOLD A OR D', 'HOLD BOTH TO BRAKE'] };
     case 'crash':
-      return ['TREES AND ROCKS', 'END YOUR RUN'];
+      return { title: 'WATCH OUT', lines: ['TREES AND ROCKS', 'END YOUR RUN'] };
     case 'star':
-      return ['GRAB STARS', 'FOR POINTS'];
+      return { title: 'STARS', lines: ['RIDE THROUGH', 'FOR POINTS'] };
     case 'jump':
       return touch
-        ? ['RIDE OVER JUMPS', 'SWIPE TO SPIN OR FLIP', 'TAP TO GRAB']
-        : ['RIDE OVER JUMPS', 'SPACE SPIN  W S FLIP', 'X TO GRAB'];
+        ? { title: 'JUMPS', lines: ['SWIPE TO SPIN', 'OR FLIP', 'TAP TO GRAB'] }
+        : { title: 'JUMPS', lines: ['SPACE TO SPIN', 'W OR S TO FLIP', 'X TO GRAB'] };
     case 'cliff':
-      return ['CLIFFS DROP YOU', 'INTO BIG AIR', 'LAND IT FOR A BONUS'];
+      return { title: 'CLIFF', lines: ['BIG AIR', 'LAND IT FOR', 'A BONUS'] };
   }
 }
 
-/** Whether a thing at world y `y` sits where a lesson about it should stop the run. */
+/** The course a new run starts on: the tutorial's own while lessons are left, else a new random one. */
+export function freshSeed(stats: { readonly runs: number; readonly lessons: number }): string {
+  return tutorialOn(stats) ? TUTORIAL_SEED : randomSeedString();
+}
+
+/**
+ * Whether a thing at world y `y` sits where a lesson about it should start: the run, slowing to a stop over
+ * `LESSON_EASE_IN` (half that time at full speed, with the ease used), stops with it in reach ahead.
+ * The rider's speed down the slope carries on through that, so where the run stops is known now.
+ */
 function inReach(sim: SimView, y: number): boolean {
-  const ahead = y - sim.rider.y;
+  const r = sim.rider;
+  const ahead = y - r.y - (headingY(r.hx) * r.speed * LESSON_EASE_IN) / 2;
   return ahead >= LESSON_AHEAD_MIN && ahead <= LESSON_AHEAD_MAX;
 }
 
 /**
- * The lesson to stop the run for right now, if any: the nearest thing ahead in reach whose lesson has not been
- * shown, once the rider is `LESSON_FREE_RIDE` px down the slope. Steering is taught at the start of the run, not here.
+ * When the next lesson may come, in seconds of the run (`Sim.runTime`): `LESSON_FIRST` into it, and `LESSON_GAP`
+ * after the last lesson went (`lastEnd`, or null if none has this run).
  */
-export function nextLesson(sim: SimView, seen: number, touch: boolean): Lesson | null {
-  if (sim.rider.y < START_Y + LESSON_FREE_RIDE) return null;
+export function lessonReadyAt(lastEnd: number | null): number {
+  return lastEnd === null ? LESSON_FIRST : Math.max(LESSON_FIRST, lastEnd + LESSON_GAP);
+}
+
+/**
+ * The lesson to slow the run for right now, if any. Nothing comes before `readyAt` (see `lessonReadyAt`). Steering
+ * comes first, on its own; after it, the nearest thing ahead in reach whose lesson has not been shown.
+ */
+export function nextLesson(
+  sim: SimView,
+  seen: number,
+  touch: boolean,
+  readyAt: number,
+): Lesson | null {
+  if (sim.runTime < readyAt || sim.rider.air) return null;
+  if (!lessonSeen(seen, 'steer'))
+    return { id: 'steer', ...lessonText('steer', touch), target: null };
   const things: Array<{ id: LessonId; target: LessonTarget; y: number }> = [];
   for (const o of sim.obstacles) {
-    // The lesson names trees and rocks, so it points at one of those, never a bush.
-    if (isPebble(o.kind, o.size) || o.kind === 'bush') continue;
+    // The lesson names trees and rocks, so it points at a pine or a rock: never a bush, and never a bare dead tree,
+    // which crashes you just the same but is a poor picture of a tree.
+    if (isPebble(o.kind, o.size) || o.kind === 'bush' || o.kind === 'dead') continue;
     things.push({ id: 'crash', target: { list: 'obstacles', id: o.id }, y: o.y });
   }
   for (const p of sim.pickups) {
@@ -103,5 +139,5 @@ export function nextLesson(sim: SimView, seen: number, touch: boolean): Lesson |
     if (lessonSeen(seen, t.id) || !inReach(sim, t.y)) continue;
     if (!best || t.y < best.y) best = t;
   }
-  return best ? { id: best.id, lines: lessonLines(best.id, touch), target: best.target } : null;
+  return best ? { id: best.id, ...lessonText(best.id, touch), target: best.target } : null;
 }

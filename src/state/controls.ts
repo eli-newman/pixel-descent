@@ -1,6 +1,5 @@
 import type { Sfx } from '../platform/audio';
 import type { Action, Input } from '../platform/input';
-import { randomSeedString } from '../core/rng';
 import type { SimInput } from '../sim/sim';
 import { menuButtons, type ButtonId, type Phase, type Screen } from './menu';
 import { BOARDS, cycleGear, RIDERS, type Kit } from './progress';
@@ -16,8 +15,10 @@ export interface ControlsHost {
   /** The rider is in the air: input treats a quick tap as a grab. */
   readonly airborne: boolean;
   /** A tutorial lesson is stopping the run: the next tap or key goes on. */
-  readonly lesson: object | null;
+  readonly lessonWaiting: boolean;
   dismissLesson(): void;
+  /** The course for a new run (the tutorial's own for a new player). */
+  freshSeed(): string;
   begin(): void;
   newRun(seed: string, play?: boolean): void;
   togglePause(): void;
@@ -95,7 +96,7 @@ export class Controls {
    * and nothing else but pause, mute and the like reaches the run. True when the item was used here.
    */
   private onLesson(action: Action | null): boolean {
-    if (!this.playing || !this.host.lesson) return false;
+    if (!this.playing || !this.host.lessonWaiting) return false;
     if (
       action === null ||
       action === 'start' ||
@@ -131,7 +132,7 @@ export class Controls {
         host.togglePause();
         break;
       case 'over':
-        if (host.overReady) host.newRun(randomSeedString(), true);
+        if (host.overReady) host.newRun(host.freshSeed(), true);
         break;
       default:
         break;
@@ -195,7 +196,7 @@ export class Controls {
     this.focusVisible = this.focusVisible && host.phase !== 'title';
     const bt = menuButtons(this)[this.focus] ?? menuButtons(this)[0];
     if (bt) this.press(bt.id);
-    else if (host.phase === 'over' && host.overReady) host.newRun(randomSeedString(), true);
+    else if (host.phase === 'over' && host.overReady) host.newRun(host.freshSeed(), true);
   }
 
   private backAction(): void {
@@ -239,10 +240,10 @@ export class Controls {
     riderNext: () => this.cycleGear('rider', 1),
     resume: () => this.host.togglePause(),
     restart: () => this.host.newRun(this.host.seed, true),
-    quit: () => this.host.newRun(randomSeedString()),
-    menu: () => this.host.newRun(randomSeedString()),
+    quit: () => this.host.newRun(this.host.freshSeed()),
+    menu: () => this.host.newRun(this.host.freshSeed()),
     again: () => {
-      if (this.host.overReady) this.host.newRun(randomSeedString(), true);
+      if (this.host.overReady) this.host.newRun(this.host.freshSeed(), true);
     },
     retry: () => {
       if (this.host.overReady) this.host.newRun(this.host.seed, true);

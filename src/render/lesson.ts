@@ -66,18 +66,26 @@ export function lessonTarget(g: GameView): FrameBox | null {
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
 }
 
-/** Rows of one lesson line at twice the font size, and the gap under the block before "TAP TO GO ON". */
+/** Rows of the title at three times the font size, of one line at twice it, and of "TAP TO GO ON" under them. */
+export const LESSON_TITLE = 19;
 export const LESSON_LINE = 13;
-const HUD_BOTTOM = 38;
+export const LESSON_GO = 10;
+/** The HUD fades out under a lesson, so its words may start this near the top. */
+const TOP = 10;
+
+/** A lesson's whole block of words, in rows: title, lines and how to go on. */
+export function lessonRows(lesson: { readonly lines: readonly string[] }): number {
+  return LESSON_TITLE + lesson.lines.length * LESSON_LINE + LESSON_GO;
+}
 
 /**
- * The top row of a lesson's words: between the score and the rider if they fit there, else under the thing the
- * lesson points at, else under the rider. `rows` is the block's height.
+ * The top row of a lesson's words: above the rider if they fit there, else under the thing the lesson points at,
+ * else under the rider. `rows` is the block's height.
  */
 export function lessonTop(g: GameView, rows: number): number {
   const rider = riderBox(g.sim, g.camYi);
   const target = lessonTarget(g);
-  if (HUD_BOTTOM + rows <= rider.top + 6) return HUD_BOTTOM;
+  if (TOP + rows <= rider.top + 6) return TOP;
   const below = Math.max(rider.bottom, target ? target.y + target.h : 0) + 6;
   if (below + rows <= H - 30) return below;
   return Math.min(H - 30 - rows, rider.bottom + 6);

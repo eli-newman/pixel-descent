@@ -14,7 +14,8 @@ import {
 import { drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
-import { LESSON_LINE, lessonTarget, lessonTop } from './lesson';
+import { drawCoach } from './coach';
+import { LESSON_LINE, LESSON_TITLE, lessonRows, lessonTarget, lessonTop } from './lesson';
 import {
   drawDizzyBirds,
   drawRider,
@@ -154,6 +155,52 @@ function hudTarget(g: GameView): [string, number] {
 }
 
 function drawHud(fb: Framebuffer, g: GameView): void {
+  if (g.lesson) {
+    // The HUD makes way for the lesson's words, dissolving out as they dissolve in.
+    faded(fb, 1 - g.lessonShow, (into) => drawHudItems(into, g));
+    faded(fb, g.lessonShow, (into) => drawLesson(into, g));
+    return;
+  }
+  drawHudItems(fb, g);
+  const toast = g.toasts[0];
+  if (toast && g.phase !== 'over') {
+    const big = g.settings.bigHud;
+    const x = Math.round(CX - textWidth(toast.text) / 2);
+    const ty = toastRow(g, big);
+    text(fb, toast.text, x, ty, toast.hot ? HOT : INK);
+    if (toast.sub) {
+      const sx = Math.round(CX - textWidth(toast.sub) / 2);
+      text(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? HOT : INK);
+    }
+  }
+}
+
+/** The 4x4 ordered dither the lesson fades through: a pixel shows once the fade passes its threshold (0 to 15). */
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+let scratch: Framebuffer | null = null;
+
+/** Draw something through a dissolve: `show` 1 draws all of it, 0 none, and between them an even scatter. */
+function faded(fb: Framebuffer, show: number, draw: (into: Framebuffer) => void): void {
+  if (show >= 1) {
+    draw(fb);
+    return;
+  }
+  if (show <= 0) return;
+  if (scratch?.w !== fb.w || scratch.h !== fb.h) scratch = new Framebuffer(fb.w, fb.h);
+  const buf = scratch;
+  buf.clear(0);
+  draw(buf);
+  const level = show * 16;
+  for (let y = 0; y < buf.h; y++) {
+    for (let x = 0; x < buf.w; x++) {
+      const c = buf.get(x, y);
+      if (c !== 0 && (BAYER[(y & 3) * 4 + (x & 3)] ?? 0) < level) fb.put(x, y, c);
+    }
+  }
+}
+
+/** The score, distance, best and gauges, and a fallen rider's birds. */
+function drawHudItems(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   // Birds circle a fallen rider's head once the tumble is over. On this layer, so the game over fade never dims
   // them; the camera holds still after a crash, so they stay on him. drawWipeout is drawn at the same spot.
@@ -177,40 +224,28 @@ function drawHud(fb: Framebuffer, g: GameView): void {
 
   if (g.phase === 'playing' || g.phase === 'crashed') drawGauges(fb, g);
   if (g.settings.muted) text(fb, 'MUTED', W - 26, H - 8);
-
-  if (g.lesson) {
-    drawLesson(fb, g);
-    return;
-  }
-  const toast = g.toasts[0];
-  if (toast && g.phase !== 'over') {
-    const x = Math.round(CX - textWidth(toast.text) / 2);
-    const ty = toastRow(g, big);
-    text(fb, toast.text, x, ty, toast.hot ? HOT : INK);
-    if (toast.sub) {
-      const sx = Math.round(CX - textWidth(toast.sub) / 2);
-      text(fb, toast.sub, sx, ty + SUB_GAP, toast.hot ? HOT : INK);
-    }
-  }
 }
 
 /**
- * A tutorial lesson: corner marks around the thing it is about, its words in big yellow letters where they cover
- * neither that thing nor the rider, and how to go on. The page fades the rest of the slope behind it (see main.ts).
+ * A tutorial lesson: corner marks around the thing it is about, a short title in big yellow letters and a few white
+ * lines where they cover neither that thing nor the rider, and, once a tap goes on, how to go on. The steering lesson
+ * acts out the controls under its words (`drawCoach`). The page fades the rest of the slope behind it (see main.ts).
  */
 function drawLesson(fb: Framebuffer, g: GameView): void {
   const lesson = g.lesson;
   if (!lesson) return;
   const target = lessonTarget(g);
   if (target) corners(fb, target.x, target.y, target.w, target.h, HOT);
-  const go = g.touch ? 'TAP TO GO ON' : 'SPACE TO GO ON';
-  const rows = lesson.lines.length * LESSON_LINE + 10;
+  const rows = lessonRows(lesson);
   let y = lessonTop(g, rows);
+  textC(fb, lesson.title, CX, y + 1, HOT, 3);
+  y += LESSON_TITLE;
   for (const line of lesson.lines) {
-    textC(fb, line, CX, y, HOT, 2);
+    textC(fb, line, CX, y + 1, INK, 2);
     y += LESSON_LINE;
   }
-  textC(fb, go, CX, y + 3, INK);
+  if (g.lessonReady) textC(fb, g.touch ? 'TAP TO GO ON' : 'SPACE TO GO ON', CX, y + 3, INK);
+  if (lesson.id === 'steer') drawCoach(fb, g, y + 12);
 }
 
 /** Corner marks around a box, each arm a few pixels long, with the usual edge. */

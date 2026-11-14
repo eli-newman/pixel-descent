@@ -15,12 +15,15 @@ function watchErrors(page: Page): string[] {
 }
 
 /** How many distinct colours the canvas shows and a checksum, so "blank" and "frozen" can both be detected. */
-function readCanvas(page: Page): Promise<{ colours: number; sum: number }> {
-  return page.evaluate(() => {
-    // Both layers: the slope and the HUD and menus drawn over it.
+function readCanvas(
+  page: Page,
+  layers: readonly string[] = ['#game', '#ui'],
+): Promise<{ colours: number; sum: number }> {
+  return page.evaluate((ids) => {
+    // By default both layers: the slope and the HUD and menus drawn over it.
     const seen = new Set<number>();
     let sum = 0;
-    for (const id of ['#game', '#ui']) {
+    for (const id of ids) {
       const canvas = document.querySelector<HTMLCanvasElement>(id);
       const data = canvas?.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
       if (!data) return { colours: 0, sum: 0 };
@@ -31,7 +34,7 @@ function readCanvas(page: Page): Promise<{ colours: number; sum: number }> {
       }
     }
     return { colours: seen.size, sum };
-  });
+  }, layers);
 }
 
 async function expectPhase(page: Page, phase: string): Promise<void> {
@@ -42,9 +45,12 @@ async function expectLesson(page: Page, on: boolean): Promise<void> {
   await expect(page.locator('#stage')).toHaveAttribute('data-lesson', on ? 'on' : 'off');
 }
 
-/** A lesson takes a tap or Space only once it has been up long enough to read (LESSON_GUARD in core/config.ts). */
+/**
+ * A lesson slows the run to a stop (LESSON_EASE_IN in core/config.ts) and takes a tap or Space only once it has been
+ * up long enough to read (LESSON_GUARD).
+ */
 async function afterLessonGuard(page: Page): Promise<void> {
-  await page.waitForTimeout(600);
+  await page.waitForTimeout(1200);
 }
 
 async function expectTitleDrawn(page: Page): Promise<void> {
@@ -58,13 +64,16 @@ test.describe('desktop', () => {
     await page.goto('/');
     await expectTitleDrawn(page);
 
-    // A first visit: the run starts on the steering lesson and holds still under it.
+    // A first visit: the run rides a moment, then slows to a stop on the steering lesson and holds still under it
+    // (the slope does; the lesson acts out the keys over it).
     await page.keyboard.press('Space');
     await expectPhase(page, 'playing');
+    await expectLesson(page, false);
     await expectLesson(page, true);
-    const held = await readCanvas(page);
     await afterLessonGuard(page);
-    expect((await readCanvas(page)).sum).toBe(held.sum);
+    const held = await readCanvas(page, ['#game']);
+    await page.waitForTimeout(300);
+    expect((await readCanvas(page, ['#game'])).sum).toBe(held.sum);
     await page.keyboard.press('Space');
     await expectLesson(page, false);
     const first = await readCanvas(page);
