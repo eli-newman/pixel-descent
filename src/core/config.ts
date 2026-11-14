@@ -72,15 +72,16 @@ export const BOARD_LEN = Math.round(23 * RIDER_SCALE);
 /**
  * The first-run tutorial (`state/tutorial.ts`): a lesson stops the run once, the first time its thing comes up, on
  * a player's first TUTORIAL_RUNS runs (so a returning player never sees it). Until every lesson has been shown a new
- * player rides TUTORIAL_SEED, a course picked so the lessons come one at a time in order: steer, crash, star, jump,
- * cliff. A run rides free for LESSON_FIRST seconds before the first lesson, and LESSON_GAP seconds between one
+ * player rides TUTORIAL_SEED, a gentle course (the spawner builds this seed with fewer obstacles at the top, the first
+ * star lane, then one kicker, then a cliff) picked so the lessons come one at a time in order: steer, crash, star,
+ * jump, cliff, with no kicker or cliff before its lesson. A run rides free for LESSON_FIRST seconds before the first lesson, and LESSON_GAP seconds between one
  * lesson going and the next. A lesson shows when the run, slowing to a stop over LESSON_EASE_IN seconds while the words
  * fade in, will stop with its thing between LESSON_AHEAD_MIN and LESSON_AHEAD_MAX px below the rider: on screen,
  * with room to act on the lesson. A tap counts only after LESSON_GUARD seconds, so a thumb already on its way
  * down does not skip one unread, and the run picks up speed again over LESSON_EASE_OUT seconds.
  */
 export const TUTORIAL_RUNS = 3;
-export const TUTORIAL_SEED = 'tut267';
+export const TUTORIAL_SEED = 'tut19';
 export const LESSON_AHEAD_MIN = 70;
 export const LESSON_AHEAD_MAX = 150;
 export const LESSON_FIRST = 1.5;

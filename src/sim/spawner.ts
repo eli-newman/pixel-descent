@@ -59,6 +59,20 @@ const FIRST_LANE_Y = START_Y + 1500;
 const FIRST_PATCH_Y = START_Y + 800;
 
 /**
+ * The tutorial course (`TUTORIAL_SEED`) is gentler at the top, so a new player meets one new thing at a time, each
+ * before the next: fewer trees and rocks (`GENTLE_DENSITY` of the usual chance, back to the usual by
+ * `GENTLE_END_M`), the first star lane at `GENTLE_LANE_Y`, then one plain kicker (no line) no sooner than
+ * `GENTLE_JUMP_Y`, then a cliff (`GENTLE_CLIFF_GAP` further on than usual), and no trees pressing in on that first lane. Every draw is still made, so only what
+ * those draws decide changes.
+ */
+const GENTLE_DENSITY = 0.45;
+const GENTLE_END_M = 420;
+const GENTLE_LANE_Y = START_Y + 1800;
+const GENTLE_JUMP_Y = START_Y + 2900;
+/** Extra ground between the tutorial course's kicker and its cliff. */
+const GENTLE_CLIFF_GAP = 250;
+
+/**
  * Half width of the guaranteed open path at a given distance. It narrows as the run gets harder,
  * but stays wider than it used to at speed, because a faster rider needs more room to turn in.
  */
@@ -157,18 +171,25 @@ export class Spawner {
   /** Start y of each path band (bandStart[i] is where band i begins). */
   private readonly bandStart: number[] = [SAFE_LANE_END_Y];
   private recent: Obstacle[] = [];
+  /** How many jumps or lines have been planned: the tutorial course's first is a kicker, its second a cliff. */
+  private planned = 0;
   /** Planned features, in order of y. Public for the renderer, the sim and tests. */
   readonly lanes: Lane[] = [];
   readonly ramps: Ramp[] = [];
 
-  constructor(seed: number) {
+  /** `gentle`: the tutorial course (see `GENTLE_DENSITY`). */
+  constructor(
+    seed: number,
+    private readonly gentle = false,
+  ) {
     this.rng = new Rng(seed);
     this.bandRng = new Rng(seed ^ 0x9e3779b9);
     this.rampRng = new Rng(seed ^ 0x2545f491);
     this.patchRng = new Rng(seed ^ 0x51ed270b);
     this.laneRng = new Rng(seed ^ 0x6c8e9cf5);
     this.hugRng = new Rng(seed ^ 0x3c6ef372);
-    this.pendingLane = this.drawLane(FIRST_LANE_Y);
+    this.pendingLane = this.drawLane(gentle ? GENTLE_LANE_Y : FIRST_LANE_Y);
+    if (gentle) this.nextRampY = Math.max(this.nextRampY, GENTLE_JUMP_Y);
   }
 
   /** Centre x of the guaranteed open path at world y. */
@@ -281,12 +302,15 @@ export class Spawner {
   private planFeatures(limit: number): void {
     while (this.clearEnd <= limit) {
       let y = Math.round(this.nextRampY + this.rampRng.range(0, JUMP_JITTER));
-      const cliff = this.rampRng.chance(CLIFF_CHANCE);
+      const rolled = this.rampRng.chance(CLIFF_CHANCE);
       const lineRoll = this.rampRng.next();
       const threeRoll = this.rampRng.next();
       const distM = (y - START_Y) / PX_PER_M;
+      const first = this.gentle && this.planned < 2;
+      const cliff = first ? this.planned === 1 : rolled;
+      this.planned++;
       const count =
-        cliff || lineRoll >= lineChance(distM) ? 1 : threeRoll < LINE_THREE_CHANCE ? 3 : 2;
+        first || cliff || lineRoll >= lineChance(distM) ? 1 : threeRoll < LINE_THREE_CHANCE ? 3 : 2;
       const runups: number[] = [];
       for (let k = 1; k < count; k++)
         runups.push(Math.round(this.rampRng.range(LINE_RUNUP_MIN, LINE_RUNUP_MAX)));
@@ -313,6 +337,7 @@ export class Spawner {
       }
       this.clearEnd = end;
       this.nextRampY = end + this.rampRng.range(JUMP_GAP_MIN, JUMP_GAP_MAX);
+      if (first && !cliff) this.nextRampY += GENTLE_CLIFF_GAP;
       const segs = cliff ? this.cliffSegs() : [];
       const seed = cliff ? this.rampRng.int(1, 100000) : 0;
       const x = cliff ? W / 2 : Math.round(this.pathCenter(y));
@@ -435,7 +460,7 @@ export class Spawner {
     const distM = (y - START_Y) / PX_PER_M;
     const gap = pathHalfWidth(distM);
     const center = this.pathCenter(y);
-    const tries = this.rng.chance(density(distM)) ? 1 + (this.rng.chance(0.45) ? 1 : 0) : 0;
+    const tries = this.rng.chance(this.density(distM)) ? 1 + (this.rng.chance(0.45) ? 1 : 0) : 0;
     for (let t = 0; t < tries; t++) this.tryObstacle(y, distM, gap, center, batch);
     // A denser forest hugs both sides of the slope.
     if (this.rng.chance(SIDE_FOREST_CHANCE)) {
@@ -446,11 +471,19 @@ export class Spawner {
     // Trees press in on both sides of a risk lane, which is what makes it risky.
     const lane = this.laneAt(y);
     if (lane && y > lane.y0 + LANE_END_STRIP && y < lane.y1 - LANE_END_STRIP) {
-      if (this.hugRng.chance(0.55)) {
+      const calm = this.gentle && lane === this.lanes[0];
+      if (this.hugRng.chance(0.55) && !calm) {
         const side = this.hugRng.chance(0.5) ? 1 : -1;
         this.tryObstacle(y, distM, gap, center, batch, undefined, { lane, side }, this.hugRng);
       }
     }
+  }
+
+  /** Chance of an obstacle in a row: `density`, thinned out at the top of the tutorial course. */
+  private density(distM: number): number {
+    const d = density(distM);
+    if (!this.gentle || distM >= GENTLE_END_M) return d;
+    return d * (GENTLE_DENSITY + ((1 - GENTLE_DENSITY) * Math.max(0, distM)) / GENTLE_END_M);
   }
 
   /** True when a solid obstacle with this half width at (x, y) would break a guarantee. */

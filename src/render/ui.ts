@@ -15,7 +15,7 @@ import { drawTextHalo, textWidth } from './font';
 import { Framebuffer, OFF, WHITE, YELLOW } from './framebuffer';
 import { GAUGE_BAR, gaugeRect, riderBox } from './layout';
 import { drawCoach } from './coach';
-import { LESSON_LINE, LESSON_TITLE, lessonRows, lessonTarget, lessonTop } from './lesson';
+import { LESSON_LINE, LESSON_TITLE, lessonBoxes, lessonRows, lessonTop } from './lesson';
 import {
   drawDizzyBirds,
   drawRider,
@@ -227,15 +227,14 @@ function drawHudItems(fb: Framebuffer, g: GameView): void {
 }
 
 /**
- * A tutorial lesson: corner marks around the thing it is about, a short title in big yellow letters and a few white
+ * A tutorial lesson: corner marks around the things it is about (`lessonBoxes`), a short title in big yellow letters and a few white
  * lines where they cover neither that thing nor the rider, and, once a tap goes on, how to go on. The steering lesson
  * acts out the controls under its words (`drawCoach`). The page fades the rest of the slope behind it (see main.ts).
  */
 function drawLesson(fb: Framebuffer, g: GameView): void {
   const lesson = g.lesson;
   if (!lesson) return;
-  const target = lessonTarget(g);
-  if (target) corners(fb, target.x, target.y, target.w, target.h, HOT);
+  for (const b of lessonBoxes(g)) corners(fb, b.x, b.y, b.w, b.h, HOT);
   const rows = lessonRows(lesson);
   let y = lessonTop(g, rows);
   textC(fb, lesson.title, CX, y + 1, HOT, 3);

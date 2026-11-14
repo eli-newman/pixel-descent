@@ -58,7 +58,10 @@ export function tutorialOn(stats: { readonly runs: number; readonly lessons: num
   return stats.runs < TUTORIAL_RUNS && stats.lessons !== ALL_LESSONS;
 }
 
-/** The words of each lesson, for a touch screen or a keyboard. The steering lesson also shows thumbs or keys. */
+/**
+ * The words of each lesson, for a touch screen or a keyboard. The steering lesson also shows thumbs or keys; the crash
+ * lesson's "these" are the trees, rocks and bushes it marks.
+ */
 export function lessonText(id: LessonId, touch: boolean): LessonText {
   switch (id) {
     case 'steer':
@@ -66,7 +69,7 @@ export function lessonText(id: LessonId, touch: boolean): LessonText {
         ? { title: 'STEER', lines: ['HOLD LEFT OR RIGHT', 'HOLD BOTH TO BRAKE'] }
         : { title: 'STEER', lines: ['HOLD A OR D', 'HOLD BOTH TO BRAKE'] };
     case 'crash':
-      return { title: 'WATCH OUT', lines: ['TREES AND ROCKS', 'END YOUR RUN'] };
+      return { title: 'WATCH OUT', lines: ["DON'T HIT THESE"] };
     case 'star':
       return { title: 'STARS', lines: ['RIDE THROUGH', 'FOR POINTS'] };
     case 'jump':
@@ -117,9 +120,8 @@ export function nextLesson(
     return { id: 'steer', ...lessonText('steer', touch), target: null };
   const things: Array<{ id: LessonId; target: LessonTarget; y: number }> = [];
   for (const o of sim.obstacles) {
-    // The lesson names trees and rocks, so it points at a pine or a rock: never a bush, and never a bare dead tree,
-    // which crashes you just the same but is a poor picture of a tree.
-    if (isPebble(o.kind, o.size) || o.kind === 'bush' || o.kind === 'dead') continue;
+    // Pebbles are only decoration you ride over; everything else ends the run.
+    if (isPebble(o.kind, o.size)) continue;
     things.push({ id: 'crash', target: { list: 'obstacles', id: o.id }, y: o.y });
   }
   for (const p of sim.pickups) {

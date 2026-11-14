@@ -14,7 +14,8 @@ import {
   W,
 } from '../src/core/config';
 import { textWidth } from '../src/render/font';
-import { lessonRows, lessonTarget, lessonTop } from '../src/render/lesson';
+import { lessonBoxes, lessonRows, lessonTarget, lessonTop } from '../src/render/lesson';
+import { isPebble } from '../src/sim/collision';
 import { testObstacle } from '../src/sim/collision';
 import type { Obstacle, ObstacleKind } from '../src/sim/types';
 import type { Game } from '../src/state/game';
@@ -76,6 +77,7 @@ function rideThrough(
 ): Shown[] {
   const { game, input } = rig;
   const shown: Shown[] = [];
+  const met = new Set<number>();
   for (let i = 0; i < steps && game.phase === 'playing'; i++) {
     const lesson = game.lesson;
     if (lesson && game.lessonWaiting) {
@@ -97,9 +99,20 @@ function rideThrough(
       input.brakeValue = r.brake;
     }
     game.update(STEP);
+    // A kicker jumped, or a cliff gone over, before its lesson came.
+    for (const r of game.sim.ramps) {
+      const cliff = r.kind === 'cliff';
+      if (met.has(r.id) || !(cliff ? r.y < game.sim.rider.y : r.used)) continue;
+      met.add(r.id);
+      const id = cliff ? 'cliff' : 'jump';
+      if (!shown.some((s) => s.id === id)) untaught.push(id);
+    }
   }
   return shown;
 }
+
+/** Ramps the last `rideThrough` met before their lesson. */
+const untaught: LessonId[] = [];
 
 describe('the first-run tutorial', () => {
   it('lets a new player ride first, then slows the run to a stop to teach steering and holds it there', () => {
@@ -189,7 +202,10 @@ describe('the first-run tutorial', () => {
     const offenders: string[] = [];
     for (const [name, rider] of Object.entries(riders)) {
       const rig = newPlayer(TUTORIAL_SEED);
+      untaught.length = 0;
       const shown = rideThrough(rig, 120 * 90, rider);
+      // never a kicker or a cliff before the lesson about it
+      if (untaught.length > 0) offenders.push(`${name}: met ${untaught.join()} untaught`);
       if (shown.map((s) => s.id).join() !== LESSON_ORDER.join()) {
         offenders.push(`${name}: ${shown.map((s) => s.id).join()}`);
       }
@@ -206,6 +222,8 @@ describe('the first-run tutorial', () => {
     if (!crash) offenders.push('still: no crash lesson');
     else if (still.game.sim.runTime < crash.went + LESSON_GAP)
       offenders.push('still: crashed straight after');
+    // ...and the top of the course is calm: nothing new before the crash lesson, and it rides a while after.
+    if (still.game.sim.runTime < 8) offenders.push(`still: crashed at ${still.game.sim.runTime}`);
     expect(offenders).toEqual([]);
   });
 
@@ -306,6 +324,17 @@ describe('the first-run tutorial', () => {
             offenders.push(`${seed} ${lesson.id}: words over the thing`);
           }
           if (top < 0 || top + rows > H) offenders.push(`${seed} ${lesson.id}: words off screen`);
+          const boxes = lessonBoxes(game);
+          if (lesson.target && boxes.length === 0)
+            offenders.push(`${seed} ${lesson.id}: nothing marked`);
+          boxes.forEach((b, i) => {
+            if (top < b.y + b.h && b.y < top + rows)
+              offenders.push(`${seed} ${lesson.id}: words over a mark`);
+            for (const c of boxes.slice(i + 1)) {
+              if (b.x < c.x + c.w && c.x < b.x + b.w && b.y < c.y + c.h && c.y < b.y + b.h)
+                offenders.push(`${seed} ${lesson.id}: marks overlap`);
+            }
+          });
           input.tap(90, 200);
         } else {
           input.steerValue = botInput(game.sim).steer;
@@ -326,7 +355,7 @@ describe('the first-run tutorial', () => {
     }
   });
 
-  it('points the crash lesson at trees and rocks that really end the run, and never at a bush or a dead tree', () => {
+  it('points the crash lesson at anything that really ends the run, never a pebble', () => {
     const obstacle = (kind: ObstacleKind, size: number): Obstacle => ({
       id: 7,
       kind,
@@ -342,6 +371,7 @@ describe('the first-run tutorial', () => {
       ['dead', 18],
       ['rock', 14],
       ['bush', 1],
+      ['rock', 6],
     ] as const) {
       const o = obstacle(kind, size);
       const sim = {
@@ -353,10 +383,40 @@ describe('the first-run tutorial', () => {
       };
       const lesson = nextLesson(sim as never, markSeen(0, 'steer'), true, 0);
       const hit = testObstacle({ x: 100, y: 392 }, o);
-      expect(hit, kind).toBe('crash');
-      // A bush and a dead tree crash too, but the lesson shows a pine or a rock, so they are never the one marked.
-      expect(lesson?.id, kind).toBe(kind === 'bush' || kind === 'dead' ? undefined : 'crash');
+      const pebble = kind === 'rock' && size < 9;
+      expect(hit, kind).toBe(pebble ? 'none' : 'crash');
+      expect(lesson?.id, kind).toBe(pebble ? undefined : 'crash');
     }
+  });
+
+  it('marks everything ahead on screen that ends a run in the crash lesson, not just one tree', () => {
+    const { game, input } = newPlayer(TUTORIAL_SEED);
+    for (let i = 0; i < 120 * 60 && game.lesson?.id !== 'crash'; i++) {
+      if (game.lessonReady) input.tap(90, 200);
+      else input.steerValue = botInput(game.sim).steer;
+      game.update(STEP);
+    }
+    waitToGoOn(game);
+    expect(game.lesson?.id).toBe('crash');
+    const boxes = lessonBoxes(game);
+    const rows = lessonRows(game.lesson ?? { lines: [] });
+    const top = lessonTop(game, rows);
+    // every solid thing whose base is on screen below the rider and clear of the words sits inside a mark
+    const sim = game.sim;
+    const solid = sim.obstacles.filter((o) => {
+      const y = o.y - game.camYi;
+      return (
+        !isPebble(o.kind, o.size) && o.y > sim.rider.y + 4 && y < H && !(y >= top && y < top + rows)
+      );
+    });
+    expect(solid.length).toBeGreaterThan(1);
+    expect(boxes.length).toBeGreaterThan(1);
+    const inside = (o: (typeof solid)[number]): boolean =>
+      boxes.some(
+        (b) =>
+          o.x >= b.x && o.x < b.x + b.w && o.y - game.camYi >= b.y && o.y - game.camYi < b.y + b.h,
+      );
+    expect(solid.filter((o) => !inside(o)).map((o) => `${o.kind}@${o.x},${o.y}`)).toEqual([]);
   });
 
   it('counts every lesson in the all-seen mask', () => {

@@ -6,6 +6,7 @@ import {
   PX_PER_M,
   START_X,
   START_Y,
+  TUTORIAL_SEED,
 } from '../src/core/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/sim/collision';
 import { hashSeed } from '../src/core/rng';
@@ -69,6 +70,45 @@ describe('spawner', () => {
       const nearest = Math.max(box.x0 - c, c - box.x1, 0);
       expect(nearest).toBeGreaterThanOrEqual(gap);
     }
+  });
+});
+
+describe('the tutorial course', () => {
+  it('starts gentle: fewer obstacles, the stars, then one plain kicker, then a cliff', () => {
+    const gentle = new Spawner(hashSeed(TUTORIAL_SEED), true);
+    const plain = new Spawner(hashSeed(TUTORIAL_SEED));
+    // the rows above the plain course's first jump, where neither has landing zones keeping the snow clear
+    const top = START_Y + FIRST_JUMP_Y - 20;
+    const solid = (b: ReturnType<Spawner['advance']>): number =>
+      b.obstacles.filter((o) => o.y < top && obstacleBox(o)).length;
+    const gb = gentle.advance(START_Y + 4000);
+    expect(solid(gb)).toBeLessThan(solid(plain.advance(START_Y + 4000)) * 0.8);
+    expect(solid(gb)).toBeGreaterThan(0);
+    const [kicker, cliff] = gentle.ramps;
+    expect(kicker?.kind).toBe('kicker');
+    expect(kicker?.lineLen).toBe(1);
+    expect(cliff?.kind).toBe('cliff');
+    // the first stars come before the kicker
+    const firstStar = Math.min(...gb.pickups.map((p) => p.y));
+    expect(firstStar).toBeLessThan(kicker?.y ?? 0);
+    // the guarantees still hold: a path follower rides it all
+    const ridden = runBot(new Sim(TUTORIAL_SEED), 600);
+    expect(ridden.crashed).toBe(false);
+  });
+
+  it('is only the tutorial seed: every other course is unchanged', () => {
+    const sim = new Sim('alpha');
+    const plain = new Spawner(hashSeed('alpha'));
+    const far = plain.advance(START_Y + 4000);
+    const last = Math.max(...sim.obstacles.map((o) => o.id));
+    expect(sim.obstacles.length).toBeGreaterThan(5);
+    const ids = (l: readonly { id: number; x: number; y: number }[]): string =>
+      l
+        .map((o) => `${o.id}:${o.x},${o.y}`)
+        .sort()
+        .join();
+    expect(ids(sim.obstacles)).toBe(ids(far.obstacles.filter((o) => o.id <= last)));
+    expect(plain.ramps.slice(0, sim.spawner.ramps.length)).toEqual(sim.spawner.ramps);
   });
 });
 

@@ -1,5 +1,5 @@
 import { clearance, crossedY, NEAR_MISS_PX, riderCenter, testObstacle } from './collision';
-import { EDGE, H, STEP, W, START_Y } from '../core/config';
+import { EDGE, H, STEP, START_Y, TUTORIAL_SEED, W } from '../core/config';
 import { touchDown, type LandEvent } from './landing';
 import { LineTracker, type LineEvent } from './lines';
 import { poseOf } from './pose';
@@ -134,7 +134,7 @@ export class Sim {
     readonly seed: string,
     readonly opts: SimOptions = {},
   ) {
-    this.spawner = new Spawner(hashSeed(seed));
+    this.spawner = new Spawner(hashSeed(seed), seed === TUTORIAL_SEED);
     this.rider.speed = 0;
     this.spawn();
   }

@@ -6,7 +6,7 @@ import { Loop } from './platform/loop';
 import { codeFromPath, decodeDare } from './core/dare';
 import { normalizeSeed } from './core/rng';
 import { Framebuffer } from './render/framebuffer';
-import { lessonTarget } from './render/lesson';
+import { lessonBoxes } from './render/lesson';
 import { SceneRenderer } from './render/scene';
 import { renderUi } from './render/ui';
 import { shareResult } from './platform/shareDom';
@@ -146,16 +146,22 @@ function render(alpha: number): void {
 
 let washClip = '';
 
-/** A tutorial lesson's fade leaves the thing it is about clear: the whole screen minus that box, in CSS px. */
+/**
+ * A tutorial lesson's fade leaves the things it is about clear: the whole screen minus their boxes, in CSS px. The
+ * boxes never overlap (`lessonBoxes` joins any that touch), so the even-odd rule cuts each one out.
+ */
 function washHole(): string {
-  const box = game.lesson ? lessonTarget(game) : null;
-  if (!box) return '';
+  const boxes = game.lesson ? lessonBoxes(game) : [];
+  if (boxes.length === 0) return '';
   const k = fit.cssW / W;
-  const x = fit.left + box.x * k;
-  const y = fit.top + box.y * k;
   const vw = document.documentElement.clientWidth;
   const vh = document.documentElement.clientHeight;
-  return `path(evenodd, 'M0 0H${vw}V${vh}H0Z M${x} ${y}h${box.w * k}v${box.h * k}h${-box.w * k}Z')`;
+  const holes = boxes.map((b) => {
+    const x = fit.left + b.x * k;
+    const y = fit.top + b.y * k;
+    return `M${x} ${y}h${b.w * k}v${b.h * k}h${-b.w * k}Z`;
+  });
+  return `path(evenodd, 'M0 0H${vw}V${vh}H0Z ${holes.join(' ')}')`;
 }
 
 /** CSS px kept clear around the frame on a touch screen that it does not fill (held sideways, or a tablet). */
