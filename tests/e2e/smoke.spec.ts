@@ -115,19 +115,26 @@ test.describe('mobile', () => {
     expect(stage.width).toBeCloseTo(390, 1);
     expect(slope.y).toBeLessThanOrEqual(0);
     expect(slope.y + slope.height).toBeGreaterThanOrEqual(844);
-    // Drawn crisp at a whole scale inside the canvas, at least as sharp as the screen, and fitted smoothly by the page.
-    const backing = await page.evaluate(() => {
-      const c = document.querySelector<HTMLCanvasElement>('#game');
-      return {
-        w: c?.width ?? 0,
-        dpr: window.devicePixelRatio,
-        look: c ? getComputedStyle(c).imageRendering : '',
-      };
-    });
-    expect(backing.w % 180).toBe(0);
-    expect(backing.w).toBeGreaterThanOrEqual(390 * backing.dpr);
-    expect(backing.w).toBeLessThan(390 * backing.dpr + 180);
-    expect(backing.look).toBe('auto');
+    // Both canvases are exactly the device pixels they cover, so the browser shows them pixel for pixel and never
+    // filters them (Safari's own scaling made the whole game blurry on a phone).
+    const backing = await page.evaluate(() =>
+      ['#game', '#ui'].map((id) => {
+        const c = document.querySelector<HTMLCanvasElement>(id);
+        const r = c?.getBoundingClientRect();
+        return {
+          w: c?.width ?? 0,
+          h: c?.height ?? 0,
+          cssW: (r?.width ?? 0) * window.devicePixelRatio,
+          cssH: (r?.height ?? 0) * window.devicePixelRatio,
+          look: c ? getComputedStyle(c).imageRendering : '',
+        };
+      }),
+    );
+    for (const b of backing) {
+      expect(b.w).toBeCloseTo(b.cssW, 0);
+      expect(b.h).toBeCloseTo(b.cssH, 0);
+      expect(b.look).toBe('pixelated');
+    }
   });
 
   test('plays and pauses with touch', async ({ page }) => {

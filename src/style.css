@@ -32,24 +32,23 @@ body {
 }
 
 /*
- * Two layers, both drawn at the screen's own resolution by main.ts: the slope (#game), which covers the whole screen
- * and carries its own smooth scroll, and the HUD and menus (#ui) on top, which fill the frame and never move. Touches
- * go through #ui to #game.
+ * Two layers, both drawn at the screen's own resolution by main.ts, which also sizes and places them: the slope
+ * (#game), which covers the whole screen and carries its own smooth scroll, and the HUD and menus (#ui) on top, which
+ * fill the frame and never move. Each covers its box pixel for pixel, so the browser never filters it. Touches go
+ * through #ui to #game.
  */
+#game,
+#ui {
+  display: block;
+  image-rendering: pixelated;
+}
+
 #game {
   position: fixed;
-  left: 0;
-  top: 0;
-  display: block;
 }
 
 #ui {
   position: absolute;
-  left: 0;
-  top: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
   pointer-events: none;
 }
 

@@ -14,7 +14,7 @@ import { analyticsConfig, DEBUG_SCRIPT, noTracker, startWebAnalytics } from './p
 import { shareEvent } from './state/telemetry';
 import { Store } from './state/storage';
 import { fitCanvas, type Fit } from './platform/viewport';
-import { SharpCanvas, sharpScale, slideRows, slopeBox } from './platform/present';
+import { SharpCanvas, frameBox, slideRows, slopeBox } from './platform/present';
 
 /** Analytics settings baked in by `vite.config.ts`: null unless built on Vercel or with `VITE_ANALYTICS=1`. */
 declare const __ANALYTICS__: { debug: boolean; vercelConfig: string } | null;
@@ -116,9 +116,8 @@ function sizeSlope(above: number, below: number): void {
 
 const uiFb = new Framebuffer(W, H);
 const uiImage = new ImageData(uiFb.data, W, H);
-/** The last layout, and the whole-number scale both layers are drawn at inside their canvases. */
+/** The last layout. */
 let fit: Fit = fitCanvas(W, H, 1);
-let sharp = 1;
 let colorOn: boolean | null = null;
 
 /** Both layers go through `SharpCanvas`: crisp at any scale, and the slope's slide is drawn into its own pixels. */
@@ -134,7 +133,7 @@ function render(alpha: number): void {
     document.body.style.background = cssColor(paletteFor(color).snow);
     stage.dataset['color'] = color ? 'on' : 'off';
   }
-  slopeLayer.draw(image, slideRows(game.camFrac, sharp));
+  slopeLayer.draw(image, slideRows(game.camFrac, fit.scale));
   uiLayer.draw(uiImage);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
   if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
@@ -184,19 +183,10 @@ function layout(): void {
   stage.style.left = `${fit.left}px`;
   stage.style.top = `${fit.top}px`;
   sizeSlope(fit.above, fit.below);
-  sharp = sharpScale(fit.scale);
-  slopeLayer.resize(W, fb.h, sharp);
-  uiLayer.resize(W, H, sharp);
-  // The slope starts `above` rows over the frame and runs on past it, at the frame's scale. The page fits each canvas
-  // to its box, smoothly when the scale is fractional.
-  const box = slopeBox(fit, dpr, fb.h);
-  canvas.style.left = `${box.left}px`;
-  canvas.style.top = `${box.top}px`;
-  canvas.style.width = `${box.width}px`;
-  canvas.style.height = `${box.height}px`;
-  const crisp = sharp === fit.scale ? 'pixelated' : 'auto';
-  canvas.style.imageRendering = crisp;
-  uiCanvas.style.imageRendering = crisp;
+  // Each canvas covers its box pixel for pixel, the slope from `above` rows over the frame to the screen's bottom, the
+  // HUD exactly the frame: `SharpCanvas` does all the scaling, so no browser filter ever touches the picture.
+  slopeLayer.resize(W, fb.h, fit.scale, slopeBox(fit, dpr, fb.h));
+  uiLayer.resize(W, H, fit.scale, frameBox(fit, dpr));
 }
 
 window.addEventListener('resize', layout);
