@@ -1,5 +1,6 @@
 import type { Sfx } from '../platform/audio';
-import type { Tracker } from '../platform/analytics';
+import type { AnalyticsEvent, Tracker } from '../platform/analytics';
+import type { ShareVia } from '../platform/shareDom';
 import type { Dare } from '../core/dare';
 import {
   LESSON_EASE_IN,
@@ -17,12 +18,31 @@ import { Feedback, type Toast } from './feedback';
 import type { ButtonId, Phase, Screen } from './menu';
 import { ACHIEVEMENTS, boardIndex, riderIndex } from './progress';
 import { dailySeed, isDailySeed, normalizeSeed } from '../core/rng';
-import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './runReport';
+import { dayString, recordRun, runEnd, summarizeRun, toCard, type RunResult } from './runReport';
 import { Sim } from '../sim/sim';
 import type { ScoreEntry, Store } from './storage';
-import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
+import {
+  bestBand,
+  dareOutcome,
+  dareResultEvent,
+  dayActiveEvent,
+  lessonDoneEvent,
+  lessonShownEvent,
+  nextActionEvent,
+  runEndedEvent,
+  runMode,
+  runSharedEvent,
+  runStartedEvent,
+  tutorialEndedEvent,
+  unlockEarnedEvent,
+  withContext,
+  type NextAction,
+  type RunEnd,
+  type RunSetup,
+} from './telemetry';
 import type { GameView } from './view';
 import {
+  ALL_LESSONS,
   freshSeed,
   lessonReadyAt,
   markSeen,
@@ -45,6 +65,8 @@ export interface GameDeps {
   rand?: () => number;
   /** Anonymous analytics (see `state/telemetry.ts`). Fire and forget: never throws, never waits. */
   analytics?: Tracker;
+  /** This visit opened from a shared link (a dare, a broken one, or an old `?seed=` link): analytics `source`. */
+  fromShare?: boolean;
 }
 
 /** Ignore restart presses for this long after the game over panel appears. */
@@ -99,8 +121,22 @@ export class Game implements GameView {
   private readonly spray = new BrakeSpray();
   private readonly cloud = new CarveCloud();
   private sharing = false;
-  /** Runs started since the page loaded, for the second-run rate. Never stored. */
+  /** Runs started since the page loaded, for analytics. Never stored. */
   private runsStarted = 0;
+  /** Analytics about the current run: which run of the player's life it is, and whether its end was sent yet. */
+  private lifeRun = 0;
+  private runLive = false;
+  /** The tutorial was on when this run started (so the run that ends it can say so). */
+  private tutorialAtStart = false;
+  private tutorialEndSent = false;
+  /** Runs at the current dare in this visit. */
+  private dareTries = 0;
+  /** What the player has done from this game over screen, so each action is sent once. */
+  private nextSent = new Set<NextAction>();
+  /** The local day of the last analytics event, so the first one of each day is preceded by Day Active. */
+  private activeDay = '';
+  /** Nothing was saved before this visit: analytics `player` is "new" for the whole visit. */
+  private readonly newPlayer: boolean;
 
   constructor(
     private readonly deps: GameDeps,
@@ -113,6 +149,7 @@ export class Game implements GameView {
     });
     deps.sfx.setMuted(this.settings.muted);
     deps.sfx.setMusic(this.settings.music);
+    this.newPlayer = this.progress.stats.runs === 0;
     this.dare = dare ?? null;
     this.newRun(dare?.seed ?? normalizeSeed(initialSeed) ?? this.freshSeed());
   }
@@ -251,7 +288,13 @@ export class Game implements GameView {
 
   /** Reset the world for a seed and wait on the title screen (or go straight in if `play`). */
   newRun(seed: string, play = false): void {
-    if (this.dare && this.dare.seed !== seed) this.dare = null;
+    // A run left before game over (QUIT, MENU, RESTART, RETRY while it tumbles) still ends.
+    this.endLiveRun(this.phase === 'crashed' ? 'crash' : 'quit');
+    this.nextSent.clear();
+    if (this.dare && this.dare.seed !== seed) {
+      this.dare = null;
+      this.dareTries = 0;
+    }
     this.seed = seed;
     this.sim = new Sim(seed, { manualSpin: this.settings.manualSpin });
     this.particles.clear();
@@ -279,8 +322,93 @@ export class Game implements GameView {
     this.deps.input.releaseAll();
     this.deps.sfx.start();
     this.deps.announce?.('Run started.');
+    const stats = this.progress.stats;
     this.runsStarted++;
-    this.deps.analytics?.track(runStartEvent(this.runsStarted, this.runSetup()));
+    this.lifeRun = stats.runs + 1;
+    this.runLive = true;
+    this.tutorialAtStart = tutorialOn(stats);
+    if (this.dare) this.dareTries++;
+    this.track(runStartedEvent(this.runSetup(), this.lifeRun, this.runsStarted));
+  }
+
+  /**
+   * Send an analytics event with who is playing (`withContext`). The first event of each local day goes after a Day
+   * Active. `main.ts` sends its own events (the page loading, sessions) through here too.
+   */
+  track(e: AnalyticsEvent): void {
+    const analytics = this.deps.analytics;
+    if (!analytics) return;
+    const today = this.day();
+    const context = {
+      player: this.newPlayer ? ('new' as const) : ('returning' as const),
+      firstDay: this.progress.stats.firstDay,
+      today,
+      source: this.deps.fromShare ? ('dare' as const) : ('direct' as const),
+    };
+    if (this.activeDay !== today) {
+      this.activeDay = today;
+      analytics.track(withContext(dayActiveEvent(context.firstDay, today), context));
+    }
+    analytics.track(withContext(e, context));
+  }
+
+  /** Runs started since the page loaded (analytics sessions count them). */
+  get visitRuns(): number {
+    return this.runsStarted;
+  }
+
+  /** The page is going away (`pagehide`): a run still going ends as left. */
+  leave(): void {
+    this.endLiveRun('left');
+  }
+
+  /** The player shared this run, and how. */
+  trackShare(via: ShareVia): void {
+    const res = this.result;
+    const dare = this.dare && res ? dareOutcome(res.score, this.dare.score) : 'none';
+    this.track(runSharedEvent(via, runMode(this.runSetup()), dare));
+  }
+
+  /** What the player did from the game over screen (from `Controls`). Each action is sent once per screen. */
+  noteNext(action: NextAction): void {
+    if (this.phase !== 'over' || this.nextSent.has(action)) return;
+    this.nextSent.add(action);
+    this.track(nextActionEvent(action));
+  }
+
+  /** Run Ended for a run that stopped before game over. */
+  private endLiveRun(end: RunEnd): void {
+    if (!this.runLive) return;
+    this.runLive = false;
+    const sim = this.sim;
+    const best = this.overallBest;
+    this.track(
+      runEndedEvent({
+        end,
+        cause: sim.crashed ? runEnd(sim.crashCause, sim.killer?.kind ?? null) : 'none',
+        metres: sim.distM,
+        best: bestBand(sim.scoreValue, best, false),
+        setup: this.runSetup(),
+        lifeRun: this.lifeRun,
+      }),
+    );
+    this.checkTutorialEnd();
+  }
+
+  /**
+   * Tutorial Ended, once, from the run in which the tutorial stopped: "completed" when every lesson has been shown,
+   * "cut_short" when the tutorial runs ran out first. Checked when a lesson is gone on from and when a run ends.
+   */
+  private checkTutorialEnd(): void {
+    const stats = this.progress.stats;
+    if (this.tutorialEndSent || !this.tutorialAtStart || tutorialOn(stats)) return;
+    this.tutorialEndSent = true;
+    this.track(tutorialEndedEvent(stats.lessons === ALL_LESSONS ? 'completed' : 'cut_short'));
+  }
+
+  /** Today as a local `YYYY-MM-DD`. */
+  private day(): string {
+    return dayString(this.deps.now?.() ?? new Date());
   }
 
   /** The course a new run starts on: the tutorial's own while it has lessons left (`freshSeed`). */
@@ -299,11 +427,15 @@ export class Game implements GameView {
     this.deps.store.saveProgress();
     this.deps.input.releaseAll();
     this.deps.announce?.(`${[lesson.title, ...lesson.lines].join('. ').toLowerCase()}.`);
+    this.track(lessonShownEvent(lesson.id, p.stats.runs));
   }
 
   /** Go on from a lesson, once it has been up long enough to have been read: the run picks up speed again. */
   dismissLesson(): void {
-    if (this.lessonWaiting && this.lessonT >= LESSON_GUARD) this.lessonOutT = 0;
+    if (!this.lesson || !this.lessonWaiting || this.lessonT < LESSON_GUARD) return;
+    this.lessonOutT = 0;
+    this.track(lessonDoneEvent(this.lesson.id, this.progress.stats.runs));
+    this.checkTutorialEnd();
   }
 
   /** A lesson is up and has not been gone on from: taps and keys go to it. */
@@ -334,7 +466,12 @@ export class Game implements GameView {
 
   /** How this run is played, for analytics. */
   private runSetup(): RunSetup {
-    return { kit: this.progress.gear.kit, daily: this.daily, dare: this.dare !== null };
+    return {
+      kit: this.progress.gear.kit,
+      daily: this.daily,
+      dare: this.dare !== null,
+      tutorial: this.tutorialAtStart,
+    };
   }
 
   update(dt: number): void {
@@ -484,13 +621,33 @@ export class Game implements GameView {
     this.overAt = this.animT;
     this.controls.resetFocus();
     const summary = summarizeRun(this.sim, this.seed, this.daily);
-    const day = dayString(this.deps.now?.() ?? new Date());
-    const res = recordRun(this.deps.store, summary, day);
+    const bestBefore = this.overallBest;
+    const res = recordRun(this.deps.store, summary, this.day());
     this.result = res;
-    this.deps.analytics?.track(runEndEvent(res.dist, res.score, this.runsStarted, this.runSetup()));
+    this.reportFinish(res, bestBefore);
     this.deps.announce?.(
       `${this.crashWord}. ${res.dist} metres, score ${res.score}${res.newBest ? ', a new best' : ''}.`,
     );
+  }
+
+  /** Analytics for a run that reached game over: its end, a dare's result, what it unlocked, the tutorial ending. */
+  private reportFinish(res: RunResult, bestBefore: number): void {
+    this.runLive = false;
+    this.track(
+      runEndedEvent({
+        end: 'crash',
+        cause: runEnd(res.summary.cause, this.sim.killer?.kind ?? null),
+        metres: res.dist,
+        best: bestBand(res.score, bestBefore, res.newBest),
+        setup: this.runSetup(),
+        lifeRun: this.lifeRun,
+      }),
+    );
+    if (this.dare)
+      this.track(dareResultEvent(dareOutcome(res.score, this.dare.score), this.dareTries));
+    for (const a of res.achievements) this.track(unlockEarnedEvent('achievement', a.id));
+    for (const g of res.gear) this.track(unlockEarnedEvent('gear', g.id));
+    this.checkTutorialEnd();
   }
 
   private updateCamera(dt: number): void {

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, sentAnalytics, test } from './fixtures';
+import { expect, pageView, sentAnalytics, test } from './fixtures';
 
 /** A friend's run: course, score 1240, 312 m, 4 stars, 3 tricks, hit a tree. Riding straight down it crashes. */
 const SEED = 'zq7secret42';
@@ -54,15 +54,18 @@ test.describe('dare links', () => {
     await expectPhase(page, 'title');
     // The code (and the seed in it) leaves the address bar and never reaches analytics.
     expect(new URL(page.url()).pathname).toBe('/');
-    await expect.poll(async () => (await sentAnalytics(page)).length).toBeGreaterThan(0);
-    const [view] = await sentAnalytics(page);
+    const view = await pageView(page);
     expect(new URL(view?.url ?? '').pathname).toBe('/from-share');
 
     await page.keyboard.press('Space');
     await expectPhase(page, 'playing');
     await expectPhase(page, 'over');
     const events = (await sentAnalytics(page)).filter((e) => e.type === 'event');
-    expect(events[0]?.payload?.data).toEqual({ run: '1', setup: 'board dare' });
+    // Vercel keeps the first two properties.
+    expect(events.find((e) => e.payload?.name === 'Run Started')?.payload?.data).toEqual({
+      mode: 'dare',
+      kit: 'board',
+    });
     expect(JSON.stringify(await sentAnalytics(page))).not.toContain(SEED);
 
     await page.keyboard.press('KeyC');

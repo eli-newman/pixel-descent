@@ -32,6 +32,11 @@ export interface Stats {
   dailies: number;
   /** The tutorial lessons already shown, one bit each (see `state/tutorial.ts`). */
   lessons: number;
+  /**
+   * The local day of the player's first finished run, `YYYY-MM-DD` as `dayString` writes it, or '' before it. The game
+   * keeps it for itself; analytics only sends the days since it, in a band.
+   */
+  firstDay: string;
 }
 
 /** What the rider stands on. Both are open to everyone and only change the look: the rules are the same. */
@@ -64,6 +69,7 @@ export function createProgress(): Progress {
       tricks: 0,
       dailies: 0,
       lessons: 0,
+      firstDay: '',
     },
     achievements: {},
     gear: { board: 'classic', rider: 'classic', kit: 'snowboard' },
@@ -159,8 +165,9 @@ export interface RunOutcome {
   newGear: GearDef[];
 }
 
-function addStats(p: Progress, run: RunSummary): void {
+function addStats(p: Progress, run: RunSummary, day: string): void {
   const s = p.stats;
+  if (s.firstDay === '') s.firstDay = day;
   s.runs += 1;
   s.totalDist += run.dist;
   s.bestDist = Math.max(s.bestDist, run.dist);
@@ -175,7 +182,7 @@ function addStats(p: Progress, run: RunSummary): void {
 /** Fold a finished run into the progress (mutates it) and report what it unlocked. */
 export function applyRun(p: Progress, run: RunSummary, day: string): RunOutcome {
   const gearBefore = new Set([...BOARDS, ...RIDERS].filter((g) => g.unlocked(p)).map((g) => g.id));
-  addStats(p, run);
+  addStats(p, run, day);
   const newAchievements: Achievement[] = [];
   for (const a of ACHIEVEMENTS) {
     if (p.achievements[a.id] === undefined && a.test(run, p)) {

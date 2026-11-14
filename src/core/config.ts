@@ -95,3 +95,23 @@ export const LESSON_GUARD = 1;
  * Pro with the Web Analytics Plus add-on (Hobby has no custom events at all). Raise it to 8 after buying Plus.
  */
 export const ANALYTICS_MAX_PROPS = 2;
+
+/**
+ * PostHog, the second analytics recipient (`platform/posthog.ts`). Events go to INGEST_PATH on this site, a Vercel
+ * function (`server/ingestHandler.ts`) that drops the player's IP address and forwards them to POSTHOG_UPSTREAM, the
+ * EU cloud. The path is plain on purpose: ad blockers know `/analytics`, `/posthog` and `/batch`. The browser sends
+ * once POSTHOG_FLUSH_EVENTS are waiting or when the page is hidden, and never retries. The function refuses a body
+ * over INGEST_MAX_BYTES (a batch of 10 events is about 4 KB, and a beacon may carry at most 64 KB).
+ */
+export const INGEST_PATH = 'flurry';
+export const POSTHOG_UPSTREAM = 'https://eu.i.posthog.com';
+export const POSTHOG_FLUSH_EVENTS = 10;
+export const INGEST_MAX_BYTES = 32 * 1024;
+
+/**
+ * Analytics sessions: one starts when the page loads, or when it comes back after SESSION_GAP_MS or more hidden (the
+ * 30 minutes GA4 uses); a shorter break carries on the same session. A run counts as close to the best when its score
+ * is at least BEST_CLOSE of the best before it.
+ */
+export const SESSION_GAP_MS = 30 * 60 * 1000;
+export const BEST_CLOSE = 0.9;

@@ -89,6 +89,14 @@ function browserBackend(): StorageLike {
   }
 }
 
+/** A local day as `dayString` writes it. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The stats that hold a day rather than a count. */
+function isDayKey(k: keyof Progress['stats']): k is 'firstDay' {
+  return k === 'firstDay';
+}
+
 function isEntry(v: unknown): v is ScoreEntry {
   if (typeof v !== 'object' || v === null) return false;
   const e = v as Partial<ScoreEntry>;
@@ -272,7 +280,9 @@ export class Store {
       if (raw.stats && typeof raw.stats === 'object') {
         for (const k of Object.keys(p.stats) as Array<keyof Progress['stats']>) {
           const v = raw.stats[k];
-          if (typeof v === 'number' && Number.isFinite(v)) p.stats[k] = v;
+          if (isDayKey(k)) {
+            if (typeof v === 'string' && DAY.test(v)) p.stats[k] = v;
+          } else if (typeof v === 'number' && Number.isFinite(v)) p.stats[k] = v;
         }
       }
       if (raw.achievements && typeof raw.achievements === 'object') {
@@ -287,8 +297,16 @@ export class Store {
       }
     }
     sanitiseGear(p);
+    // Saves from before `firstDay` have played on or before the earliest day they recorded anything.
+    if (p.stats.firstDay === '' && p.stats.runs > 0) p.stats.firstDay = this.earliestDay(p);
     this.prog = p;
     return p;
+  }
+
+  /** The earliest day an achievement was earned or an all-time run was played, or '' if none is known. */
+  private earliestDay(p: Progress): string {
+    const days = [...Object.values(p.achievements), ...this.topRuns().map((e) => e.date)];
+    return days.filter((d) => DAY.test(d)).sort()[0] ?? '';
   }
 
   saveProgress(): void {

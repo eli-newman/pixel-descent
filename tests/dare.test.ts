@@ -132,6 +132,9 @@ describe('playing a dare', () => {
   it('labels its runs as a dare in analytics', () => {
     const { game, analytics } = makeGame('x', {}, undefined, { dare: DARE });
     game.press('play');
-    expect(analytics.events.at(-1)?.data).toEqual({ run: '1', setup: 'board dare' });
+    expect(analytics.events.at(-1)).toMatchObject({
+      name: 'Run Started',
+      data: { mode: 'dare', kit: 'board', life_run: '1', visit_run: '1' },
+    });
   });
 });

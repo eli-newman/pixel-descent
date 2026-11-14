@@ -23,9 +23,17 @@ Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, l
 
 The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
 
-The build ends with `scripts/vercel-output.mjs`, which writes the whole deployment in Vercel's Build Output API layout (`.vercel/output`): `dist/` as the static files, plus two Node functions bundled into one file each by Vite, `dare` (`/c/<code>`, the game's page with a dare's link preview) and `dare-card` (`/c/<code>/card.png`), and the routes to them. Vercel serves a build's `.vercel/output` as it is, so the Vite preset's `dist` setting no longer decides what ships. The functions are bundled rather than left in an `api/` folder because Vercel compiles those file by file, and this ES module project's extensionless imports are not guaranteed to resolve that way. `scripts/serve-output.mjs` serves the folder locally with the same routes; the browser tests use it. A preview deployment sits behind Vercel's login: test it with `vercel curl /c/<code> --deployment <url>`.
+The build ends with `scripts/vercel-output.mjs`, which writes the whole deployment in Vercel's Build Output API layout (`.vercel/output`): `dist/` as the static files, plus three Node functions bundled into one file each by Vite, `dare` (`/c/<code>`, the game's page with a dare's link preview), `dare-card` (`/c/<code>/card.png`) and `ingest` (`POST /flurry`, analytics events passed on to PostHog), and the routes to them. Vercel serves a build's `.vercel/output` as it is, so the Vite preset's `dist` setting no longer decides what ships. The functions are bundled rather than left in an `api/` folder because Vercel compiles those file by file, and this ES module project's extensionless imports are not guaranteed to resolve that way. `scripts/serve-output.mjs` serves the folder locally with the same routes; the browser tests use it. A preview deployment sits behind Vercel's login: test it with `vercel curl /c/<code> --deployment <url>`.
 
-Vercel Web Analytics is enabled on the project (turned on with `vercel api "/web/insights/toggle?projectId=..." -X POST -F value=true`; the dashboard's Analytics tab does the same). The team is on Hobby: page views only (50,000 events a month), no custom events. Run Start, Run End and Share show up after an upgrade to Pro (2 properties per event, `ANALYTICS_MAX_PROPS`) or Pro with Web Analytics Plus (8). See `src/platform/CLAUDE.md` and the README privacy note.
+Vercel Web Analytics is enabled on the project (turned on with `vercel api "/web/insights/toggle?projectId=..." -X POST -F value=true`; the dashboard's Analytics tab does the same). The team is on Hobby: page views only (50,000 events a month), no custom events. The game's events (Run Started, Run Ended and the rest, see `src/state/CLAUDE.md`) show up there after an upgrade to Pro (2 properties per event, `ANALYTICS_MAX_PROPS`) or Pro with Web Analytics Plus (8). See `src/platform/CLAUDE.md` and the README privacy note.
+
+The same events also go to PostHog Cloud EU, with every property, once the project has a key. The browser posts batches to `/flurry` on the site (`INGEST_PATH`), and the `ingest` function sends them on to `https://eu.i.posthog.com/batch/` from Vercel's servers, so PostHog never sees a player's IP address. Without a key the function drops everything and the page sends nothing, so the game behaves as before. To turn it on:
+
+1. Create a PostHog project in the EU cloud (https://eu.posthog.com). In its settings, turn on "Discard client IP data" as a second guard, and copy the project API key (`phc_...`, public by design: it can only add events).
+2. In Vercel, project `pixel-descent`, Settings, Environment Variables, add `VITE_POSTHOG_KEY` with that key for Production (and Preview if wanted). Or run `vercel env add VITE_POSTHOG_KEY production`.
+3. Redeploy (`vercel --prod`, or merge to `main`). The key is baked in at build time, into both the page and the function, so it takes effect only on a new build.
+
+`VITE_POSTHOG_ENDPOINT` (optional) sends events to another full https URL, for a copy of the game not served from this site (an iOS app's web view would use `https://powline.vercel.app/flurry`). Locally, `scripts/serve-output.mjs` stands in for PostHog, so nothing is sent from a test or a local run.
 
 ## Dependencies
 
@@ -41,7 +49,7 @@ src/
   state/        game state machine, controls, feedback, progress, persistence, the read-only view. Imports sim and core; types only from platform and render.
   platform/     browser I/O (input, audio, loop, viewport, share sheet). Imports core, render/share and render/framebuffer.
   render/       draws state to the framebuffer. Imports sim, state and core.
-  server/       Vercel functions for dare links: the page and its card image. Imports core and render/share only; nothing imports it.
+  server/       Vercel functions: the dare link page and its card image, and the analytics ingest route. Imports core and render/share only; nothing imports it.
 scripts/        build and serve the Vercel Build Output folder (Node, not part of the game)
 tests/          vitest, one file per feature, helpers/ for fakes and a bot, e2e/ for the Playwright tests
 ```

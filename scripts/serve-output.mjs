@@ -3,6 +3,9 @@
  * `config.json` routes first, into the bundled functions, then the static files. The browser tests run against this,
  * so they test the same layout that gets deployed, dare links and their preview cards included.
  *
+ * It never calls PostHog: the ingest function's upstream is a stand-in on this same server (`/__posthog`), which
+ * keeps every batch the function forwards; `GET /__posthog/batches` lists them, for the browser tests.
+ *
  * Usage: node scripts/serve-output.mjs [port]
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -25,6 +28,27 @@ const TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 };
 const handlers = new Map();
+/** Batches the ingest function sent on to the stand-in PostHog. */
+const forwarded = [];
+const STUB = '/__posthog';
+process.env.POSTHOG_UPSTREAM = `http://localhost:${port}${STUB}`;
+
+/** The stand-in PostHog: keep each batch, and list them. */
+async function stub(req, res, path) {
+  if (req.method === 'POST' && path === `${STUB}/batch/`) {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    forwarded.push(JSON.parse(body));
+    res.statusCode = 200;
+    res.end('{"status":"Ok"}');
+  } else if (path === `${STUB}/batches`) {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(forwarded));
+  } else {
+    res.statusCode = 404;
+    res.end();
+  }
+}
 
 async function handler(name) {
   if (!handlers.has(name)) {
@@ -36,6 +60,7 @@ async function handler(name) {
 
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${port}`);
+  if (url.pathname.startsWith(`${STUB}/`)) return stub(req, res, url.pathname);
   for (const route of config.routes) {
     if (route.handle) break;
     const m = new RegExp(route.src).exec(url.pathname);
