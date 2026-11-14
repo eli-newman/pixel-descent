@@ -3,6 +3,7 @@ import { H, W } from './core/config';
 import { Game } from './state/game';
 import { Input } from './platform/input';
 import { Loop } from './platform/loop';
+import { codeFromPath, decodeDare } from './core/dare';
 import { normalizeSeed } from './core/rng';
 import { Framebuffer } from './render/framebuffer';
 import { lessonTarget } from './render/lesson';
@@ -38,13 +39,17 @@ const store = new Store();
 const sfx = new Sfx();
 const input = new Input(canvas);
 const params = new URLSearchParams(window.location.search);
-const fromShare = params.has('seed');
+// A friend's dare (`/c/<code>`, served by the dare page function) or an older plain course link (`?seed=`).
+const dareCode = codeFromPath(window.location.pathname);
+const dare = decodeDare(dareCode);
+const fromShare = dare !== null || dareCode !== null || params.has('seed');
 
 // A shared link opens its course once. Clearing it keeps seeds out of sight, and a reload starts fresh.
 if (fromShare) {
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete('seed');
+    url.pathname = url.pathname.replace(/c\/[^/]*\/?$/, '');
     window.history.replaceState(null, '', url);
   } catch {
     // History can be unavailable (sandboxed frames). The link still opens its course.
@@ -86,13 +91,15 @@ const game = new Game(
       status.textContent = text;
     },
     share: async (card) => {
-      const outcome = await shareResult(card, window.location.href);
+      // Dare links go on the site the game is on, whatever path it was opened at.
+      const outcome = await shareResult(card, new URL('.', window.location.href).href);
       analytics.track(shareEvent(outcome.via));
       return outcome.message;
     },
     analytics,
   },
   normalizeSeed(params.get('seed')),
+  dare,
 );
 
 /**

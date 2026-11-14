@@ -1,3 +1,4 @@
+import type { Dare } from '../../src/core/dare';
 import { Game, type GameDeps } from '../../src/state/game';
 import type { Action, Input, InputItem } from '../../src/platform/input';
 import type { Sfx } from '../../src/platform/audio';
@@ -119,7 +120,7 @@ export function makeGame(
   seed = 'rig',
   over: Partial<GameDeps> = {},
   storage = memoryStorage(),
-  opts: { tutorial?: boolean } = {},
+  opts: { tutorial?: boolean; dare?: Dare } = {},
 ): Rig {
   const input = new FakeInput();
   const sfx = new FakeSfx();
@@ -142,6 +143,7 @@ export function makeGame(
       ...over,
     },
     seed,
+    opts.dare,
   );
   return { game, input, sfx, store, storage, shared, analytics };
 }

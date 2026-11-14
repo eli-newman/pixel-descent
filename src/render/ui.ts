@@ -99,7 +99,7 @@ function labelOf(g: GameView, id: ButtonId): string {
     case 'retry':
       return 'RETRY';
     case 'share':
-      return 'SHARE';
+      return g.dare ? 'SEND IT BACK' : 'SHARE';
     case 'menu':
       return 'MENU';
   }
@@ -143,6 +143,16 @@ export function renderUi(fb: Framebuffer, g: GameView): void {
   }
 }
 
+/**
+ * The HUD's third line: the best score, or on a friend's dare the score to beat, which turns yellow and counts the
+ * margin once it is beaten.
+ */
+function hudTarget(g: GameView): [string, number] {
+  if (!g.dare) return [`BEST ${g.overallBest}`, INK];
+  const by = g.sim.scoreValue - g.dare.score;
+  return by > 0 ? [`BEATEN +${by}`, HOT] : [`BEAT ${g.dare.score}`, INK];
+}
+
 function drawHud(fb: Framebuffer, g: GameView): void {
   const sim = g.sim;
   // Birds circle a fallen rider's head once the tumble is over. On this layer, so the game over fade never dims
@@ -162,7 +172,8 @@ function drawHud(fb: Framebuffer, g: GameView): void {
   let y = 4 + 5 * s1 + 3;
   text(fb, `${sim.distM}M`, 4, y, INK, s2);
   y += 5 * s2 + 3;
-  text(fb, `BEST ${g.overallBest}`, 4, y, INK, s2);
+  const [target, targetColor] = hudTarget(g);
+  text(fb, target, 4, y, targetColor, s2);
 
   if (g.phase === 'playing' || g.phase === 'crashed') drawGauges(fb, g);
   if (g.settings.muted) text(fb, 'MUTED', W - 26, H - 8);
@@ -337,8 +348,10 @@ function drawButtons(fb: Framebuffer, g: GameView, selected?: ButtonId): void {
 function drawMain(fb: Framebuffer, g: GameView): void {
   textC(fb, 'POW', CX, 15, INK, 3);
   textC(fb, 'LINE', CX, 34, INK, 3);
+  // Opened from a friend's dare: the score to beat takes the best score's place.
   const best = g.overallBest;
-  textC(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, INK, 2);
+  if (g.dare) textC(fb, `BEAT ${g.dare.score}`, CX, 155, HOT, 2);
+  else textC(fb, best > 0 ? `BEST ${best}` : 'NO SCORE YET', CX, 155, INK, 2);
   drawButtons(fb, g);
   const daily = g.dailyBest;
   textC(fb, daily > 0 ? `TODAY'S BEST ${daily}` : 'NO DAILY RUN YET', CX, 284, INK);
@@ -518,7 +531,15 @@ function drawOver(fb: Framebuffer, g: GameView): void {
   textC(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
   textC(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);
   const rank = res.rank;
-  textC(fb, rank ? `RANK ${rank} ALL TIME` : 'NOT IN YOUR TOP 10', CX, top + 71, INK);
+  if (g.dare) {
+    // The run against the friend's: beaten (by how much), tied, or how far short.
+    const by = res.score - g.dare.score;
+    if (by > 0) textC(fb, `YOU BEAT IT BY ${by}`, CX, top + 71, HOT);
+    else if (by === 0) textC(fb, `TIED AT ${g.dare.score}`, CX, top + 71, HOT);
+    else textC(fb, `${-by} SHORT OF ${g.dare.score}`, CX, top + 71, INK);
+  } else {
+    textC(fb, rank ? `RANK ${rank} ALL TIME` : 'NOT IN YOUR TOP 10', CX, top + 71, INK);
+  }
   // new achievements and gear take turns in one line
   const news: string[] = [
     ...res.achievements.map((a) => `GOAL: ${a.name}`),

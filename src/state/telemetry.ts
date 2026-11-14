@@ -8,14 +8,19 @@ import type { Kit } from './progress';
  * keep the first two (see `ANALYTICS_MAX_PROPS`).
  */
 
-/** How a run is played: kit and course, for example "skis daily". */
+/**
+ * How a run is played: kit and course, for example "skis daily". A run on a friend's dare link is "dare", even on a
+ * daily course, since that is what brought the player to it.
+ */
 export interface RunSetup {
   kit: Kit;
   daily: boolean;
+  dare: boolean;
 }
 
 export function setupLabel(s: RunSetup): string {
-  return `${s.kit === 'skis' ? 'skis' : 'board'} ${s.daily ? 'daily' : 'normal'}`;
+  const course = s.dare ? 'dare' : s.daily ? 'daily' : 'normal';
+  return `${s.kit === 'skis' ? 'skis' : 'board'} ${course}`;
 }
 
 /** `value` placed in the band of `edges` (ascending), for example "100-249", or "3" for a band of one. */

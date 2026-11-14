@@ -1,5 +1,6 @@
 import type { Sfx } from '../platform/audio';
 import type { Tracker } from '../platform/analytics';
+import type { Dare } from '../core/dare';
 import { LESSON_GUARD, RIDER_SCREEN_Y, RIDER_SCREEN_Y_FAST, START_Y } from '../core/config';
 import { BrakeSpray, CarveCloud, Particles, Puffs } from './effects';
 import type { Input } from '../platform/input';
@@ -10,7 +11,6 @@ import { ACHIEVEMENTS, boardIndex, riderIndex } from './progress';
 import { dailySeed, isDailySeed, normalizeSeed, randomSeedString } from '../core/rng';
 import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './runReport';
 import { Sim } from '../sim/sim';
-import type { ResultCardData } from '../render/share';
 import type { ScoreEntry, Store } from './storage';
 import { runEndEvent, runStartEvent, type RunSetup } from './telemetry';
 import type { GameView } from './view';
@@ -23,8 +23,8 @@ export interface GameDeps {
   /** Vibrate for a number of milliseconds (touch phones only). */
   haptic?: (ms: number) => void;
   announce?: (text: string) => void;
-  /** Render and share the result card. Resolves to a short message to show the player. */
-  share?: (card: ResultCardData) => Promise<string>;
+  /** Share a run as a dare (link and card). Resolves to a short message to show the player. */
+  share?: (card: Dare) => Promise<string>;
   now?: () => Date;
   /** Cosmetic randomness only (particles). Never feeds the sim. */
   rand?: () => number;
@@ -43,6 +43,11 @@ export class Game implements GameView {
   result: RunResult | null = null;
   /** The tutorial lesson stopping the run right now (see `state/tutorial.ts`), or null. */
   lesson: Lesson | null = null;
+  /**
+   * The friend's run this player is trying to beat, from the dare link they opened, or null. It holds while they
+   * stay on its course (RETRY, RESTART) and ends on any other course.
+   */
+  dare: Dare | null = null;
   /** Seconds the current lesson has been up. */
   private lessonT = 0;
 
@@ -73,6 +78,7 @@ export class Game implements GameView {
   constructor(
     private readonly deps: GameDeps,
     initialSeed?: string | null,
+    dare?: Dare | null,
   ) {
     this.controls = new Controls(this, deps);
     this.feedback = new Feedback(deps.sfx, (ms) => {
@@ -80,7 +86,8 @@ export class Game implements GameView {
     });
     deps.sfx.setMuted(this.settings.muted);
     deps.sfx.setMusic(this.settings.music);
-    this.newRun(normalizeSeed(initialSeed) ?? randomSeedString());
+    this.dare = dare ?? null;
+    this.newRun(dare?.seed ?? normalizeSeed(initialSeed) ?? randomSeedString());
   }
 
   get screen(): Screen {
@@ -211,6 +218,7 @@ export class Game implements GameView {
 
   /** Reset the world for a seed and wait on the title screen (or go straight in if `play`). */
   newRun(seed: string, play = false): void {
+    if (this.dare && this.dare.seed !== seed) this.dare = null;
     this.seed = seed;
     this.sim = new Sim(seed, { manualSpin: this.settings.manualSpin });
     this.particles.clear();
@@ -261,7 +269,7 @@ export class Game implements GameView {
 
   /** How this run is played, for analytics. */
   private runSetup(): RunSetup {
-    return { kit: this.progress.gear.kit, daily: this.daily };
+    return { kit: this.progress.gear.kit, daily: this.daily, dare: this.dare !== null };
   }
 
   update(dt: number): void {
@@ -333,9 +341,12 @@ export class Game implements GameView {
     if (this.phase === 'title') this.sim.opts.manualSpin = on;
   }
 
-  /** The result of this run, for the share card and tests. */
-  cardData(): ResultCardData | null {
-    return this.result && toCard(this.result, this.progress.gear.kit === 'skis');
+  /** This run as a dare to send, for the share card and tests. */
+  cardData(): Dare | null {
+    return (
+      this.result &&
+      toCard(this.result, this.sim.killer?.kind ?? null, this.progress.gear.kit === 'skis')
+    );
   }
 
   /** Render and share the result card; shows the outcome as a toast. */

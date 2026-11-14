@@ -10,8 +10,8 @@ npm run typecheck   # tsc --noEmit
 npm run lint        # eslint .
 npm test            # vitest run (tests/)
 npm run check       # typecheck + lint + format check + vitest
-npm run test:e2e    # Playwright smoke test against the production bundle (tests/e2e)
-npm run build       # typecheck + vitest + vite build, so a deploy cannot ship failing tests
+npm run test:e2e    # Playwright tests against the deployment layout, served locally (tests/e2e)
+npm run build       # typecheck + vitest + vite build + .vercel/output, so a deploy cannot ship failing tests
 npm run format      # prettier
 ```
 
@@ -22,6 +22,8 @@ Before calling any change done: `npm run check`, `npm run build` and `npm run te
 Hosted on Vercel, project `pixel-descent` (team "Eli's projects", Vite preset, linked locally through `.vercel/`, which is git-ignored). Live at https://powline.vercel.app (`https://pixel-descent.vercel.app` still serves it too). The project and GitHub repo keep the old `pixel-descent` name, which players never see. The code is on GitHub at `eli-newman/pixel-descent`.
 
 The Vercel project is connected to GitHub: pushing a branch builds a preview deployment (confirmed on PR #1). Merging to `main` is therefore expected to deploy to production, so treat a merge as a release. Earlier production deploys were made from the CLI (`vercel --prod`). Check `vercel ls` after merging. The build uses relative URLs (`base: './'`) and Vercel runs `npm run build`.
+
+The build ends with `scripts/vercel-output.mjs`, which writes the whole deployment in Vercel's Build Output API layout (`.vercel/output`): `dist/` as the static files, plus two Node functions bundled into one file each by Vite, `dare` (`/c/<code>`, the game's page with a dare's link preview) and `dare-card` (`/c/<code>/card.png`), and the routes to them. Vercel serves a build's `.vercel/output` as it is, so the Vite preset's `dist` setting no longer decides what ships. The functions are bundled rather than left in an `api/` folder because Vercel compiles those file by file, and this ES module project's extensionless imports are not guaranteed to resolve that way. `scripts/serve-output.mjs` serves the folder locally with the same routes; the browser tests use it. A preview deployment sits behind Vercel's login: test it with `vercel curl /c/<code> --deployment <url>`.
 
 Vercel Web Analytics is enabled on the project (turned on with `vercel api "/web/insights/toggle?projectId=..." -X POST -F value=true`; the dashboard's Analytics tab does the same). The team is on Hobby: page views only (50,000 events a month), no custom events. Run Start, Run End and Share show up after an upgrade to Pro (2 properties per event, `ANALYTICS_MAX_PROPS`) or Pro with Web Analytics Plus (8). See `src/platform/CLAUDE.md` and the README privacy note.
 
@@ -39,7 +41,9 @@ src/
   state/        game state machine, controls, feedback, progress, persistence, the read-only view. Imports sim and core; types only from platform and render.
   platform/     browser I/O (input, audio, loop, viewport, share sheet). Imports core, render/share and render/framebuffer.
   render/       draws state to the framebuffer. Imports sim, state and core.
-tests/          vitest, one file per feature, helpers/ for fakes and a bot, e2e/ for the Playwright smoke test
+  server/       Vercel functions for dare links: the page and its card image. Imports core and render/share only; nothing imports it.
+scripts/        build and serve the Vercel Build Output folder (Node, not part of the game)
+tests/          vitest, one file per feature, helpers/ for fakes and a bot, e2e/ for the Playwright tests
 ```
 
 `main.ts` may import everything, and nothing imports `main.ts`. These rules are enforced by `npm run lint` (the `boundaries` entries in `eslint.config.js`): change them there and here together.
@@ -68,6 +72,8 @@ A change is not finished until the docs match the code.
 - `src/state/CLAUDE.md`
 - `src/platform/CLAUDE.md`
 - `src/render/CLAUDE.md`
+- `src/server/CLAUDE.md`
+- `scripts/CLAUDE.md`
 - `tests/CLAUDE.md`
 
 ## Conventions
@@ -75,5 +81,5 @@ A change is not finished until the docs match the code.
 - Match the surrounding code: comment density, naming, idiom. Prettier formats everything.
 - No em dashes in any text, use a plain dash.
 - Removed features live in `archive/*` git tags (checkpoints, path-stars, ghost, avalanche, ice, deep-snow, slope-labels, color), not behind flags in the code. Do not add dead code behind a flag.
-- Seeds are internal. Never show one to the player or make them think about one: scores are all-time or today's daily, and `GameView` does not expose a seed. Share links carry one, and `main.ts` clears it from the address bar on load.
+- Seeds are internal. Never show one to the player or make them think about one: scores are all-time or today's daily, and `GameView` does not expose a seed. Share and dare links carry one, and `main.ts` clears it from the address bar on load. A dare card or preview may show the score, never the seed.
 - The game has one calm look on every device, so phone and desktop match. Shake, zoom punch and snowfall were deleted, not switched off.

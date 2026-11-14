@@ -1,0 +1,23 @@
+# src/server
+
+The two Vercel functions behind dare links. `scripts/vercel-output.mjs` bundles each handler into one file of the deployment (see the root `CLAUDE.md`, Hosting and deploy). Nothing in the game imports this folder.
+
+| File             | Job                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pageHandler.ts` | `/c/<code>` (function `dare`): the game's page with the dare's link preview, or a redirect to `/` for a code that is not a dare. The built `index.html` is baked in at build time as `__INDEX_HTML__`. Cached by the CDN for 5 minutes only, since the page names this deployment's assets.                                                                                         |
+| `cardHandler.ts` | `/c/<code>/card.png` (function `dare-card`): the dare card as a PNG, or 404. A code always draws the same card, so it is cached long (a new deployment starts a fresh CDN cache).                                                                                                                                                                                                   |
+| `page.ts`        | `darePage`: the built `index.html` with its own `og:` and `twitter:` tags swapped for the dare's (`dareTitle`: "Beat 1240 on Powline", `dareDescription`: the run in a sentence, the card as the image, absolute URLs on the request's origin) and a `<base href="/">`, so its relative asset paths still load from `/c/<code>`. Pure. Every value put in the page is HTML-escaped. |
+| `card.ts`        | `cardPng`: `render/share.ts`'s `renderCard` at 200x105, every pixel blown up to a 6x6 square, as a 1200x630 PNG (about 8 KB).                                                                                                                                                                                                                                                       |
+| `png.ts`         | `encodePng` (opaque 8-bit RGB, no filters, compressed with Node's zlib) and `crc32`. No dependencies.                                                                                                                                                                                                                                                                               |
+| `http.ts`        | `Req` and `Res`, the parts of Node's request and response the handlers use; `originOf` (the `https://host` Vercel forwards) and `queryParam` (the routes pass the code as `?code=`).                                                                                                                                                                                                |
+| `node.d.ts`      | The project has no `@types/node`: the one Node API the server uses (`deflateSync`).                                                                                                                                                                                                                                                                                                 |
+
+## Rules
+
+- Imports `../core` and `render/share` and `render/framebuffer` only (boundary lint). The card is the game's own drawing, so the preview and the image the share sheet sends are the same pixels.
+- The handlers are plain Node `(req, res)` functions, so tests call them with fakes (`tests/server.test.ts`) and `scripts/serve-output.mjs` runs the bundled ones as they are.
+- Never write a seed anywhere a player reads it: the card and preview show the score, metres, stars, tricks and how the run ended. The seed is only inside the code in the URL, as in every share link.
+
+## Keeping docs in sync (mandatory)
+
+When you change anything in this folder (add, remove, rename a file, change an exported function, constant or rule), update this file in the same change, and the root `CLAUDE.md` if the routes or the build step change.

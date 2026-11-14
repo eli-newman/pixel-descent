@@ -24,7 +24,7 @@ function typesOnly(folder, why) {
 }
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules', 'test-results', 'playwright-report'] },
+  { ignores: ['dist', '.vercel', 'coverage', 'node_modules', 'test-results', 'playwright-report'] },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
@@ -39,23 +39,27 @@ export default tseslint.config(
   },
   boundaries(
     ['src/core/**/*.ts'],
-    ['sim', 'state', 'platform', 'render'].map((f) => banned(f, 'core imports nothing.')),
+    ['sim', 'state', 'platform', 'render', 'server'].map((f) => banned(f, 'core imports nothing.')),
   ),
   boundaries(
     ['src/sim/**/*.ts'],
-    ['state', 'platform', 'render'].map((f) => banned(f, 'sim imports core only.')),
+    ['state', 'platform', 'render', 'server'].map((f) => banned(f, 'sim imports core only.')),
   ),
   boundaries(
     ['src/state/**/*.ts'],
-    ['platform', 'render'].map((f) =>
-      typesOnly(f, 'state gets browser and drawing code through GameDeps: types only.'),
-    ),
+    [
+      ...['platform', 'render'].map((f) =>
+        typesOnly(f, 'state gets browser and drawing code through GameDeps: types only.'),
+      ),
+      banned('server', 'server code runs on Vercel only.'),
+    ],
   ),
   boundaries(
     ['src/platform/**/*.ts'],
     [
       banned('sim', 'platform imports core and the share card only.'),
       banned('state', 'platform imports core and the share card only.'),
+      banned('server', 'server code runs on Vercel only.'),
       {
         group: ['**/render/*', '!**/render/share', '!**/render/framebuffer'],
         message: 'platform imports core and the share card only.',
@@ -66,9 +70,22 @@ export default tseslint.config(
     ['src/render/**/*.ts'],
     [
       banned('platform', 'render reads state, it does not talk to the browser.'),
+      banned('server', 'server code runs on Vercel only.'),
       {
         group: ['**/state/game', '**/sim/sim'],
         message: 'render sees the game through state/view (GameView, SimView), which cannot write.',
+      },
+    ],
+  ),
+  boundaries(
+    ['src/server/**/*.ts'],
+    [
+      banned('state', 'server draws dare cards from core and the share card only.'),
+      banned('platform', 'server draws dare cards from core and the share card only.'),
+      banned('sim', 'server draws dare cards from core and the share card only.'),
+      {
+        group: ['**/render/*', '!**/render/share', '!**/render/framebuffer'],
+        message: 'server draws dare cards from core and the share card only.',
       },
     ],
   ),
@@ -116,7 +133,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.mjs'],
     ...tseslint.configs.disableTypeChecked,
     languageOptions: { globals: globals.node },
   },

@@ -139,6 +139,15 @@ describe('cleanUrl', () => {
   it('gives an empty string (the event is dropped) for something that is not a URL', () => {
     expect(cleanUrl('not a url', false)).toBe('');
   });
+
+  it("never reports a dare link's code, which carries the seed", () => {
+    expect(cleanUrl('https://powline.vercel.app/c/k1abc-1240-312-4-3-t', true)).toBe(
+      'https://powline.vercel.app/from-share',
+    );
+    expect(cleanUrl('https://powline.vercel.app/c/k1abc-1240-312-4-3-t/', false)).toBe(
+      'https://powline.vercel.app/',
+    );
+  });
 });
 
 describe('analyticsConfig', () => {

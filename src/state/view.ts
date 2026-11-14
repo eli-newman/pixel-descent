@@ -1,3 +1,4 @@
+import type { Dare } from '../core/dare';
 import type { Sim } from '../sim/sim';
 import type { Trail } from '../sim/trail';
 import type { Toast } from './feedback';
@@ -63,6 +64,8 @@ export interface GameView {
   readonly scoreTab: 'top' | 'daily';
   readonly sim: SimView;
   readonly result: DeepReadonly<RunResult> | null;
+  /** The friend's run to beat, from a dare link, while the player is on its course. */
+  readonly dare: Readonly<Dare> | null;
   readonly focus: number;
   readonly focusVisible: boolean;
   readonly particles: ParticlesView;

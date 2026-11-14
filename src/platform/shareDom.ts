@@ -1,16 +1,9 @@
-import {
-  CARD_H,
-  CARD_SCALE,
-  CARD_W,
-  renderCard,
-  shareText,
-  shareUrl,
-  type ResultCardData,
-} from '../render/share';
+import type { Dare } from '../core/dare';
+import { CARD_H, CARD_SCALE, CARD_W, renderCard, shareText, shareUrl } from '../render/share';
 import { Framebuffer } from '../render/framebuffer';
 
 /** Draw the card to an offscreen canvas at full size (nearest-neighbour, so the pixels stay crisp). */
-export function cardCanvas(card: ResultCardData): HTMLCanvasElement {
+export function cardCanvas(card: Dare): HTMLCanvasElement {
   const fb = new Framebuffer(CARD_W, CARD_H);
   renderCard(fb, card);
   const small = document.createElement('canvas');
@@ -64,11 +57,12 @@ export interface ShareOutcome {
 }
 
 /**
- * Share a result: the Web Share API with the card image when the browser supports sharing files,
- * otherwise the link alone; with no Web Share at all the link is copied and the image downloaded.
+ * Share a dare from the site at `origin`: the Web Share API with the card image when the browser supports sharing
+ * files, otherwise the link alone (its preview is the same card); with no Web Share at all the link is copied and the
+ * image downloaded.
  */
-export async function shareResult(card: ResultCardData, pageUrl: string): Promise<ShareOutcome> {
-  const url = shareUrl(pageUrl, card.seed);
+export async function shareResult(card: Dare, origin: string): Promise<ShareOutcome> {
+  const url = shareUrl(origin, card);
   const text = shareText(card);
   const blob = await toBlob(cardCanvas(card));
   const file = blob ? new File([blob], `powline-${card.score}.png`, { type: 'image/png' }) : null;
