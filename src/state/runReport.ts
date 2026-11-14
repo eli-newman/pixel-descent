@@ -1,11 +1,13 @@
 import type { Dare, DareEnd } from '../core/dare';
 import type { Sim } from '../sim/sim';
 import type { ObstacleKind } from '../sim/types';
+import type { EventCounts } from './goals';
 import {
   applyRun,
   boardIndex,
   riderIndex,
   type Achievement,
+  type Challenge,
   type Gear,
   type GearDef,
   type RunSummary,
@@ -21,6 +23,11 @@ export interface RunResult {
   newBest: boolean;
   achievements: Achievement[];
   gear: GearDef[];
+  /** The daily streak when this run kept it going on a new day (or started one), else null. */
+  streak: number | null;
+  /** Today's goals this run finished, and whether they were the last of the three. */
+  goals: Challenge[];
+  allGoals: boolean;
 }
 
 export function dayString(d: Date): string {
@@ -29,7 +36,13 @@ export function dayString(d: Date): string {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-export function summarizeRun(sim: Sim, seed: string, daily: boolean): RunSummary {
+/** The run's numbers. Grabs and clean lines are only told by events, so the game counts them (`countEvent`). */
+export function summarizeRun(
+  sim: Sim,
+  seed: string,
+  daily: boolean,
+  counts: Readonly<EventCounts> = { grabs: 0, lines: 0 },
+): RunSummary {
   const sc = sim.score;
   return {
     seed,
@@ -41,6 +54,8 @@ export function summarizeRun(sim: Sim, seed: string, daily: boolean): RunSummary
     nearMisses: sc.nearMisses,
     tricks: sc.tricks,
     landings: sc.landings,
+    grabs: counts.grabs,
+    lines: counts.lines,
     maxCombo: sc.maxCombo,
     sendItTime: sim.sendItTime,
     topSpeed: sim.topSpeedSeen,
@@ -63,6 +78,9 @@ export function recordRun(store: Store, summary: RunSummary, day: string): RunRe
     newBest: rec.newBest,
     achievements: out.newAchievements,
     gear: out.newGear,
+    streak: out.streak,
+    goals: out.goals,
+    allGoals: out.allGoals,
   };
 }
 

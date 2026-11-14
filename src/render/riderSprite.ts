@@ -8,7 +8,7 @@ type Pt = readonly [number, number];
 export interface RiderStyle {
   /** 0 classic, 1 stripe, 2 dots, 3 twin tip. On skis the same looks are drawn on the skis. */
   board: number;
-  /** 0 helmet, 1 beanie, 2 scarf, 3 ears. */
+  /** 0 helmet, 1 beanie, 2 scarf, 3 ears, 4 antlers. */
   rider: number;
   /** A skier with two skis and poles instead of a snowboarder. */
   skis: boolean;
@@ -417,7 +417,7 @@ function maskBody(
   cutFace(set, b);
 }
 
-/** Unlockable headgear: a bobble hat, a fluttering scarf or a pair of ears. */
+/** Unlockable headgear: a bobble hat, a fluttering scarf, a pair of ears or antlers. */
 function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): void {
   const [hx, hy] = head;
   if (kind === 1) {
@@ -441,6 +441,18 @@ function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): 
     set.add(hx + 1, hy - 3);
     set.add(hx + 1, hy - 4);
     set.add(hx + 2 * mv, hy - 4);
+  } else if (kind === 4) {
+    // antlers: a little fork each side, a tine straight up and the beam sweeping out
+    for (const [x, out] of [
+      [hx - 2, -1],
+      [hx + 1, 1],
+    ] as const) {
+      set.add(x, hy - 2);
+      set.add(x, hy - 3);
+      set.add(x, hy - 4);
+      set.add(x + out, hy - 3);
+      set.add(x + 2 * out, hy - 4);
+    }
   }
 }
 

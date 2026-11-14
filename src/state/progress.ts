@@ -1,5 +1,9 @@
 /** Lifetime stats, achievements, challenges and unlockable gear. Pure data and rules, no storage. */
 
+import { STREAK_UNLOCK } from '../core/config';
+import { addRunToGoals, createDayGoals, type DayGoals } from './goals';
+import { rideStreak } from './streak';
+
 export interface RunSummary {
   seed: string;
   daily: boolean;
@@ -10,6 +14,9 @@ export interface RunSummary {
   nearMisses: number;
   tricks: number;
   landings: number;
+  /** Grabs landed clean, and jump lines landed clean all the way. */
+  grabs: number;
+  lines: number;
   maxCombo: number;
   /** Seconds spent near top speed. */
   sendItTime: number;
@@ -32,6 +39,13 @@ export interface Stats {
   dailies: number;
   /** The tutorial lessons already shown, one bit each (see `state/tutorial.ts`). */
   lessons: number;
+  /**
+   * The daily-ride streak (see `state/streak.ts`): the last local day (YYYY-MM-DD, '' for none) a finished run on the
+   * daily course counted for, the days in the current streak, and the longest streak ever.
+   */
+  lastDay: string;
+  streak: number;
+  bestStreak: number;
 }
 
 /** What the rider stands on. Both are open to everyone and only change the look: the rules are the same. */
@@ -49,6 +63,8 @@ export interface Progress {
   /** Achievement id to the day it was earned. */
   achievements: Record<string, string>;
   gear: Gear;
+  /** Today's three goals and how far they have come (see `state/goals.ts`). */
+  goals: DayGoals;
 }
 
 export function createProgress(): Progress {
@@ -64,9 +80,13 @@ export function createProgress(): Progress {
       tricks: 0,
       dailies: 0,
       lessons: 0,
+      lastDay: '',
+      streak: 0,
+      bestStreak: 0,
     },
     achievements: {},
     gear: { board: 'classic', rider: 'classic', kit: 'snowboard' },
+    goals: createDayGoals(),
   };
 }
 
@@ -138,6 +158,12 @@ export const RIDERS: readonly GearDef[] = [
   },
   { id: 'scarf', name: 'SCARF', need: '25 LANE STARS', unlocked: (p) => p.stats.laneStars >= 25 },
   { id: 'ears', name: 'EARS', need: '50 CLOSE CALLS', unlocked: (p) => p.stats.nearMisses >= 50 },
+  {
+    id: 'antlers',
+    name: 'ANTLERS',
+    need: `${STREAK_UNLOCK} DAY STREAK`,
+    unlocked: (p) => p.stats.bestStreak >= STREAK_UNLOCK,
+  },
 ];
 
 /** Where the furthest run so far ended, in metres, for the mark on the slope: null before the first run ends. */
@@ -162,6 +188,11 @@ export function riderIndex(id: string): number {
 export interface RunOutcome {
   newAchievements: Achievement[];
   newGear: GearDef[];
+  /** The streak, when this run kept it going on a new day (or started one); null when it did not count. */
+  streak: number | null;
+  /** Today's goals this run finished, and whether it finished the last of the three. */
+  goals: Challenge[];
+  allGoals: boolean;
 }
 
 function addStats(p: Progress, run: RunSummary): void {
@@ -181,6 +212,8 @@ function addStats(p: Progress, run: RunSummary): void {
 export function applyRun(p: Progress, run: RunSummary, day: string): RunOutcome {
   const gearBefore = new Set([...BOARDS, ...RIDERS].filter((g) => g.unlocked(p)).map((g) => g.id));
   addStats(p, run);
+  const streak = rideStreak(p.stats, run.seed, day);
+  const goals = addRunToGoals(p.goals, run, day);
   const newAchievements: Achievement[] = [];
   for (const a of ACHIEVEMENTS) {
     if (p.achievements[a.id] === undefined && a.test(run, p)) {
@@ -189,7 +222,7 @@ export function applyRun(p: Progress, run: RunSummary, day: string): RunOutcome 
     }
   }
   const newGear = [...BOARDS, ...RIDERS].filter((g) => g.unlocked(p) && !gearBefore.has(g.id));
-  return { newAchievements, newGear };
+  return { newAchievements, newGear, streak, goals: goals.done, allGoals: goals.all };
 }
 
 /** Make sure the equipped gear is something that is actually unlocked. */

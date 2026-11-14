@@ -15,7 +15,19 @@ import type { Input } from '../platform/input';
 import { Controls } from './controls';
 import { Feedback, type Toast } from './feedback';
 import type { ButtonId, Phase, Screen } from './menu';
-import { ACHIEVEMENTS, bestMark, boardIndex, riderIndex } from './progress';
+import {
+  countEvent,
+  dailyGoals,
+  dayValues,
+  goalDefs,
+  goalName,
+  withRun,
+  type EventCounts,
+  type GoalDef,
+  type RunTally,
+} from './goals';
+import { ACHIEVEMENTS, bestMark, boardIndex, riderIndex, type Challenge } from './progress';
+import { liveStreak } from './streak';
 import { dailySeed, isDailySeed, normalizeSeed } from '../core/rng';
 import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './runReport';
 import { Sim } from '../sim/sim';
@@ -103,6 +115,27 @@ export class Game implements GameView {
   private sharing = false;
   /** Runs started since the page loaded, for the second-run rate. Never stored. */
   private runsStarted = 0;
+  /** This run's landed grabs and clean lines, which only events tell. */
+  private counts: EventCounts = { grabs: 0, lines: 0 };
+  /**
+   * The day's goals as this run began: what they count, their saved progress, and which are done (or have been
+   * toasted this run). A goal finished mid-run gets a toast the moment it is done; the save is only written when the
+   * run ends.
+   */
+  private runGoals: { defs: GoalDef[]; base: number[]; done: boolean[] } | null = null;
+  /** The run so far, as goals count it, reused every step. */
+  private readonly tally: RunTally = {
+    dist: 0,
+    score: 0,
+    stars: 0,
+    nearMisses: 0,
+    tricks: 0,
+    landings: 0,
+    grabs: 0,
+    lines: 0,
+    maxCombo: 0,
+  };
+  private goalsCache: { day: string; list: Challenge[] } | null = null;
 
   constructor(
     private readonly deps: GameDeps,
@@ -154,6 +187,23 @@ export class Game implements GameView {
 
   get today(): string {
     return dailySeed(this.deps.now?.() ?? new Date());
+  }
+
+  /** The local day, YYYY-MM-DD, from the injected clock. */
+  get day(): string {
+    return dayString(this.deps.now?.() ?? new Date());
+  }
+
+  /** The daily streak as it stands today: 0 once it can no longer be kept going (see `state/streak.ts`). */
+  get streak(): number {
+    return liveStreak(this.progress.stats, this.day);
+  }
+
+  /** Today's three goals, short, medium and long (see `state/goals.ts`). */
+  get dailyGoals(): readonly Challenge[] {
+    const day = this.day;
+    if (this.goalsCache?.day !== day) this.goalsCache = { day, list: dailyGoals(day) };
+    return this.goalsCache.list;
   }
 
   /** Where the screen should be drawn between the last two steps (see `prevCamY`). Called before every render. */
@@ -273,6 +323,8 @@ export class Game implements GameView {
     this.lessonOutT = null;
     this.lessonEnd = null;
     this.slowAcc = 0;
+    this.counts = { grabs: 0, lines: 0 };
+    this.runGoals = null;
     this.phase = 'title';
     this.controls.reset();
     if (play) this.begin();
@@ -282,6 +334,9 @@ export class Game implements GameView {
     if (this.phase !== 'title') return;
     this.phase = 'playing';
     this.sim.begin();
+    const defs = goalDefs(this.day);
+    const base = dayValues(this.progress.goals, this.day);
+    this.runGoals = { defs, base, done: defs.map((g, i) => (base[i] ?? 0) >= g.target) };
     this.deps.input.releaseAll();
     this.deps.sfx.start();
     this.deps.announce?.('Run started.');
@@ -460,7 +515,10 @@ export class Game implements GameView {
   private stepPlaying(): void {
     const sim = this.sim;
     sim.step(this.controls.readSimInput());
-    for (const e of sim.events) this.feedback.react(e, this.animT);
+    for (const e of sim.events) {
+      this.feedback.react(e, this.animT);
+      countEvent(this.counts, e);
+    }
     const rand = this.deps.rand ?? Math.random;
     this.spray.step(sim.rider, this.particles, rand);
     this.cloud.step(sim.rider, this.puffs, this.particles, rand);
@@ -470,11 +528,36 @@ export class Game implements GameView {
       this.lessonOutT = null;
       return;
     }
+    this.checkGoals();
     const stats = this.progress.stats;
     if (!this.lesson && tutorialOn(stats)) {
       const lesson = nextLesson(sim, stats.lessons, this.touch, lessonReadyAt(this.lessonEnd));
       if (lesson) this.showLesson(lesson);
     }
+  }
+
+  /** Toast a daily goal the moment the run so far finishes it, and the day's last one as all three. */
+  private checkGoals(): void {
+    const rg = this.runGoals;
+    if (!rg || rg.done.every(Boolean)) return;
+    const sim = this.sim;
+    const t = this.tally;
+    t.dist = sim.distM;
+    t.score = sim.scoreValue;
+    t.stars = sim.score.stars;
+    t.nearMisses = sim.score.nearMisses;
+    t.tricks = sim.score.tricks;
+    t.landings = sim.score.landings;
+    t.grabs = this.counts.grabs;
+    t.lines = this.counts.lines;
+    t.maxCombo = sim.score.maxCombo;
+    rg.defs.forEach((g, i) => {
+      if (rg.done[i] || withRun(g, rg.base[i] ?? 0, t) < g.target) return;
+      rg.done[i] = true;
+      const all = rg.done.every(Boolean);
+      this.feedback.showToast(all ? 'ALL 3 GOALS DONE' : 'GOAL DONE', 1.8, true, goalName(g));
+      this.deps.announce?.(`Goal done: ${goalName(g).toLowerCase()}.`);
+    });
   }
 
   private stepCrashed(): void {
@@ -486,8 +569,8 @@ export class Game implements GameView {
     this.phase = 'over';
     this.overAt = this.animT;
     this.controls.resetFocus();
-    const summary = summarizeRun(this.sim, this.seed, this.daily);
-    const day = dayString(this.deps.now?.() ?? new Date());
+    const summary = summarizeRun(this.sim, this.seed, this.daily, this.counts);
+    const day = this.day;
     const res = recordRun(this.deps.store, summary, day);
     this.result = res;
     this.deps.analytics?.track(runEndEvent(res.dist, res.score, this.runsStarted, this.runSetup()));
