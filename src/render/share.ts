@@ -9,7 +9,8 @@ import { getSprite } from './sprites';
 /**
  * The dare card: what a share link shows as its preview, and the image the share sheet sends along. It is a dare,
  * so the score to beat is the biggest thing on it, and beside it the run's wipeout is staged with the game's own
- * sprites: whatever ended it, the rider down beside it and the birds over his head.
+ * sprites: whatever ended it, the rider down beside it in the look he rode in, and the birds over his head. A run
+ * on the daily course reads as that day's result instead: POWLINE DAILY, the day, then the score.
  */
 
 /** The card is drawn at this logical size and scaled up by CARD_SCALE: 1200 x 630, the usual link preview size. */
@@ -30,11 +31,25 @@ export function shareUrl(origin: string, c: Readonly<Dare>): string {
   return `${origin.replace(/\/+$/, '')}${darePath(c)}`;
 }
 
-/** The words that go with the link. The preview card carries the rest. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The day of a daily course ("14 Nov"; the card writes it in capitals), or null for any other course. Only the day
+ * is shown, never the seed itself.
+ */
+export function dailyDay(seed: string): string | null {
+  if (!isDailySeed(seed)) return null;
+  const month = MONTHS[Number(seed.slice(5, 7)) - 1];
+  const day = Number(seed.slice(7, 9));
+  return month && day >= 1 && day <= 31 ? `${day} ${month}` : null;
+}
+
+/** The words that go with the link: a daily run as that day's result, any other as a score to beat. */
 export function shareText(c: Readonly<Dare>): string {
-  return isDailySeed(c.seed)
-    ? `${c.score} on today's Powline. beat it 👇`
-    : `${c.score} on Powline. beat it 👇`;
+  const day = dailyDay(c.seed);
+  return day === null
+    ? `${c.score} on Powline. beat it 👇`
+    : `Powline Daily ${day}: ${c.score}, ${c.dist}m. beat it 👇`;
 }
 
 /** The line under the stats: how the run ended. */
@@ -95,7 +110,7 @@ function drawScene(fb: Framebuffer, c: Readonly<Dare>): void {
     fb.put(Math.round(rx + 6 - 4 * Math.sin((y / end) * Math.PI)), y, WHITE);
   }
   // Long after the tumble, so he lies still; the birds at the moment they are spread evenly round his head.
-  drawWipeout(fb, rx, ry, 4, -1, c.skis);
+  drawWipeout(fb, rx, ry, 4, -1, { board: c.board, rider: c.rider, skis: c.skis });
   drawDizzyBirds(fb, wipeoutHead(rx, ry, -1), Math.PI / 2 / 3.2);
 }
 
@@ -107,10 +122,10 @@ export function renderCard(fb: Framebuffer, c: Readonly<Dare>): void {
 
   const x = 12;
   drawText(fb, 'POWLINE', x, 12, WHITE, 2);
-  if (isDailySeed(c.seed)) {
-    drawText(fb, 'DAILY', x + textWidth('POWLINE', 2) + 6, 17, YELLOW);
-  }
-  drawText(fb, 'BEAT', x, 30, WHITE, 2);
+  // A daily run is that day's result, Wordle style: the day where a dare says BEAT.
+  const day = dailyDay(c.seed);
+  if (day !== null) drawText(fb, 'DAILY', x + textWidth('POWLINE', 2) + 6, 17, YELLOW);
+  drawText(fb, day?.toUpperCase() ?? 'BEAT', x, 30, WHITE, 2);
   // As big as fits beside the scene: five times the font for four digits, smaller for a longer score.
   const score = String(c.score);
   const scale = Math.max(2, Math.min(5, Math.floor(SCORE_W / Math.max(1, textWidth(score)))));

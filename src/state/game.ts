@@ -15,7 +15,7 @@ import type { Input } from '../platform/input';
 import { Controls } from './controls';
 import { Feedback, type Toast } from './feedback';
 import type { ButtonId, Phase, Screen } from './menu';
-import { ACHIEVEMENTS, boardIndex, riderIndex } from './progress';
+import { ACHIEVEMENTS, bestMark, boardIndex, riderIndex } from './progress';
 import { dailySeed, isDailySeed, normalizeSeed } from '../core/rng';
 import { dayString, recordRun, summarizeRun, toCard, type RunResult } from './runReport';
 import { Sim } from '../sim/sim';
@@ -63,6 +63,8 @@ export class Game implements GameView {
    * stay on its course (RETRY, RESTART) and ends on any other course.
    */
   dare: Dare | null = null;
+  /** The furthest run before this one, in metres, or null with none (see `GameView.bestMarkM`). */
+  bestMarkM: number | null = null;
   /** Seconds the current lesson has been up. */
   private lessonT = 0;
   /**
@@ -263,6 +265,10 @@ export class Game implements GameView {
     this.camY = this.sim.rider.y - this.camOff;
     this.settleBlend();
     this.result = null;
+    // Held for the whole run: the run's own distance joins the stats when it ends, under the game over screen. None
+    // while the tutorial still has lessons, so the mark never runs through the things a lesson points at.
+    const stats = this.progress.stats;
+    this.bestMarkM = tutorialOn(stats) ? null : bestMark(stats);
     this.lesson = null;
     this.lessonOutT = null;
     this.lessonEnd = null;
@@ -434,10 +440,7 @@ export class Game implements GameView {
 
   /** This run as a dare to send, for the share card and tests. */
   cardData(): Dare | null {
-    return (
-      this.result &&
-      toCard(this.result, this.sim.killer?.kind ?? null, this.progress.gear.kit === 'skis')
-    );
+    return this.result && toCard(this.result, this.sim.killer?.kind ?? null, this.progress.gear);
   }
 
   /** Render and share the result card; shows the outcome as a toast. */

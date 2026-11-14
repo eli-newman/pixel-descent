@@ -140,6 +140,11 @@ export const RIDERS: readonly GearDef[] = [
   { id: 'ears', name: 'EARS', need: '50 CLOSE CALLS', unlocked: (p) => p.stats.nearMisses >= 50 },
 ];
 
+/** Where the furthest run so far ended, in metres, for the mark on the slope: null before the first run ends. */
+export function bestMark(stats: Readonly<Stats>): number | null {
+  return stats.runs > 0 && stats.bestDist > 0 ? stats.bestDist : null;
+}
+
 export function boardIndex(id: string): number {
   return Math.max(
     0,

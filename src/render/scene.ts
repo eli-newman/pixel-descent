@@ -1,4 +1,4 @@
-import { W } from '../core/config';
+import { PX_PER_M, START_Y, W } from '../core/config';
 import type { DeepReadonly, GameView } from '../state/view';
 import { hash2 } from '../core/rng';
 import { poseOf } from '../sim/pose';
@@ -11,6 +11,10 @@ import { getSprite } from './sprites';
 import { BOARDS, RIDERS } from '../state/progress';
 import { hudRect, riderZ, type Rect } from './layout';
 import { TrackPainter } from './track';
+
+/** The best-distance mark: its yellow edge ticks' length and the gap between the dots across the slope. */
+const BEST_TICK = 4;
+const BEST_DOT_GAP = 6;
 
 /** Draws the whole world (not the UI) into a framebuffer from the current game state. */
 export class SceneRenderer {
@@ -42,6 +46,7 @@ export class SceneRenderer {
       if (r.kind === 'cliff') this.drawCliff(r, cam);
       else this.drawRamp(r, cam);
     }
+    this.drawBestMark(g, cam);
     this.track.draw(fb, sim.trail, cam, g.progress.gear.kit === 'skis');
     this.drawLanded(g, cam);
     this.drawPickups(g, cam);
@@ -273,6 +278,20 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * Where the player's furthest run ended: a sparse dotted line across the snow with a short yellow tick at each
+   * edge, flat like a pebble, so it reads as a mark, not a thing to dodge. Far lighter than the old ghost rider.
+   */
+  private drawBestMark(g: GameView, cam: number): void {
+    const m = g.bestMarkM;
+    if (m === null || g.phase === 'title') return;
+    const y = START_Y + m * PX_PER_M - cam;
+    if (y < 0 || y >= this.fb.h) return;
+    for (let x = BEST_TICK + 3; x < W - BEST_TICK - 3; x += BEST_DOT_GAP) this.fb.put(x, y, WHITE);
+    this.fb.fillRect(1, y, BEST_TICK, 1, YELLOW);
+    this.fb.fillRect(W - 1 - BEST_TICK, y, BEST_TICK, 1, YELLOW);
+  }
+
   private style(g: GameView): RiderStyle {
     const gear = g.progress.gear;
     return {
@@ -295,7 +314,7 @@ export class SceneRenderer {
     const sx = Math.round(g.riderX);
     const sy = Math.round(g.riderY - cam);
     if (sim.crashed) {
-      drawWipeout(this.fb, sx, sy + 10, sim.crashT, sim.crashFace, g.progress.gear.kit === 'skis');
+      drawWipeout(this.fb, sx, sy + 10, sim.crashT, sim.crashFace, this.style(g));
       return;
     }
     const z = Math.round(riderZ(sim));

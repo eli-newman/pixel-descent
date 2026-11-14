@@ -550,17 +550,31 @@ function drawPause(fb: Framebuffer, g: GameView): void {
   textC(fb, 'P, ESC OR TAP TO RESUME', CX, 218, HOT);
 }
 
+/**
+ * Game over's line under the score: a new best, or how close the run came to the best (`best`, which already counts
+ * this run). On a friend's dare their score is the one to measure against (the line under the stats), so this line
+ * just names the best. Nothing before there is a best at all.
+ */
+export function bestLine(
+  res: Readonly<{ score: number; newBest: boolean }>,
+  best: number,
+  dare: boolean,
+): { text: string; hot: boolean } | null {
+  if (res.newBest) return { text: 'NEW BEST!', hot: true };
+  if (best <= 0) return null;
+  if (dare) return { text: `BEST ${best}`, hot: false };
+  if (res.score >= best) return { text: 'TIED YOUR BEST', hot: true };
+  return { text: `${best - res.score} SHORT OF YOUR BEST`, hot: false };
+}
+
 function drawOver(fb: Framebuffer, g: GameView): void {
   const res = g.result;
   if (!res) return;
   const top = OVER_PANEL_TOP;
   textC(fb, g.crashWord, CX, top + 6, INK, 2);
   textC(fb, String(res.score), CX, top + 21, HOT, 3);
-  if (res.newBest) {
-    textC(fb, 'NEW BEST!', CX, top + 41, HOT);
-  } else {
-    textC(fb, `BEST ${g.overallBest}`, CX, top + 41, INK);
-  }
+  const best = bestLine(res, g.overallBest, g.dare !== null);
+  if (best) textC(fb, best.text, CX, top + 41, best.hot ? HOT : INK);
   const sm = res.summary;
   textC(fb, `${res.dist}M  STARS ${sm.stars}  CLOSE ${sm.nearMisses}`, CX, top + 51);
   textC(fb, `TRICKS ${sm.tricks}  COMBO X${Math.max(1, sm.maxCombo)}`, CX, top + 60);

@@ -137,7 +137,7 @@ describe('the skier sprite', () => {
     for (const t of [0.1, 0.4, 0.8, 1.5]) {
       const ski = new Framebuffer(W, H);
       const board = new Framebuffer(W, H);
-      drawWipeout(ski, 90, 160, t, -1, true);
+      drawWipeout(ski, 90, 160, t, -1, SKIS);
       drawWipeout(board, 90, 160, t, -1);
       if (lit(ski) < 20 || sameImage(ski, board)) missing.push(t);
     }

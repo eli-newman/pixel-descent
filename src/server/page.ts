@@ -1,14 +1,14 @@
 import { encodeDare, type Dare } from '../core/dare';
-import { isDailySeed } from '../core/rng';
-import { CARD_H, CARD_SCALE, CARD_W, endLine } from '../render/share';
+import { CARD_H, CARD_SCALE, CARD_W, dailyDay, endLine } from '../render/share';
 
 function escape(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-/** The preview's title: the score to beat. */
+/** The preview's title: the score to beat, and on a daily course its day (the link may be opened days later). */
 export function dareTitle(d: Readonly<Dare>): string {
-  return isDailySeed(d.seed) ? `Beat ${d.score} on today's Powline` : `Beat ${d.score} on Powline`;
+  const day = dailyDay(d.seed);
+  return day === null ? `Beat ${d.score} on Powline` : `Beat ${d.score} on Powline Daily ${day}`;
 }
 
 /** The preview's description: the run in a sentence, then the dare. */

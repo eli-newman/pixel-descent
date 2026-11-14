@@ -5,7 +5,7 @@ import cardHandler from '../src/server/cardHandler';
 import { cardPng } from '../src/server/card';
 import type { Req, Res } from '../src/server/http';
 import { originOf } from '../src/server/http';
-import { darePage } from '../src/server/page';
+import { dareDescription, darePage, dareTitle } from '../src/server/page';
 import pageHandler from '../src/server/pageHandler';
 import { crc32, encodePng } from '../src/server/png';
 
@@ -17,6 +17,8 @@ const DARE: Dare = {
   tricks: 3,
   end: 'tree',
   skis: false,
+  board: 0,
+  rider: 0,
 };
 const CODE = 'k3m9qa-1240-312-4-3-t';
 
@@ -119,7 +121,10 @@ describe('dare page', () => {
       { ...DARE, stars: 1, tricks: 1, seed: 'd20261113' },
       'https://x.app',
     );
-    expect(one).toContain('Beat 1240 on today&#39;s Powline');
+    expect(one).toContain('Beat 1240 on Powline Daily 13 Nov');
+    // The seed is only in the link itself, never in the words.
+    expect(dareTitle({ ...DARE, seed: 'd20261113' })).not.toContain('2026');
+    expect(dareDescription({ ...DARE, seed: 'd20261113' })).not.toContain('2026');
     expect(one).toContain('312m, 1 star, 1 trick, then');
   });
 });

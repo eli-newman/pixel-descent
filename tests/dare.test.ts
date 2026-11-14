@@ -14,6 +14,8 @@ const DARE: Dare = {
   tricks: 3,
   end: 'tree',
   skis: false,
+  board: 0,
+  rider: 0,
 };
 
 describe('dare codes', () => {
@@ -28,6 +30,31 @@ describe('dare codes', () => {
     }
   });
 
+  it('carry the look only when it is not the plain one', () => {
+    const d = { ...DARE, board: 2, rider: 3 };
+    expect(encodeDare(d)).toBe('k3m9qa-1240-312-4-3-t-23');
+    expect(decodeDare(encodeDare(d))).toEqual(d);
+    const s = { ...DARE, skis: true, board: 0, rider: 1 };
+    expect(encodeDare(s)).toBe('k3m9qa-1240-312-4-3-ts-01');
+    expect(decodeDare(encodeDare(s))).toEqual(s);
+    // Out of range looks are clamped to one digit, never a broken code.
+    expect(encodeDare({ ...DARE, board: 42, rider: -1 })).toBe('k3m9qa-1240-312-4-3-t-90');
+  });
+
+  it('still read codes sent before looks were, in the plain look', () => {
+    for (const [code, skis] of [
+      ['k3m9qa-1240-312-4-3-t', false],
+      ['d20261113-88-40-0-0-ls', true],
+    ] as const) {
+      const d = decodeDare(code);
+      expect(d).not.toBeNull();
+      expect(d?.skis).toBe(skis);
+      expect(d?.board).toBe(0);
+      expect(d?.rider).toBe(0);
+      expect(d && encodeDare(d)).toBe(code);
+    }
+  });
+
   it('turn away anything that is not a dare', () => {
     for (const bad of [
       null,
@@ -39,6 +66,9 @@ describe('dare codes', () => {
       'k3m9qa--1240-312-4-3-t',
       'k3m9qa-12.5-312-4-3-t',
       'k3m9qa-1240-312-4-3-t-extra',
+      'k3m9qa-1240-312-4-3-t-1',
+      'k3m9qa-1240-312-4-3-t-123',
+      'k3m9qa-1240-312-4-3-t-',
       'abcdefghijklm-1-1-1-1-t',
       'k3m9qa-12345678-1-1-1-t',
       '<script>-1-1-1-1-t',
@@ -127,6 +157,23 @@ describe('playing a dare', () => {
     expect(sent.dist).toBe(game.result?.dist);
     expect(sent.end).toBe(game.sim.crashCause === 'bail' ? 'bail' : game.sim.killer?.kind);
     expect(sent.skis).toBe(false);
+    expect(sent.board).toBe(0);
+    expect(sent.rider).toBe(0);
+  });
+
+  it("sends the player's unlocked look along with the dare", async () => {
+    const { game, input, shared, store } = makeGame('x');
+    const p = store.progress();
+    p.stats.tricks = 10;
+    p.stats.nearMisses = 50;
+    p.gear = { board: 'dots', rider: 'ears', kit: 'skis' };
+    input.push('start');
+    stepUntil(game, () => game.phase === 'over');
+    stepUntil(game, () => game.overReady);
+    await game.share();
+    const sent = shared[0] as Dare;
+    expect([sent.board, sent.rider, sent.skis]).toEqual([2, 3, true]);
+    expect(decodeDare(encodeDare(sent))).toEqual(sent);
   });
 
   it('labels its runs as a dare in analytics', () => {

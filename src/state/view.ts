@@ -81,6 +81,11 @@ export interface GameView {
   readonly settings: Readonly<Settings>;
   readonly progress: DeepReadonly<Progress>;
   readonly overallBest: number;
+  /**
+   * How far the player's furthest run went, in metres, as it stood when this run began, for a quiet mark on the
+   * slope; null for a player with no runs behind them.
+   */
+  readonly bestMarkM: number | null;
   /** Best score on today's daily course. */
   readonly dailyBest: number;
   readonly topRuns: readonly Readonly<ScoreEntry>[];

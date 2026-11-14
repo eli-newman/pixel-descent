@@ -448,7 +448,7 @@ function headgear(set: Mask, kind: number, head: Pt, mv: 1 | -1, time: number): 
  * A wipeout: the rider tumbles through the air, lands, and lies in the snow. Drawn as a small
  * stick figure rotated about its middle, in the same one-colour style as the riding pose.
  * `t` is seconds since the crash, `face` the side the rider was heading to. A skier tumbles with
- * crossed skis and his poles.
+ * crossed skis and his poles. The look comes along (`style`): the board's pattern and the headgear.
  */
 export function drawWipeout(
   fb: Framebuffer,
@@ -456,7 +456,7 @@ export function drawWipeout(
   y: number,
   t: number,
   face: 1 | -1,
-  skis = false,
+  style: Readonly<RiderStyle> = DEFAULT_STYLE,
 ): void {
   const AIR = 0.75;
   const p = Math.min(1, t / AIR);
@@ -479,6 +479,11 @@ export function drawWipeout(
     const B = tx(b[0], b[1]);
     set.line(A[0], A[1], B[0], B[1], th);
   };
+  const dot = (px: number, py: number): void => {
+    const q = tx(px, py);
+    set.add(q[0], q[1]);
+  };
+  const skis = style.skis;
   if (skis) {
     // Two skis crossed under the boots, and the poles still in the hands.
     seg([-9, 1], [9, -1], 1);
@@ -496,12 +501,57 @@ export function drawWipeout(
     seg([4, -13], [11, -15], 1); // poles
   }
   for (let j = 0; j < 3; j += 0.5) {
-    for (let i = -2; i <= 1.5; i += 0.5) {
-      const q = tx(i, -14 + j);
-      set.add(q[0], q[1]);
+    for (let i = -2; i <= 1.5; i += 0.5) dot(i, -14 + j);
+  }
+  wipeoutHeadgear(dot, style.rider, t);
+  wipeoutBoardLook(set, tx, style);
+  set.stamp(fb);
+}
+
+/** The headgear on a wiped out rider, in his own frame (head on top, from -14 to -11): the same four looks. */
+function wipeoutHeadgear(dot: (x: number, y: number) => void, kind: number, t: number): void {
+  if (kind === 1) {
+    for (let i = -2; i <= 1; i++) dot(i, -14.5); // taller hat
+    dot(-1, -15.5);
+    dot(0, -15.5);
+    dot(-0.5, -16.5); // bobble
+  } else if (kind === 2) {
+    // the scarf streaming out from the neck, still rippling as he tumbles
+    for (let k = 1; k <= 6; k++) {
+      dot(k + 1, -10.5 + Math.round(Math.sin(t * 14 + k * 0.9) * (0.3 + k * 0.15)));
+    }
+  } else if (kind === 3) {
+    // two ears splaying out from the top corners of the head
+    for (let j = 1; j <= 2; j++) {
+      dot(-1.5 - j * 0.6, -14 - j);
+      dot(1.5 + j * 0.6, -14 - j);
     }
   }
-  set.stamp(fb);
+}
+
+/**
+ * The board's look on a wiped out board (or the near ski): pixels cut out along one side, stripes in pairs and dots
+ * one at a time, and a twin tip notched at both ends.
+ */
+function wipeoutBoardLook(
+  set: Mask,
+  tx: (x: number, y: number) => Pt,
+  style: Readonly<RiderStyle>,
+): void {
+  // Along one side of the board, or down the near ski (from (-9, 1) to (9, -1)).
+  const cut = (u: number): void => {
+    const q = tx(u, style.skis ? -u / 9 : 0.5);
+    set.delete(q[0], q[1]);
+  };
+  for (let u = -6; u <= 6; u++) {
+    const k = u + 6;
+    if (style.board === 1 && k % 4 < 2) cut(u);
+    if (style.board === 2 && k % 4 === 1) cut(u);
+  }
+  if (style.board === 3) {
+    cut(-9);
+    cut(9);
+  }
 }
 
 /** Seconds a wipeout tumbles before the rider lies still and the birds come. */

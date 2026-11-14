@@ -38,6 +38,21 @@ test.describe('dare links', () => {
     expect((await request.get('/c/not-a-dare/card.png')).status()).toBe(404);
   });
 
+  test("draw the rider's look on the card, and a daily run as that day's result", async ({
+    request,
+  }) => {
+    const plain = await request.get(`/c/${CODE}/card.png`);
+    const dressed = await request.get(`/c/${CODE}-23/card.png`);
+    expect(dressed.status()).toBe(200);
+    expect(new Uint8Array(await dressed.body())).not.toEqual(new Uint8Array(await plain.body()));
+
+    const daily = await request.get('/c/d20261114-1240-312-4-3-t');
+    expect(daily.status()).toBe(200);
+    const html = await daily.text();
+    expect(html).toContain('content="Beat 1240 on Powline Daily 14 Nov"');
+    expect((await request.get('/c/d20261114-1240-312-4-3-t-11/card.png')).status()).toBe(200);
+  });
+
   test('open on the course, hide the code, and send the run back as a new dare', async ({
     page,
     context,

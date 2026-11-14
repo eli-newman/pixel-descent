@@ -1,7 +1,15 @@
 import type { Dare, DareEnd } from '../core/dare';
 import type { Sim } from '../sim/sim';
 import type { ObstacleKind } from '../sim/types';
-import { applyRun, type Achievement, type GearDef, type RunSummary } from './progress';
+import {
+  applyRun,
+  boardIndex,
+  riderIndex,
+  type Achievement,
+  type Gear,
+  type GearDef,
+  type RunSummary,
+} from './progress';
 import type { Store } from './storage';
 
 /** What the game over screen shows about the run that just ended. */
@@ -63,8 +71,8 @@ export function runEnd(cause: RunSummary['cause'], hit: ObstacleKind | null): Da
   return cause === 'bail' || hit === null ? 'bail' : hit;
 }
 
-/** A finished run as a dare for a friend: its course, score and stats, and how it ended. */
-export function toCard(res: RunResult, hit: ObstacleKind | null, skis: boolean): Dare {
+/** A finished run as a dare for a friend: its course, score and stats, how it ended and the look it was ridden in. */
+export function toCard(res: RunResult, hit: ObstacleKind | null, gear: Readonly<Gear>): Dare {
   const s = res.summary;
   return {
     seed: s.seed,
@@ -73,6 +81,8 @@ export function toCard(res: RunResult, hit: ObstacleKind | null, skis: boolean):
     stars: s.stars,
     tricks: s.tricks,
     end: runEnd(s.cause, hit),
-    skis,
+    skis: gear.kit === 'skis',
+    board: boardIndex(gear.board),
+    rider: riderIndex(gear.rider),
   };
 }
