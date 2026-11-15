@@ -5,7 +5,7 @@ import { SceneRenderer } from '../src/render/scene';
 import { renderUi } from '../src/render/ui';
 import type { Game } from '../src/state/game';
 import { botInput } from './helpers/bot';
-import { makeGame, type FakeInput } from './helpers/fakes';
+import { makeGame, stepUntil, type FakeInput } from './helpers/fakes';
 
 /**
  * Golden frames: the real scene and UI renderers, hashed pixel for pixel at fixed points of one
@@ -206,5 +206,31 @@ describe('golden frames', () => {
 
   it('is repeatable', () => {
     expect(capture().frames).toEqual(capture().frames);
+  });
+});
+
+describe('game over key hints', () => {
+  it('shows SPACE NEW R RETRY C SHARE on a keyboard and nothing there on a touch screen', () => {
+    const { game, input } = makeGame(SEED);
+    input.push('start');
+    stepUntil(game, () => game.phase === 'over');
+    stepUntil(game, () => game.overReady);
+    const scene = new SceneRenderer(new Framebuffer(W, H));
+    const frame = (touch: boolean): Uint8ClampedArray => {
+      input.usingTouch = touch;
+      const out = scene.render(game);
+      renderUi(out, game);
+      // the renderer reuses its buffer, so keep a copy
+      return out.data.slice();
+    };
+    const keys = frame(false);
+    const touch = frame(true);
+    // the hint is the only difference, and it is white text on the keyboard's frame only
+    let differ = 0;
+    for (let i = 0; i < keys.length; i += 4) {
+      if (keys[i] !== touch[i] || keys[i + 1] !== touch[i + 1]) differ++;
+    }
+    expect(differ).toBeGreaterThan(50);
+    expect(differ).toBeLessThan(1500);
   });
 });
