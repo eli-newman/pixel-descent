@@ -21,7 +21,7 @@ import { detExp } from '../core/detMath';
 import { obstacleBox } from './collision';
 import { maxFlightPx, topSpeed } from './speed';
 import { Rng } from '../core/rng';
-import type { CliffSeg, Obstacle, ObstacleKind, Patch, Ramp, SpawnBatch } from './types';
+import type { CliffSeg, Obstacle, ObstacleKind, Ramp, SpawnBatch } from './types';
 
 /** Nothing spawns in the rows right below the start gate. */
 export const FIRST_ROW_Y = START_Y + 70;
@@ -47,8 +47,6 @@ const LANDING_MARGIN = 110;
 const FIRST_RAMP_Y = START_Y + FIRST_JUMP_Y;
 /** Clear ground kept between a jump (lip or landing end) and a risk lane. */
 const LANE_JUMP_PAD = 60;
-/** Ice and drifts stay this far (plus their own radius) from a jump's lip, so the run-up is plain snow. */
-const JUMP_PATCH_PAD = 40;
 /**
  * After the last kicker of a line the clear ground runs on until a rider who landed on the line's x can
  * be back inside the open path: steering in over LINE_TURN_IN px, then moving LINE_RETURN_SLOPE px
@@ -59,6 +57,20 @@ const LINE_RETURN_SLOPE = 0.5;
 const LINE_RETURN_BODY = 10;
 const FIRST_LANE_Y = START_Y + 1500;
 const FIRST_PATCH_Y = START_Y + 800;
+
+/**
+ * The tutorial course (`TUTORIAL_SEED`) is gentler at the top, so a new player meets one new thing at a time, each
+ * before the next: fewer trees and rocks (`GENTLE_DENSITY` of the usual chance, back to the usual by
+ * `GENTLE_END_M`), the first star lane at `GENTLE_LANE_Y`, then one plain kicker (no line) no sooner than
+ * `GENTLE_JUMP_Y`, then a cliff (`GENTLE_CLIFF_GAP` further on than usual), and no trees pressing in on that first lane. Every draw is still made, so only what
+ * those draws decide changes.
+ */
+const GENTLE_DENSITY = 0.45;
+const GENTLE_END_M = 420;
+const GENTLE_LANE_Y = START_Y + 1800;
+const GENTLE_JUMP_Y = START_Y + 2900;
+/** Extra ground between the tutorial course's kicker and its cliff. */
+const GENTLE_CLIFF_GAP = 250;
 
 /**
  * Half width of the guaranteed open path at a given distance. It narrows as the run gets harder,
@@ -148,7 +160,6 @@ export class Spawner {
   private nextObstacleId = 1;
   private nextPickupId = 1;
   private nextRampId = 1;
-  private nextPatchId = 1;
   private nextRampY = FIRST_RAMP_Y;
   /** Where the clear ground of the last planned jump ends. Nothing new is planned above it. */
   private clearEnd = FIRST_ROW_Y;
@@ -156,24 +167,29 @@ export class Spawner {
   private nextPatchY = FIRST_PATCH_Y;
   private nextLaneStarLane = 0;
   private nextRampOut = 0;
-  private nextPatchOut = 0;
   private readonly bands: number[] = [START_X];
   /** Start y of each path band (bandStart[i] is where band i begins). */
   private readonly bandStart: number[] = [SAFE_LANE_END_Y];
   private recent: Obstacle[] = [];
+  /** How many jumps or lines have been planned: the tutorial course's first is a kicker, its second a cliff. */
+  private planned = 0;
   /** Planned features, in order of y. Public for the renderer, the sim and tests. */
   readonly lanes: Lane[] = [];
   readonly ramps: Ramp[] = [];
-  readonly patches: Patch[] = [];
 
-  constructor(seed: number) {
+  /** `gentle`: the tutorial course (see `GENTLE_DENSITY`). */
+  constructor(
+    seed: number,
+    private readonly gentle = false,
+  ) {
     this.rng = new Rng(seed);
     this.bandRng = new Rng(seed ^ 0x9e3779b9);
     this.rampRng = new Rng(seed ^ 0x2545f491);
     this.patchRng = new Rng(seed ^ 0x51ed270b);
     this.laneRng = new Rng(seed ^ 0x6c8e9cf5);
     this.hugRng = new Rng(seed ^ 0x3c6ef372);
-    this.pendingLane = this.drawLane(FIRST_LANE_Y);
+    this.pendingLane = this.drawLane(gentle ? GENTLE_LANE_Y : FIRST_LANE_Y);
+    if (gentle) this.nextRampY = Math.max(this.nextRampY, GENTLE_JUMP_Y);
   }
 
   /** Centre x of the guaranteed open path at world y. */
@@ -233,7 +249,6 @@ export class Spawner {
       obstacles: [],
       pickups: [],
       ramps: [],
-      patches: [],
     };
     this.planFeatures(toY + 60);
     this.planPatches(toY + 60);
@@ -253,12 +268,6 @@ export class Spawner {
       batch.ramps.push(r);
       this.nextRampOut++;
     }
-    while (this.nextPatchOut < this.patches.length) {
-      const p = this.patches[this.nextPatchOut];
-      if (!p || p.y >= toY) break;
-      batch.patches.push(p);
-      this.nextPatchOut++;
-    }
     return batch;
   }
 
@@ -277,20 +286,6 @@ export class Spawner {
     return null;
   }
 
-  private nearLane(y: number, pad: number): boolean {
-    for (const l of this.lanes) if (y >= l.y0 - pad && y <= l.y1 + pad) return true;
-    return false;
-  }
-
-  /** True when world y is within `pad` of a jump's lip, or of the run-ups between the kickers of a line. */
-  private nearJump(y: number, pad: number): boolean {
-    for (const r of this.ramps) {
-      if (Math.abs(r.y - y) < pad) return true;
-      if (r.lineIdx < r.lineLen - 1 && y > r.y - pad && y < r.landEnd + pad) return true;
-    }
-    return false;
-  }
-
   /**
    * Plan jumps and risk lanes until nothing new can start above `limit`. They are planned together, in
    * order down the slope, so they take turns and never share ground. Each jump gets a solid-free landing
@@ -307,12 +302,15 @@ export class Spawner {
   private planFeatures(limit: number): void {
     while (this.clearEnd <= limit) {
       let y = Math.round(this.nextRampY + this.rampRng.range(0, JUMP_JITTER));
-      const cliff = this.rampRng.chance(CLIFF_CHANCE);
+      const rolled = this.rampRng.chance(CLIFF_CHANCE);
       const lineRoll = this.rampRng.next();
       const threeRoll = this.rampRng.next();
       const distM = (y - START_Y) / PX_PER_M;
+      const first = this.gentle && this.planned < 2;
+      const cliff = first ? this.planned === 1 : rolled;
+      this.planned++;
       const count =
-        cliff || lineRoll >= lineChance(distM) ? 1 : threeRoll < LINE_THREE_CHANCE ? 3 : 2;
+        first || cliff || lineRoll >= lineChance(distM) ? 1 : threeRoll < LINE_THREE_CHANCE ? 3 : 2;
       const runups: number[] = [];
       for (let k = 1; k < count; k++)
         runups.push(Math.round(this.rampRng.range(LINE_RUNUP_MIN, LINE_RUNUP_MAX)));
@@ -339,6 +337,7 @@ export class Spawner {
       }
       this.clearEnd = end;
       this.nextRampY = end + this.rampRng.range(JUMP_GAP_MIN, JUMP_GAP_MAX);
+      if (first && !cliff) this.nextRampY += GENTLE_CLIFF_GAP;
       const segs = cliff ? this.cliffSegs() : [];
       const seed = cliff ? this.rampRng.int(1, 100000) : 0;
       const x = cliff ? W / 2 : Math.round(this.pathCenter(y));
@@ -431,42 +430,29 @@ export class Spawner {
     return segs;
   }
 
-  /** Plan ice patches and snowdrifts up to `limit`. */
+  /**
+   * Plan snowdrifts up to `limit`. Ice patches were removed (tag `archive/ice`), but every draw they made is still
+   * made in the same order, so drifts, jumps and lanes stay where they were and a shared link opens the same course.
+   */
+  /**
+   * The stream that once placed ice and deep snow. Both were removed (tags `archive/ice`, `archive/deep-snow`), but
+   * its draws and the jump planning it triggers stay exactly as they were, so every course keeps its trees, jumps,
+   * lanes and stars where they always were and shared links still open the same course.
+   */
   private planPatches(limit: number): void {
     while (this.nextPatchY <= limit) {
       const y = Math.round(this.nextPatchY + this.patchRng.range(0, 120));
       this.nextPatchY = y + this.patchRng.range(230, 400);
+      // The same draws, in the same order, as when they placed a patch: kind, on the path, radii, side, slack, look.
       const ice = this.patchRng.chance(0.45);
-      const onPath = this.patchRng.chance(0.3);
-      const rx = Math.round(ice ? this.patchRng.range(18, 32) : this.patchRng.range(15, 26));
-      const ry = Math.round(ice ? this.patchRng.range(16, 26) : this.patchRng.range(12, 20));
-      const side = this.patchRng.chance(0.5) ? 1 : -1;
-      const slack = this.patchRng.range(0, 24);
-      const variant = this.patchRng.int(0, 3);
+      this.patchRng.chance(0.3);
+      const [rxMin, rxMax, ryMin, ryMax] = ice ? [18, 32, 16, 26] : [15, 26, 12, 20];
+      this.patchRng.range(rxMin, rxMax);
+      const ry = Math.round(this.patchRng.range(ryMin, ryMax));
+      this.patchRng.chance(0.5);
+      this.patchRng.range(0, 24);
+      this.patchRng.int(0, 3);
       this.planFeatures(y + ry + 80);
-      if (this.nearLane(y, ry + 30)) continue;
-      // Keep the run-up and the lip of every jump clean: no ice or drift drawn over it or slowing the rider into it.
-      if (this.nearJump(y, ry + JUMP_PATCH_PAD)) continue;
-      const distM = (y - START_Y) / PX_PER_M;
-      const centre = this.pathCenter(y);
-      let x: number;
-      if (onPath) {
-        // Ice on the path only where the path is nearly straight, so a loose board can still hold the line.
-        if (ice && Math.abs(this.pathCenter(y - ry) - this.pathCenter(y + ry)) > 12) continue;
-        x = centre + side * Math.min(8, slack / 3);
-      } else {
-        x = centre + side * (pathHalfWidth(distM) + rx + 4 + slack);
-      }
-      if (x < rx * 0.5 || x > W - rx * 0.5) x = Math.min(W - rx * 0.5, Math.max(rx * 0.5, x));
-      this.patches.push({
-        id: this.nextPatchId++,
-        kind: ice ? 'ice' : 'drift',
-        x: Math.round(x),
-        y,
-        rx,
-        ry,
-        variant,
-      });
     }
   }
 
@@ -474,7 +460,7 @@ export class Spawner {
     const distM = (y - START_Y) / PX_PER_M;
     const gap = pathHalfWidth(distM);
     const center = this.pathCenter(y);
-    const tries = this.rng.chance(density(distM)) ? 1 + (this.rng.chance(0.45) ? 1 : 0) : 0;
+    const tries = this.rng.chance(this.density(distM)) ? 1 + (this.rng.chance(0.45) ? 1 : 0) : 0;
     for (let t = 0; t < tries; t++) this.tryObstacle(y, distM, gap, center, batch);
     // A denser forest hugs both sides of the slope.
     if (this.rng.chance(SIDE_FOREST_CHANCE)) {
@@ -485,11 +471,19 @@ export class Spawner {
     // Trees press in on both sides of a risk lane, which is what makes it risky.
     const lane = this.laneAt(y);
     if (lane && y > lane.y0 + LANE_END_STRIP && y < lane.y1 - LANE_END_STRIP) {
-      if (this.hugRng.chance(0.55)) {
+      const calm = this.gentle && lane === this.lanes[0];
+      if (this.hugRng.chance(0.55) && !calm) {
         const side = this.hugRng.chance(0.5) ? 1 : -1;
         this.tryObstacle(y, distM, gap, center, batch, undefined, { lane, side }, this.hugRng);
       }
     }
+  }
+
+  /** Chance of an obstacle in a row: `density`, thinned out at the top of the tutorial course. */
+  private density(distM: number): number {
+    const d = density(distM);
+    if (!this.gentle || distM >= GENTLE_END_M) return d;
+    return d * (GENTLE_DENSITY + ((1 - GENTLE_DENSITY) * Math.max(0, distM)) / GENTLE_END_M);
   }
 
   /** True when a solid obstacle with this half width at (x, y) would break a guarantee. */
@@ -536,7 +530,6 @@ export class Spawner {
       y: Math.round(y + rng.range(-3, 3)),
       half: pick.half,
       judged: false,
-      touched: false,
     };
     const box = obstacleBox(probe);
     const w = box ? (box.x1 - box.x0) / 2 : 0;

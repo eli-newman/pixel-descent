@@ -3,7 +3,7 @@ import { H, W } from '../src/core/config';
 import { Framebuffer, GREY, SOFT_GREY, WHITE } from '../src/render/framebuffer';
 import { TrackPainter } from '../src/render/track';
 import { Trail } from '../src/sim/trail';
-import { POWDER, PROBE } from './helpers/probe';
+import { POWDER } from './helpers/probe';
 
 /** Record a path the way the sim does: a point every 1.5px of travel. */
 function trailFrom(path: (y: number) => number, from = 10, to = 310): Trail {
@@ -14,7 +14,7 @@ function trailFrom(path: (y: number) => number, from = 10, to = 310): Trail {
 
 function paint(t: Trail, cam = 0): Framebuffer {
   const fb = new Framebuffer(W, H);
-  new TrackPainter().draw(fb, t, cam, false, PROBE);
+  new TrackPainter(POWDER).draw(fb, t, cam, false);
   return fb;
 }
 

@@ -1,46 +1,22 @@
 import { START_X, W } from '../core/config';
 import { Rng } from '../core/rng';
 import { Framebuffer, OFF, WHITE } from './framebuffer';
-import { C } from './palette';
 
 /** Height of the pre-rendered start area (peaks, foothills, gate), in world pixels. */
 export const BACKDROP_H = 124;
 const BASE = 106;
-/** Colour mode: the row where the deep blue of the upper sky starts to fade into the paler blue. */
-const SKY_BLEND = 34;
 
-/** What a backdrop pixel is. Black and white draws every part but `body` and `clear` in white. */
+/** What a backdrop pixel is. Every part but `body` and `clear` is drawn in white; those two are black. */
 type Part = 'clear' | 'body' | 'edge' | 'cap' | 'hatch' | 'ridge' | 'hill';
 
-/** Colour mode: blue sky, slate peaks with white snow caps, a slate outline. */
-function colorOf(part: Part, dim: boolean): number {
-  switch (part) {
-    case 'clear':
-    case 'body':
-      return dim ? C.peakFar : C.peak;
-    case 'edge':
-      return C.peakLine;
-    case 'cap':
-      return C.white;
-    case 'hatch':
-    case 'ridge':
-      return C.peakShade;
-    case 'hill':
-      return C.peakShade;
-  }
-}
-
-function drawPeaks(fb: Framebuffer, color: boolean): void {
+function drawPeaks(fb: Framebuffer): void {
   const rng = new Rng(7);
-  let dim = false;
   const paint = (x: number, y: number, part: Part): void => {
-    if (color) fb.put(x, y, colorOf(part, dim));
-    else fb.put(x, y, part === 'clear' || part === 'body' ? OFF : WHITE);
+    fb.put(x, y, part === 'clear' || part === 'body' ? OFF : WHITE);
   };
   const jit = (y: number, c: number): number =>
     ((y * 37 + c * 11) % 5 === 0 ? 1 : 0) - ((y * 53 + c * 7) % 7 === 0 ? 1 : 0);
   const peak = (cx: number, top: number, hw: number, far: boolean): void => {
-    dim = far;
     const edge = (y: number): number => Math.round((hw * (y - top)) / (BASE - top)) + jit(y, cx);
     for (let y = top; y <= BASE; y++) {
       const e = Math.max(0, edge(y));
@@ -86,9 +62,9 @@ function drawPeaks(fb: Framebuffer, color: boolean): void {
 }
 
 /** Start gate: two poles, a banner and a checkered strip. */
-function drawGate(fb: Framebuffer, x: number, y: number, color: boolean): void {
-  const pole = color ? C.gateDark : WHITE;
-  const banner = color ? C.gate : WHITE;
+function drawGate(fb: Framebuffer, x: number, y: number): void {
+  const pole = WHITE;
+  const banner = WHITE;
   for (let j = 0; j < 18; j++) {
     fb.put(x - 14, y - j, pole);
     fb.put(x + 14, y - j, pole);
@@ -102,37 +78,17 @@ function drawGate(fb: Framebuffer, x: number, y: number, color: boolean): void {
   }
 }
 
-/** The pre-rendered start area: world-space x,y pairs and the colour of each. */
-export interface Backdrop {
-  readonly pts: Int16Array;
-  readonly colors: Uint32Array;
-}
-
 /**
- * The peaks and start gate. In colour the sky behind them is part of it, fading from a deeper blue at the top
- * down to the horizon, and the snow below the horizon is left to the slope.
+ * The peaks and start gate, pre-rendered once: the world-space x,y pairs of their white pixels, drawn in white over
+ * the black slope.
  */
-export function buildBackdrop(color: boolean): Backdrop {
+export function buildBackdrop(): Int16Array {
   const fb = new Framebuffer(W, BACKDROP_H);
-  if (color) {
-    // Two blues: the deeper one high up, a checker of both between them so the fade has no hard line.
-    for (let y = 0; y <= BASE; y++) {
-      for (let x = 0; x < W; x++) {
-        const deep = y < SKY_BLEND || (y < SKY_BLEND + 6 && (x + y) % 2 === 0);
-        fb.put(x, y, deep ? C.skyHigh : C.sky);
-      }
-    }
-  }
-  drawPeaks(fb, color);
-  drawGate(fb, START_X, 114, color);
+  drawPeaks(fb);
+  drawGate(fb, START_X, 114);
   const pts: number[] = [];
-  const colors: number[] = [];
   for (let y = 0; y < BACKDROP_H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (!fb.isOn(x, y)) continue;
-      pts.push(x, y);
-      colors.push(fb.get(x, y));
-    }
+    for (let x = 0; x < W; x++) if (fb.isOn(x, y)) pts.push(x, y);
   }
-  return { pts: Int16Array.from(pts), colors: Uint32Array.from(colors) };
+  return Int16Array.from(pts);
 }

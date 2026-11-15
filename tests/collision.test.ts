@@ -10,7 +10,7 @@ import {
 import type { Obstacle, ObstacleKind } from '../src/sim/types';
 
 function obstacle(kind: ObstacleKind, size: number, half: number, x = 100, y = 200): Obstacle {
-  return { id: 1, kind, size, variant: 0, x, y, half, judged: false, touched: false };
+  return { id: 1, kind, size, variant: 0, x, y, half, judged: false };
 }
 
 describe('collision', () => {
@@ -36,8 +36,8 @@ describe('collision', () => {
     expect(testObstacle({ x: 100, y: 192 }, obstacle('dead', 18, 6))).toBe('crash');
   });
 
-  it('slows (does not crash) on a bush', () => {
-    expect(testObstacle({ x: 100, y: 192 }, obstacle('bush', 1, 9))).toBe('slow');
+  it('crashes into a bush like anything else solid', () => {
+    expect(testObstacle({ x: 100, y: 192 }, obstacle('bush', 1, 9))).toBe('crash');
   });
 
   it('ignores pebbles', () => {
@@ -54,7 +54,8 @@ describe('collision', () => {
     const c = clearance({ x: edge, y: 192 }, rock);
     expect(c).not.toBeNull();
     expect(c ?? 99).toBeLessThanOrEqual(NEAR_MISS_PX);
-    expect(clearance({ x: 100, y: 192 }, obstacle('bush', 1, 9))).toBeNull();
+    // a bush counts for close calls like any other solid obstacle
+    expect(clearance({ x: 100, y: 192 }, obstacle('bush', 1, 9))).not.toBeNull();
   });
 
   it('detects the moment the rider crosses a line', () => {

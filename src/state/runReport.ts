@@ -1,5 +1,6 @@
-import type { ResultCardData } from '../render/share';
+import type { Dare, DareEnd } from '../core/dare';
 import type { Sim } from '../sim/sim';
+import type { ObstacleKind } from '../sim/types';
 import { applyRun, type Achievement, type GearDef, type RunSummary } from './progress';
 import type { Store } from './storage';
 
@@ -57,17 +58,21 @@ export function recordRun(store: Store, summary: RunSummary, day: string): RunRe
   };
 }
 
-export function toCard(res: RunResult, skis: boolean): ResultCardData {
+/** How a run ended, for the dare card: what was hit (`hit`, the obstacle that crashed the rider), or a bail. */
+export function runEnd(cause: RunSummary['cause'], hit: ObstacleKind | null): DareEnd {
+  return cause === 'bail' || hit === null ? 'bail' : hit;
+}
+
+/** A finished run as a dare for a friend: its course, score and stats, and how it ended. */
+export function toCard(res: RunResult, hit: ObstacleKind | null, skis: boolean): Dare {
+  const s = res.summary;
   return {
-    seed: res.summary.seed,
-    daily: res.summary.daily,
+    seed: s.seed,
     score: res.score,
     dist: res.dist,
-    stars: res.summary.stars,
-    nearMisses: res.summary.nearMisses,
-    tricks: res.summary.tricks,
-    cause: res.summary.cause,
-    newBest: res.newBest,
+    stars: s.stars,
+    tricks: s.tricks,
+    end: runEnd(s.cause, hit),
     skis,
   };
 }

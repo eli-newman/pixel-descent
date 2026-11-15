@@ -1,7 +1,6 @@
 import { BOARD_LEN, RIDER_SCALE as SC } from '../core/config';
 import { heelSide, type RiderPose } from '../sim/pose';
-import type { Framebuffer } from './framebuffer';
-import { MONO, type Palette } from './palette';
+import { OFF, WHITE, type Framebuffer } from './framebuffer';
 
 type Pt = readonly [number, number];
 
@@ -30,13 +29,10 @@ class Mask {
   private n = 0;
   private ox = 0;
   private oy = 0;
-  /** What newly added pixels are: 1 the body, 2 the board or skis. Only colour mode tells them apart. */
-  paint: 1 | 2 = 1;
 
   reset(cx: number, cy: number): void {
     for (let i = 0; i < this.n; i++) this.bits[this.touched[i] ?? 0] = 0;
     this.n = 0;
-    this.paint = 1;
     this.ox = Math.round(cx) - HALF;
     this.oy = Math.round(cy) - HALF;
   }
@@ -50,7 +46,7 @@ class Mask {
   add(x: number, y: number): void {
     const i = this.idx(x, y);
     if (i < 0 || this.bits[i] !== 0) return;
-    this.bits[i] = this.paint;
+    this.bits[i] = 1;
     this.touched[this.n++] = i;
   }
 
@@ -119,8 +115,8 @@ class Mask {
     this.touched[this.n++] = i;
   }
 
-  /** Draw the set with a one pixel halo (black, or a near black in colour) so it reads on top of trees and snow. */
-  stamp(fb: Framebuffer, pal: Readonly<Palette>): void {
+  /** Draw the set in white with a one pixel black halo, so it reads on top of trees and snow. */
+  stamp(fb: Framebuffer): void {
     const n = this.n;
     for (let k = 0; k < n; k++) {
       const i = this.touched[k] ?? 0;
@@ -129,17 +125,16 @@ class Mask {
       const y = Math.floor(i / GRID) + this.oy;
       for (let a = -1; a <= 1; a++) {
         for (let b = -1; b <= 1; b++) {
-          if (!this.has(x + a, y + b)) fb.put(x + a, y + b, pal.riderHalo);
+          if (!this.has(x + a, y + b)) fb.put(x + a, y + b, OFF);
         }
       }
     }
     for (let k = 0; k < n; k++) {
       const i = this.touched[k] ?? 0;
-      const v = this.bits[i] ?? 0;
-      if (v === 0) continue;
+      if (this.bits[i] === 0) continue;
       const x = (i % GRID) + this.ox;
       const y = Math.floor(i / GRID) + this.oy;
-      fb.put(x, y, v === 2 ? pal.riderBoard : pal.riderBody);
+      fb.put(x, y, WHITE);
     }
   }
 }
@@ -179,8 +174,6 @@ export interface DrawOptions {
   time?: number;
   /** 0..1, how far into a stop the rider is. Only the skier shows it (a hockey stop). */
   brake?: number;
-  /** The colours to draw in. Defaults to black and white. */
-  palette?: Readonly<Palette>;
 }
 
 /**
@@ -196,19 +189,17 @@ export function drawRider(
 ): void {
   const style = opts.style ?? DEFAULT_STYLE;
   if (style.skis) {
-    drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0, opts.palette ?? MONO);
+    drawSkier(fb, pose, style, opts.time ?? 0, opts.brake ?? 0);
     return;
   }
   // Mid-flip the rider tucks his limbs in, and a grab pulls the knees up; upright (or a full turn) changes nothing.
   const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
-  mask.paint = 2;
   maskBoard(mask, pose, style.board);
-  mask.paint = 1;
   maskBody(mask, pose, tuck, style.rider, opts.time ?? 0);
   if (flipping) mask.squashY(flipScale(pose.pitch));
-  mask.stamp(fb, opts.palette ?? MONO);
+  mask.stamp(fb);
 }
 
 /** The board: tail on the track head, solid capsule, outlined when it points steeply downhill. */
@@ -466,7 +457,6 @@ export function drawWipeout(
   t: number,
   face: 1 | -1,
   skis = false,
-  pal: Readonly<Palette> = MONO,
 ): void {
   const AIR = 0.75;
   const p = Math.min(1, t / AIR);
@@ -489,7 +479,6 @@ export function drawWipeout(
     const B = tx(b[0], b[1]);
     set.line(A[0], A[1], B[0], B[1], th);
   };
-  set.paint = 2;
   if (skis) {
     // Two skis crossed under the boots, and the poles still in the hands.
     seg([-9, 1], [9, -1], 1);
@@ -497,7 +486,6 @@ export function drawWipeout(
   } else {
     seg([-9, 0], [9, 0], 2); // board
   }
-  set.paint = 1;
   seg([-3, -1], [0, -4], 1);
   seg([3, -1], [0, -4], 1); // legs
   seg([0, -4], [0, -11], 3); // torso
@@ -513,7 +501,68 @@ export function drawWipeout(
       set.add(q[0], q[1]);
     }
   }
-  set.stamp(fb, pal);
+  set.stamp(fb);
+}
+
+/** Seconds a wipeout tumbles before the rider lies still and the birds come. */
+export const WIPEOUT_SETTLE = 0.9;
+
+/** Where a wiped out rider's head comes to rest, drawn by `drawWipeout` at (x, y) facing `face`. */
+export function wipeoutHead(x: number, y: number, face: 1 | -1): { x: number; y: number } {
+  // At rest the body has turned a quarter past two whole turns about the pivot (0, -6): it lies on its side, and
+  // the head (about (0, -12.5) on the body) ends up level with the pivot, out to the side it fell towards.
+  return { x: x + Math.round(6.5 * face), y: y - 6 };
+}
+
+/** Rows of a bird seen from the front, wings up and wings down: a small body with a wing out to each side. */
+const BIRD_UP = ['X.....X', '.X...X.', '..XXX..'];
+const BIRD_DOWN = ['..XXX..', '.X...X.', 'X.....X'];
+
+function birdPixels(rows: readonly string[]): ReadonlyArray<readonly [number, number]> {
+  const out: Array<readonly [number, number]> = [];
+  rows.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] === 'X') out.push([x - 3, y - 1]);
+  });
+  return out;
+}
+const BIRD_FRAMES = [birdPixels(BIRD_UP), birdPixels(BIRD_DOWN)];
+
+/** How many birds circle a fallen rider, how wide and how flat their ring is, how fast they go round and flap. */
+const BIRDS = 3;
+const BIRD_RX = 10;
+const BIRD_RY = 3;
+const BIRD_ABOVE = 8;
+const OUTLINE: ReadonlyArray<readonly [number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+const BIRD_TURN = 3.2;
+const BIRD_FLAP = 9;
+
+/**
+ * Cartoon birds circling over a fallen rider's head (`head`, from `wipeoutHead`), at time `t` in seconds: a flat
+ * ring of `BIRDS`, each flapping between wings up and wings down, with the rider's halo around them so they read
+ * over trees.
+ */
+export function drawDizzyBirds(
+  fb: Framebuffer,
+  head: Readonly<{ x: number; y: number }>,
+  t: number,
+): void {
+  const cy = head.y - BIRD_ABOVE;
+  for (let i = 0; i < BIRDS; i++) {
+    const a = t * BIRD_TURN + (i * Math.PI * 2) / BIRDS;
+    const bx = Math.round(head.x + Math.cos(a) * BIRD_RX);
+    const by = Math.round(cy + Math.sin(a) * BIRD_RY);
+    const shape = BIRD_FRAMES[Math.floor(t * BIRD_FLAP + i * 1.5) % 2] ?? [];
+    // A one pixel outline (no corners), so the bird keeps its shape and does not turn into a blob.
+    for (const [dx, dy] of shape) {
+      for (const [ox, oy] of OUTLINE) fb.put(bx + dx + ox, by + dy + oy, OFF);
+    }
+    for (const [dx, dy] of shape) fb.put(bx + dx, by + dy, WHITE);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -566,16 +615,13 @@ function drawSkier(
   style: Readonly<RiderStyle>,
   time: number,
   brake: number,
-  pal: Readonly<Palette>,
 ): void {
   const tuck = Math.max(pose.tuck, flipTuck(pose.pitch), pose.grab ? GRAB_TUCK : 0);
   const flipping = Math.abs(Math.sin((pose.pitch * Math.PI) / 360)) > 0.004;
   mask.reset(pose.x, pose.y - 10);
   const solved = solveSkier(pose, tuck, brake);
   const b = pose.grab ? skierGrab(solved) : solved;
-  mask.paint = 2;
   maskSkis(mask, pose, b, style.board);
-  mask.paint = 1;
   maskSkierBody(mask, b);
   // The helmet and face cut take the snowboarder's skeleton: from behind it is the back of the head.
   const head: Skeleton = {
@@ -597,7 +643,7 @@ function drawSkier(
   headgear(mask, style.rider, b.head, b.mv, time);
   cutFace(mask, head);
   if (flipping) mask.squashY(flipScale(pose.pitch));
-  mask.stamp(fb, pal);
+  mask.stamp(fb);
 }
 
 function solveSkier(pose: Readonly<RiderPose>, tuck: number, brake: number): SkierSkeleton {
@@ -843,13 +889,10 @@ function maskSkierBody(set: Mask, b: Readonly<SkierSkeleton>): void {
     const from: Pt = b.square ? [sh[0] + Math.sign(h[0] - sh[0]) * 3, sh[1]] : [sh[0], sh[1] + 1];
     set.line(from[0], from[1], e[0], e[1], 1);
     set.line(e[0], e[1], h[0], h[1], 1); // arm
-    // Poles are the colour of the skis in colour mode, so they read apart from the arms.
-    set.paint = 2;
     set.line(h[0], h[1], t[0], t[1], 1); // pole
     // The basket, a nub just above the tip on the outside, is what tells a pole from an arm.
     const out = t[0] >= h[0] ? 1 : -1;
     const up = t[1] >= h[1] ? -2 : 2;
     set.add(t[0] + out, t[1] + up);
-    set.paint = 1;
   }
 }

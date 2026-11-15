@@ -6,6 +6,7 @@ import {
   PX_PER_M,
   START_X,
   START_Y,
+  TUTORIAL_SEED,
 } from '../src/core/config';
 import { circleHitsBox, obstacleBox, RIDER_RADIUS } from '../src/sim/collision';
 import { hashSeed } from '../src/core/rng';
@@ -72,6 +73,45 @@ describe('spawner', () => {
   });
 });
 
+describe('the tutorial course', () => {
+  it('starts gentle: fewer obstacles, the stars, then one plain kicker, then a cliff', () => {
+    const gentle = new Spawner(hashSeed(TUTORIAL_SEED), true);
+    const plain = new Spawner(hashSeed(TUTORIAL_SEED));
+    // the rows above the plain course's first jump, where neither has landing zones keeping the snow clear
+    const top = START_Y + FIRST_JUMP_Y - 20;
+    const solid = (b: ReturnType<Spawner['advance']>): number =>
+      b.obstacles.filter((o) => o.y < top && obstacleBox(o)).length;
+    const gb = gentle.advance(START_Y + 4000);
+    expect(solid(gb)).toBeLessThan(solid(plain.advance(START_Y + 4000)) * 0.8);
+    expect(solid(gb)).toBeGreaterThan(0);
+    const [kicker, cliff] = gentle.ramps;
+    expect(kicker?.kind).toBe('kicker');
+    expect(kicker?.lineLen).toBe(1);
+    expect(cliff?.kind).toBe('cliff');
+    // the first stars come before the kicker
+    const firstStar = Math.min(...gb.pickups.map((p) => p.y));
+    expect(firstStar).toBeLessThan(kicker?.y ?? 0);
+    // the guarantees still hold: a path follower rides it all
+    const ridden = runBot(new Sim(TUTORIAL_SEED), 600);
+    expect(ridden.crashed).toBe(false);
+  });
+
+  it('is only the tutorial seed: every other course is unchanged', () => {
+    const sim = new Sim('alpha');
+    const plain = new Spawner(hashSeed('alpha'));
+    const far = plain.advance(START_Y + 4000);
+    const last = Math.max(...sim.obstacles.map((o) => o.id));
+    expect(sim.obstacles.length).toBeGreaterThan(5);
+    const ids = (l: readonly { id: number; x: number; y: number }[]): string =>
+      l
+        .map((o) => `${o.id}:${o.x},${o.y}`)
+        .sort()
+        .join();
+    expect(ids(sim.obstacles)).toBe(ids(far.obstacles.filter((o) => o.id <= last)));
+    expect(plain.ramps.slice(0, sim.spawner.ramps.length)).toEqual(sim.spawner.ramps);
+  });
+});
+
 describe('spawner invariants for jumps, lanes and terrain', () => {
   const seeds = Array.from({ length: 12 }, (_, i) => `inv-${i}`);
 
@@ -132,7 +172,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(kickers / all).toBeLessThan(0.9);
   });
 
-  it('keeps jumps fair: room after each landing, off risk lanes, run-ups free of ice and drifts', () => {
+  it('keeps jumps fair: room after each landing, off risk lanes', () => {
     const offenders: string[] = [];
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
@@ -156,13 +196,6 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
         for (const l of s.lanes) {
           if (l.y1 >= r.y - 60 && l.y0 <= r.landEnd + 60)
             offenders.push(`${seed} ${r.id}: on a lane`);
-        }
-        for (const p of batch.patches) {
-          if (Math.abs(p.y - r.y) < p.ry + 40)
-            offenders.push(`${seed} ${r.id}: patch ${p.id} at the lip`);
-          // A line's run-ups are plain snow too, so ice or a drift never breaks it.
-          if (r.lineIdx < r.lineLen - 1 && p.y + p.ry > r.y && p.y - p.ry < r.landEnd)
-            offenders.push(`${seed} ${r.id}: patch ${p.id} inside a line`);
         }
         // A kicker sits inside the open path, so riding the path lines you up with it.
         const distM = (r.y - START_Y) / PX_PER_M;
@@ -251,15 +284,10 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(lanes).toBeGreaterThan(20);
   });
 
-  it('keeps patches off lanes and stars out of solid obstacles', () => {
+  it('keeps stars out of solid obstacles', () => {
     for (const seed of seeds) {
       const s = new Spawner(hashSeed(seed));
       const batch = s.advance(START_Y + 40000);
-      expect(batch.patches.some((p) => p.kind === 'ice')).toBe(true);
-      expect(batch.patches.some((p) => p.kind === 'drift')).toBe(true);
-      for (const p of batch.patches) {
-        expect(s.laneAt(p.y)).toBeNull();
-      }
       const buried: string[] = [];
       for (const star of batch.pickups) {
         for (const o of batch.obstacles) {
@@ -273,7 +301,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('stays winnable at maximum speed and high distance, with jumps and drifts', () => {
+  it('stays winnable at maximum speed and high distance, with jumps', () => {
     for (const seed of seeds) {
       const sim = new Sim(seed, { forceSpeed: true });
       runBot(sim, 7000);
@@ -283,7 +311,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('stays winnable for a bot that is slowed by drifts and ice (no forced speed)', () => {
+  it('stays winnable for a bot at its own speed (no forced speed)', () => {
     for (const seed of seeds.slice(0, 6)) {
       const sim = new Sim(seed);
       runBot(sim, 4000);
@@ -291,7 +319,7 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     }
   });
 
-  it('is deterministic for lanes, ramps and patches regardless of chunking', () => {
+  it('is deterministic for lanes and ramps regardless of chunking', () => {
     const whole = new Spawner(hashSeed('feat'));
     whole.advance(20000);
     const parts = new Spawner(hashSeed('feat'));
@@ -301,7 +329,6 @@ describe('spawner invariants for jumps, lanes and terrain', () => {
     expect(n).toBeGreaterThan(5);
     expect(parts.ramps.slice(0, n)).toEqual(whole.ramps.slice(0, n));
     expect(parts.lanes.slice(0, 5)).toEqual(whole.lanes.slice(0, 5));
-    expect(parts.patches.slice(0, 10)).toEqual(whole.patches.slice(0, 10));
   });
 
   it('keeps the open path wide enough for speed: wider than the old formula at distance', () => {
@@ -316,18 +343,19 @@ describe('mountain world is stable', () => {
       const b = new Spawner(hashSeed(seed)).advance(20000);
       // Fingerprints taken when batches still carried empty `gates` and `props` lists and lane star
       // ids started at 1,000,000, so those are put back here. Refreshed on purpose only when the course
-      // design changes (last: a jump every ~85 m instead of ~150 m, jump lines, lanes fitted between jumps), never to get green.
+      // design changes (last: deep snow removed and bushes made solid, which dropped `touched` from obstacles; every
+      // tree, rock, bush, star and jump stayed where it was, checked on 6 seeds over 60000 px), never to get green.
       const old = {
         obstacles: b.obstacles,
         pickups: b.pickups.map((p) => ({ ...p, id: p.id + 999_999 })),
         gates: [],
         ramps: b.ramps,
-        patches: b.patches,
+        patches: [],
         props: [],
       };
       return [hashSeed(JSON.stringify(old)), b.obstacles.length, b.ramps.length];
     };
-    expect(fp('alpha')).toEqual([2402853442, 726, 28]);
-    expect(fp('k3m9qa')).toEqual([1247566756, 674, 31]);
+    expect(fp('alpha')).toEqual([122788692, 726, 28]);
+    expect(fp('k3m9qa')).toEqual([498870801, 674, 31]);
   });
 });

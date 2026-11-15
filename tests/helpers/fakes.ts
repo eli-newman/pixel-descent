@@ -1,8 +1,10 @@
+import type { Dare } from '../../src/core/dare';
 import { Game, type GameDeps } from '../../src/state/game';
 import type { Action, Input, InputItem } from '../../src/platform/input';
 import type { Sfx } from '../../src/platform/audio';
 import type { AnalyticsEvent, Tracker } from '../../src/platform/analytics';
 import { Store, type StorageLike } from '../../src/state/storage';
+import { ALL_LESSONS } from '../../src/state/tutorial';
 
 export class FakeInput {
   steerValue = 0;
@@ -66,9 +68,6 @@ export class FakeSfx {
   nearMiss(): void {
     this.calls.push('near');
   }
-  bush(): void {
-    this.calls.push('bush');
-  }
   launch(): void {
     this.calls.push('launch');
   }
@@ -113,14 +112,20 @@ export interface Rig {
   analytics: FakeTracker;
 }
 
+/**
+ * A game on a fake device. The rig plays as a player who has had the tutorial (in memory only, nothing is saved), so
+ * runs are not stopped by lessons; pass `tutorial: true` to play as a brand new player.
+ */
 export function makeGame(
   seed = 'rig',
   over: Partial<GameDeps> = {},
   storage = memoryStorage(),
+  opts: { tutorial?: boolean; dare?: Dare } = {},
 ): Rig {
   const input = new FakeInput();
   const sfx = new FakeSfx();
   const store = new Store(storage);
+  if (!opts.tutorial) store.progress().stats.lessons = ALL_LESSONS;
   const shared: unknown[] = [];
   const analytics = new FakeTracker();
   const game = new Game(
@@ -138,6 +143,7 @@ export function makeGame(
       ...over,
     },
     seed,
+    opts.dare,
   );
   return { game, input, sfx, store, storage, shared, analytics };
 }

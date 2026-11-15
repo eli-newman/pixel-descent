@@ -22,20 +22,74 @@ body {
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
 
+/* The 180x320 frame: the HUD layer fills it and taps map through it. The slope layer reaches past it to the screen's edges. */
 #stage {
   position: absolute;
   left: 0;
   top: 0;
-  background: #000;
+}
+
+/*
+ * Two layers, both drawn at the screen's own resolution by main.ts, which also sizes and places them: the slope
+ * (#game), which covers the whole screen and carries its own smooth scroll, and the HUD and menus (#ui) on top, which
+ * fill the frame and never move. Each covers its box pixel for pixel, so the browser never filters it. Touches go
+ * through #ui to #game.
+ */
+#game,
+#ui {
+  display: block;
+  image-rendering: pixelated;
 }
 
 #game {
+  position: fixed;
+}
+
+#ui {
+  position: absolute;
+  pointer-events: none;
+}
+
+/*
+ * Menus sit straight on the slope, so behind them the whole screen fades towards the snow's own black, and the rider and trees never fight with the words: lightly for pause and game over, where
+ * the run still matters, and almost all the way for SCORES, GEAR and GOALS. The main title shows the mountains as
+ * they are and fades only the slope under its menu. Under a tutorial lesson it fades in and out with the run slowing
+ * and speeding up, with a hole (main.ts sets the clip path) over the thing the lesson is about. Any change into a run
+ * eases out the same way, so leaving the title never snaps.
+ */
+#wash {
+  position: fixed;
+  inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  image-rendering: pixelated;
+  opacity: 0;
+  pointer-events: none;
+  background: rgb(0 0 0 / 60%);
+}
+
+#stage[data-phase='playing'] #wash {
+  transition: opacity 0.35s ease-out;
+}
+
+#stage[data-phase='paused'] #wash,
+#stage[data-phase='over'] #wash {
+  opacity: 1;
+}
+
+#stage[data-phase='playing'][data-lesson='on'] #wash {
+  opacity: 1;
+  background: rgb(0 0 0 / 70%);
+  transition: opacity 0.45s ease-in-out;
+}
+
+/* The main title keeps its mountains and rider clear and calms only the slope under the menu. */
+#stage[data-phase='title'][data-screen='main'] #wash {
+  opacity: 1;
+  background: linear-gradient(to bottom, rgb(0 0 0 / 0%) 36%, rgb(0 0 0 / 80%) 46%);
+}
+
+#stage[data-phase='title']:not([data-screen='main']) #wash {
+  opacity: 1;
+  background: rgb(0 0 0 / 88%);
 }
 
 /* Reads the device safe-area insets (notch, home bar) as padding, so the script can fit inside them. */

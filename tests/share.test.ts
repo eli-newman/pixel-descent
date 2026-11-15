@@ -1,63 +1,79 @@
 import { describe, expect, it } from 'vitest';
-import { Framebuffer, OFF, YELLOW } from '../src/render/framebuffer';
-import {
-  CARD_H,
-  CARD_W,
-  renderCard,
-  shareText,
-  shareUrl,
-  type ResultCardData,
-} from '../src/render/share';
+import type { Dare } from '../src/core/dare';
+import { Framebuffer, OFF, WHITE, YELLOW } from '../src/render/framebuffer';
+import { CARD_H, CARD_W, renderCard, shareText, shareUrl } from '../src/render/share';
 
-const card: ResultCardData = {
+const DARE: Dare = {
   seed: 'k3m9qa',
-  daily: false,
   score: 1234,
   dist: 567,
   stars: 8,
-  nearMisses: 12,
   tricks: 3,
-  cause: 'obstacle',
-  newBest: true,
+  end: 'tree',
   skis: false,
 };
 
-describe('share card', () => {
-  it('draws something with the yellow score and is deterministic', () => {
-    const a = new Framebuffer(CARD_W, CARD_H);
-    const b = new Framebuffer(CARD_W, CARD_H);
-    renderCard(a, card);
-    renderCard(b, card);
-    expect(a.data).toEqual(b.data);
-    let lit = 0;
-    let yellow = 0;
-    for (let y = 0; y < CARD_H; y++) {
-      for (let x = 0; x < CARD_W; x++) {
-        if (a.get(x, y) !== OFF) lit++;
-        if (a.get(x, y) === YELLOW) yellow++;
-      }
-    }
-    expect(lit).toBeGreaterThan(500);
-    expect(yellow).toBeGreaterThan(50);
+function draw(d: Dare): Framebuffer {
+  const fb = new Framebuffer(CARD_W, CARD_H);
+  renderCard(fb, d);
+  return fb;
+}
+
+/** Lit pixels of a colour inside a box of the card. */
+function count(fb: Framebuffer, color: number, x0 = 0, x1 = CARD_W): number {
+  let n = 0;
+  for (let y = 0; y < CARD_H; y++) for (let x = x0; x < x1; x++) if (fb.get(x, y) === color) n++;
+  return n;
+}
+
+describe('dare card', () => {
+  it('is the same every time, in black, white and the yellow score only', () => {
+    const a = draw(DARE);
+    expect(a.data).toEqual(draw(DARE).data);
+    expect(count(a, YELLOW)).toBeGreaterThan(200);
+    const all = count(a, OFF) + count(a, WHITE) + count(a, YELLOW);
+    expect(all).toBe(CARD_W * CARD_H);
   });
 
-  it('differs for a different score', () => {
-    const a = new Framebuffer(CARD_W, CARD_H);
-    const b = new Framebuffer(CARD_W, CARD_H);
-    renderCard(a, card);
-    renderCard(b, { ...card, score: 99 });
-    expect(a.data).not.toEqual(b.data);
-  });
-
-  it('builds a link with the seed and drops other params', () => {
-    expect(shareUrl('https://example.com/game/?seed=old&x=1#h', 'k3m9qa')).toBe(
-      'https://example.com/game/?seed=k3m9qa',
+  it('changes with the score and with what ended the run', () => {
+    const base = draw(DARE);
+    expect(draw({ ...DARE, score: 99 }).data).not.toEqual(base.data);
+    const scenes = new Set(
+      (['tree', 'dead', 'rock', 'bush', 'bail'] as const).map((end) =>
+        draw({ ...DARE, end }).data.join(),
+      ),
     );
-    expect(shareText(card)).toContain('1234');
-    expect(shareText({ ...card, daily: true })).toContain('daily');
-    expect(shareText(card)).not.toContain('k3m9qa');
-    expect(shareText(card)).not.toContain('seed');
-    expect(shareText(card)).not.toContain('skis');
-    expect(shareText({ ...card, skis: true })).toContain('(567m on skis)');
+    expect(scenes.size).toBe(5);
+    // Skis change the fallen rider.
+    expect(draw({ ...DARE, skis: true }).data).not.toEqual(base.data);
+  });
+
+  it('fits a long score beside the scene', () => {
+    // The scene's left edge: nothing yellow may reach it, however long the score.
+    for (const score of [7, 1234, 98765, 9999999]) {
+      expect(count(draw({ ...DARE, score }), YELLOW, CARD_W - 6 - 92)).toBe(0);
+    }
+  });
+
+  it('marks a daily course', () => {
+    const daily = draw({ ...DARE, seed: 'd20261113' });
+    expect(count(daily, YELLOW)).toBeGreaterThan(count(draw(DARE), YELLOW));
+  });
+});
+
+describe('dare link and words', () => {
+  it('puts the dare on the site the game is on', () => {
+    expect(shareUrl('https://powline.vercel.app/', DARE)).toBe(
+      'https://powline.vercel.app/c/k3m9qa-1234-567-8-3-t',
+    );
+    expect(shareUrl('https://example.com/games/powline/', DARE)).toBe(
+      'https://example.com/games/powline/c/k3m9qa-1234-567-8-3-t',
+    );
+  });
+
+  it('says the score and dares, never the course', () => {
+    expect(shareText(DARE)).toBe('1234 on Powline. beat it 👇');
+    expect(shareText({ ...DARE, seed: 'd20261113' })).toBe("1234 on today's Powline. beat it 👇");
+    expect(shareText(DARE)).not.toContain(DARE.seed);
   });
 });

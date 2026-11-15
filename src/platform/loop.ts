@@ -1,6 +1,6 @@
 import { MAX_FRAME, STEP } from '../core/config';
 
-/** Fixed timestep update with a requestAnimationFrame render. */
+/** Fixed timestep update with a requestAnimationFrame render that is told how far it is into the next step. */
 export class Loop {
   private raf = 0;
   private last = 0;
@@ -9,7 +9,8 @@ export class Loop {
 
   constructor(
     private readonly update: (dt: number) => void,
-    private readonly render: () => void,
+    /** Gets how far the moment on screen lies between the last step and the next one, 0 to 1. */
+    private readonly render: (alpha: number) => void,
   ) {}
 
   start(): void {
@@ -32,7 +33,7 @@ export class Loop {
       this.update(STEP);
       this.acc -= STEP;
     }
-    this.render();
+    this.render(this.acc / STEP);
     this.raf = requestAnimationFrame(this.frame);
   };
 }
