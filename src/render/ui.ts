@@ -584,7 +584,8 @@ function drawOver(fb: Framebuffer, g: GameView): void {
     textC(fb, n, CX, top + 80, HOT);
   }
   drawButtons(fb, g);
-  textC(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
+  // the key hints are for a keyboard: a phone has the buttons
+  if (!g.touch) textC(fb, 'SPACE NEW  R RETRY  C SHARE', CX, top + 146);
   const toast = g.toasts[0];
   if (toast) {
     text(fb, toast.text, Math.round(CX - textWidth(toast.text) / 2), top - 10, HOT);
