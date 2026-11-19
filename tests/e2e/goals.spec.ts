@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
 /** The GOALS button on the title (see TITLE in src/state/menu.ts), in logical pixels of the 180x320 frame. */
-const GOALS = { x: 48, y: 265 };
+const GOALS = { x: 133, y: 213 };
 
 /** What the HUD layer shows in a band of logical rows: how many pixels are lit, which of them yellow, and how wide. */
 async function band(

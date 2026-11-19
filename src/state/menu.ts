@@ -46,16 +46,18 @@ function b(id: ButtonId, x: number, y: number, w: number, h: number, accent = fa
 }
 
 /**
- * The title's grid is wider than the other menus' (80 px buttons, 8 px from the edges), so even SOUND OFF fits at
- * twice the font size; the score and gear tabs share it. DAILY runs the full width under PLAY.
+ * The title's grid is wider than the other menus' (82 px buttons, 6 px from the edges) so that even SOUND OFF and
+ * MUSIC OFF (the widest label, 74 px) fit at twice the font size, which every plain button then shares. PLAY runs the
+ * full width, then DAILY and GOALS, SCORES and GEAR, SOUND and MUSIC.
  */
 const TITLE: UiButton[] = [
-  b('play', 8, 172, 164, 26, true),
-  b('daily', 8, 202, 164, MIN_TOUCH),
-  b('scores', 8, 228, 80, MIN_TOUCH),
-  b('gear', 92, 228, 80, MIN_TOUCH),
-  b('goals', 8, 254, 80, MIN_TOUCH),
-  b('sound', 92, 254, 80, MIN_TOUCH),
+  b('play', 6, 172, 168, 26, true),
+  b('daily', 6, 202, 82, MIN_TOUCH),
+  b('goals', 92, 202, 82, MIN_TOUCH),
+  b('scores', 6, 228, 82, MIN_TOUCH),
+  b('gear', 92, 228, 82, MIN_TOUCH),
+  b('sound', 6, 254, 82, MIN_TOUCH),
+  b('music', 92, 254, 82, MIN_TOUCH),
 ];
 
 const SCORES: UiButton[] = [

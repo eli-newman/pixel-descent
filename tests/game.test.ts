@@ -135,6 +135,27 @@ describe('game state machine', () => {
     expect(game.seed).not.toBe(second);
   });
 
+  it('has MUSIC and SOUND buttons on the title that toggle them', () => {
+    const { game, input, sfx, store } = makeGame();
+    const tap = (id: string): void => {
+      const bt = menuButtons(game).find((x) => x.id === id);
+      expect(bt, id).toBeDefined();
+      input.tap((bt?.x ?? 0) + 3, (bt?.y ?? 0) + 3);
+      game.update(1 / 120);
+    };
+    expect(game.phase).toBe('title');
+    expect(store.settings().music).toBe(true);
+    tap('music');
+    expect(store.settings().music).toBe(false);
+    expect(sfx.musicOn).toBe(false);
+    tap('music');
+    expect(store.settings().music).toBe(true);
+    expect(sfx.musicOn).toBe(true);
+    tap('sound');
+    expect(store.settings().muted).toBe(true);
+    expect(game.phase).toBe('title');
+  });
+
   it('remembers mute and settings between sessions', () => {
     const rig = makeGame();
     rig.input.push('mute');
