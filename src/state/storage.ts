@@ -28,7 +28,7 @@ export interface ScoreEntry {
 
 export interface Settings {
   muted: boolean;
-  /** Very quiet procedural background music. Off by default. */
+  /** The soundtrack (`platform/music.ts`). On by default. */
   music: boolean;
   /** Bigger score and distance text. */
   bigHud: boolean;
@@ -41,7 +41,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   muted: false,
-  music: false,
+  music: true,
   bigHud: false,
   autoPause: true,
   haptics: true,

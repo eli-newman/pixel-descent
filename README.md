@@ -27,6 +27,12 @@ Players never see a seed: every run is just a new course.
 
 The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/powline/`. `public/og.png` is the plain site's link preview image (1200x630). Crawlers need an absolute `og:image` URL, so the `og:image`, `twitter:image` and `og:url` tags in `index.html` point at https://powline.vercel.app: update them if the address changes. Dare links (`/c/<code>`) and their cards (`/c/<code>/card.png`) need the two small functions in `src/server/`, so they work on Vercel only; the rest of the game works from any folder.
 
+## Soundtrack
+
+Six tracks play on a shuffle while you ride, and the MUSIC button in the pause menu (or U) turns them off. They are AAC files in `public/music/` (about 19 MB in all, normalized to one loudness), streamed one at a time: nothing is downloaded until your first tap or key press, and then only the track playing plus the next one shortly before it ends, so the first load stays small and a player who turns music off never downloads it. They play through the game's sound, so MUTE silences them, and they pause when the tab or app is in the background. To change the playlist, encode a file, drop it in `public/music/` and add it to `MUSIC_TRACKS` in `src/core/config.ts`.
+
+The music is original, made by the game's author, all rights reserved. It is not covered by any licence for the code and may not be reused without permission. The old generated background music was removed (git tag `archive/generative-music`).
+
 ## Privacy
 
 Powline counts visits and a few game events. There are no cookies, no consent banner, no account and no ad tracking. Two services receive data:
@@ -48,23 +54,23 @@ Never sent: seeds, share or dare links, exact scores, distances or times, names,
 
 ## Controls
 
-| Action             | Keyboard                       | Touch                                        |
-| ------------------ | ------------------------------ | -------------------------------------------- |
-| Steer toe / heel   | Left/Right, A/D                | Hold left or right half, or drag             |
-| Spin (in the air)  | Hold Left/Right or A/D         | Hold left or right half, or drag             |
-| Full-turn trick    | Space, T                       | Swipe left or right (a quick flick)          |
-| Frontflip          | Down, S (in the air)           | Swipe down (a quick flick, slant is fine)    |
-| Backflip           | Up, W (in the air)             | Swipe up (a quick flick, slant is fine)      |
-| Grab               | Hold X or Shift (in the air)   | Quick tap in the air; next touch lets go     |
-| Brake (side slip)  | Left + Right together          | Two fingers down at once                     |
-| Menus              | Up/Down + Space/Enter          | Tap the buttons                              |
-| Start / new run    | Space, Enter                   | Tap                                          |
-| Pause / resume     | P, Esc, Space                  | Two bars (top right), tap                    |
-| Retry same course  | R                              | RETRY                                        |
-| Share a dare       | C                              | SHARE, or SEND IT BACK on a dare (game over) |
-| Sound on / off     | M (sound is ON by default)     | SOUND button on the title and pause menus    |
-| Big HUD, music     | H, U (music is OFF by default) | Pause menu                                   |
-| Manual spin on/off | G (default OFF)                | MANUAL SPIN button, pause menu               |
+| Action             | Keyboard                      | Touch                                        |
+| ------------------ | ----------------------------- | -------------------------------------------- |
+| Steer toe / heel   | Left/Right, A/D               | Hold left or right half, or drag             |
+| Spin (in the air)  | Hold Left/Right or A/D        | Hold left or right half, or drag             |
+| Full-turn trick    | Space, T                      | Swipe left or right (a quick flick)          |
+| Frontflip          | Down, S (in the air)          | Swipe down (a quick flick, slant is fine)    |
+| Backflip           | Up, W (in the air)            | Swipe up (a quick flick, slant is fine)      |
+| Grab               | Hold X or Shift (in the air)  | Quick tap in the air; next touch lets go     |
+| Brake (side slip)  | Left + Right together         | Two fingers down at once                     |
+| Menus              | Up/Down + Space/Enter         | Tap the buttons                              |
+| Start / new run    | Space, Enter                  | Tap                                          |
+| Pause / resume     | P, Esc, Space                 | Two bars (top right), tap                    |
+| Retry same course  | R                             | RETRY                                        |
+| Share a dare       | C                             | SHARE, or SEND IT BACK on a dare (game over) |
+| Sound on / off     | M (sound is ON by default)    | SOUND button on the title and pause menus    |
+| Big HUD, music     | H, U (music is ON by default) | Pause menu                                   |
+| Manual spin on/off | G (default OFF)               | MANUAL SPIN button, pause menu               |
 
 ## Mechanics
 
@@ -127,7 +133,7 @@ Plain TypeScript and Vite, no runtime dependencies. The simulation is pure and D
 - `src/sim/spawner.ts` - deterministic endless course generator with independent seeded streams. A wandering guaranteed-open path keeps every course winnable; kickers, jump lines and risk lanes are planned so they never break that guarantee. `src/sim/lines.ts` follows the jump line being ridden and pays its multiplier and bonus.
 - `src/state/progress.ts`, `src/state/storage.ts` - achievements, challenges and gear; localStorage access (every call guarded) for boards, settings and progress. `src/state/streak.ts` and `src/state/goals.ts` - the daily streak and the three daily goals, from the local date.
 - `src/state/game.ts` - the shell around the sim: runs and their phases (title, playing, paused, crashed, over), camera, and what each frame steps, drawn between steps so motion is even on 60, 90 and 120 Hz screens. `src/state/controls.ts` turns input into actions and holds the menu position, `src/state/feedback.ts` turns sim events into sound, toasts, haptics and hit-stop, `src/state/runReport.ts` saves a finished run, `src/state/view.ts` is the read-only view render gets, `src/state/menu.ts` holds the button layout shared by input and drawing, and `src/state/tutorial.ts` picks the first-run lessons.
-- `src/platform/input.ts`, `src/platform/audio.ts`, `src/state/effects.ts` - keyboard, mouse and touch input; procedural WebAudio (quiet wind, carve hiss, pitch ladders, optional music); a fixed particle pool.
+- `src/platform/input.ts`, `src/platform/audio.ts`, `src/state/effects.ts` - keyboard, mouse and touch input; procedural WebAudio (quiet wind, carve hiss, pitch ladders); `src/platform/music.ts` plays the soundtrack; a fixed particle pool.
 - `src/render/` - `framebuffer.ts` (integer pixel buffer), `sprites.ts`, `riderSprite.ts` (snowboarder and skier, tuck, flip squash and tuck, grab, wipeout, unlockable looks), `backdrop.ts`, `track.ts` (the track: one clean line for the board or two thin lines for skis, swelling gently in turns, with a soft grey shadow, powder spilled along its edges and more thrown out of hard turns), `scene.ts` (world), `font.ts` and `ui.ts` (3x5 pixel font, HUD, menus), `lesson.ts` (where a tutorial lesson's marker and words go), `coach.ts` (the steering lesson's thumbs or keys), `layout.ts`.
 - `src/core/dare.ts`, `src/render/share.ts`, `src/platform/shareDom.ts` - dares: the link code, the 1200x630 dare card (pure drawing, plus canvas export) and the Web Share / clipboard / download flow.
 - `src/server/`, `scripts/vercel-output.mjs`, `scripts/serve-output.mjs` - the dare page and card image functions, the build step that writes the deployment in Vercel's Build Output layout, and a local server that routes it the same way (the browser tests run against it).

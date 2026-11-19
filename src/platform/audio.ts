@@ -1,10 +1,12 @@
 /**
  * Procedural WebAudio sound: a continuous wind and snow bed that follows speed, tuck and carving,
  * plus one-shot powder sprays, whooshes and soft chimes. No samples; everything is filtered noise or a quiet sine. Levels are deliberately low.
+ * The soundtrack (`music.ts`) plays through the same master gain.
  * Nothing is created until the first gesture (start or unmute), because browsers block earlier audio.
  */
 
-import { MAX_SPEED } from '../core/config';
+import { MAX_SPEED, MUSIC_DIR, MUSIC_TRACKS } from '../core/config';
+import { Music, WebTracks } from './music';
 
 const POWDER_COOLDOWN = 0.7;
 /** Heading-change rate (see rider.hv) above which a turn throws up a spray of powder. */
@@ -41,10 +43,6 @@ export function ladderFreq(base: number, step: number): number {
   return base * Math.pow(2, (LADDER[n % 5] ?? 0) / 12 + Math.floor(n / 5));
 }
 
-/** Notes (Hz) the optional background music draws from: A minor pentatonic over two octaves. */
-const SCALE = [110, 130.8, 146.8, 164.8, 196, 220, 261.6, 293.7, 329.6, 392];
-const PATTERN = [5, 7, 8, 7, 3, 6, 7, 4];
-
 export class Sfx {
   muted = false;
   musicOn = false;
@@ -54,8 +52,13 @@ export class Sfx {
   private bed: Bed | null = null;
   private lastPowder = 0;
   private lastRide = 0;
-  private nextNote = 0;
-  private noteIdx = 0;
+  private music: Music | null = null;
+
+  constructor() {
+    // The soundtrack stops with the page (a hidden tab, an app in the background) and comes back with it.
+    if (typeof document !== 'undefined')
+      document.addEventListener('visibilitychange', () => this.syncMusic());
+  }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
@@ -63,6 +66,15 @@ export class Sfx {
     if (ctx && this.master) {
       this.master.gain.setTargetAtTime(muted ? 0 : MASTER, ctx.currentTime, 0.05);
     }
+    this.syncMusic();
+  }
+
+  /**
+   * Called on every gesture (a touch lifted, a key, a click): browsers only start or resume audio from one, so this
+   * is what creates the audio context, brings it back after an interruption and starts the soundtrack the first time.
+   */
+  gesture(): void {
+    this.ensure();
   }
 
   /** Called from a gesture after unmuting: creates the audio context if needed and plays a tiny confirmation. */
@@ -72,12 +84,19 @@ export class Sfx {
 
   setMusic(on: boolean): void {
     this.musicOn = on;
-    if (on) this.nextNote = 0;
+    this.syncMusic();
+  }
+
+  /** The soundtrack plays when it is on, the game is not muted, the page is showing and the context is running. */
+  private syncMusic(): void {
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    this.music?.setWanted(this.musicOn && !this.muted && !hidden && this.ctx?.state === 'running');
   }
 
   private ensure(): AudioContext | null {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      if (this.ctx.state !== 'running') void this.ctx.resume().then(() => this.syncMusic());
+      this.syncMusic();
       return this.ctx;
     }
     const w = window as unknown as { webkitAudioContext?: typeof AudioContext };
@@ -90,6 +109,13 @@ export class Sfx {
     this.master.connect(ctx.destination);
     this.noiseBuf = this.makeNoise(ctx);
     this.bed = this.makeBed(ctx);
+    this.music = new Music(
+      MUSIC_TRACKS.map((t) => t.file),
+      new WebTracks(ctx, this.master, (file) => `./${MUSIC_DIR}${file}`),
+      Math.random,
+    );
+    ctx.addEventListener('statechange', () => this.syncMusic());
+    void ctx.resume().then(() => this.syncMusic());
     return ctx;
   }
 
@@ -189,35 +215,6 @@ export class Sfx {
       this.lastPowder = now;
       this.powder(Math.min(1, 0.4 + sp * 0.6));
     }
-    if (s.active) this.music(ctx, now, sp);
-  }
-
-  /** Very quiet generative music, only when switched on: a slow, sparse pentatonic pluck pattern. */
-  private music(ctx: AudioContext, now: number, intensity: number): void {
-    if (!this.musicOn || this.muted || !this.master) return;
-    if (this.nextNote === 0 || this.nextNote < now - 1) this.nextNote = now + 0.1;
-    while (this.nextNote < now + 0.25) {
-      const i = this.noteIdx++;
-      const idx = PATTERN[i % PATTERN.length] ?? 5;
-      const f = SCALE[idx % SCALE.length] ?? 220;
-      this.pluck(ctx, f, this.nextNote, 0.011, 0.7);
-      if (i % 4 === 0) this.pluck(ctx, (SCALE[idx % 5] ?? 110) / 2, this.nextNote, 0.012, 1.4);
-      this.nextNote += 0.62 - 0.2 * intensity;
-    }
-  }
-
-  private pluck(ctx: AudioContext, freq: number, at: number, vol: number, dur: number): void {
-    if (!this.master) return;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(vol, at + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    osc.connect(g).connect(this.master);
-    osc.start(at);
-    osc.stop(at + dur + 0.05);
   }
 
   /** Filtered noise with a quick attack and a falling band, shaped like a spray of powder. */

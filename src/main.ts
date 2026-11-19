@@ -263,6 +263,11 @@ window.addEventListener('pagehide', () => {
   posthog?.flush();
 });
 window.addEventListener('blur', () => game.autoPause());
+// Browsers start audio only from a gesture, and iOS counts a lifted touch, not a touch down: so audio, and with it the
+// soundtrack, starts on the first of these and comes back after an interruption on the next.
+for (const type of ['pointerup', 'touchend', 'keydown', 'click'] as const) {
+  window.addEventListener(type, () => sfx.gesture(), { capture: true, passive: true });
+}
 
 const loop = new Loop((dt) => game.update(dt), render);
 loop.start();

@@ -140,9 +140,9 @@ describe('store', () => {
     expect(s.progress().stats.runs).toBe(0);
   });
 
-  it('defaults to sound on, music off', () => {
+  it('defaults to sound on, music on', () => {
     expect(DEFAULT_SETTINGS.muted).toBe(false);
-    expect(DEFAULT_SETTINGS.music).toBe(false);
+    expect(DEFAULT_SETTINGS.music).toBe(true);
   });
 
   it('loads a save written before ghosts and gates were removed', () => {

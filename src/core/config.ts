@@ -160,3 +160,25 @@ export const INGEST_MAX_BYTES = 32 * 1024;
  */
 export const SESSION_GAP_MS = 30 * 60 * 1000;
 export const BEST_CLOSE = 0.9;
+
+/**
+ * The soundtrack (`platform/music.ts`): files in `public/music/`, AAC in .m4a so every browser and web view plays
+ * them, all normalized to one loudness. Titles are the file names in title case. The player shuffles them and never
+ * repeats one straight away. MUSIC_LEVEL is the music's gain under the master (the effects are deliberately quiet, so
+ * this is a share of them, not of the track); MUSIC_FADE_S the fade in when it starts or comes back; MUSIC_PREFETCH_S
+ * how many seconds before a track ends the next one starts downloading (nothing is fetched before the first
+ * gesture); MUSIC_MAX_FAILS the failed tracks in a row (a missing file, a decode error) after which it gives up.
+ */
+export const MUSIC_TRACKS = [
+  { file: 'yumon.m4a', title: 'Yumon' },
+  { file: 'roronora-remix-2.m4a', title: 'Roronora Remix 2' },
+  { file: 'drunk-diver.m4a', title: 'Drunk Diver' },
+  { file: 'montage.m4a', title: 'Montage' },
+  { file: 'vivands.m4a', title: 'Vivands' },
+  { file: 'gust-of-coal.m4a', title: 'Gust of Coal' },
+] as const;
+export const MUSIC_DIR = 'music/';
+export const MUSIC_LEVEL = 0.3;
+export const MUSIC_FADE_S = 1.2;
+export const MUSIC_PREFETCH_S = 20;
+export const MUSIC_MAX_FAILS = 3;
