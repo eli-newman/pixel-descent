@@ -5,8 +5,9 @@
  * Nothing is created until the first gesture (start or unmute), because browsers block earlier audio.
  */
 
-import { MAX_SPEED, MUSIC_DIR, MUSIC_TRACKS } from '../core/config';
-import { Music, WebTracks } from './music';
+import { MAX_SPEED, MUSIC_DIR, MUSIC_LOBBY, MUSIC_TRACKS } from '../core/config';
+import type { Scene } from '../core/soundtrack';
+import { Music, WebAudio, webClock } from './music';
 
 const POWDER_COOLDOWN = 0.7;
 /** Heading-change rate (see rider.hv) above which a turn throws up a spray of powder. */
@@ -53,6 +54,8 @@ export class Sfx {
   private lastPowder = 0;
   private lastRide = 0;
   private music: Music | null = null;
+  private sceneNow: Scene = 'lobby';
+  private runNow = 0;
 
   constructor() {
     // The soundtrack stops with the page (a hidden tab, an app in the background) and comes back with it.
@@ -75,6 +78,14 @@ export class Sfx {
    */
   gesture(): void {
     this.ensure();
+    this.music?.gesture();
+  }
+
+  /** What the soundtrack follows: the game's scene and which run it is. Called every frame; changes are what count. */
+  scene(scene: Scene, run: number): void {
+    this.sceneNow = scene;
+    this.runNow = run;
+    this.music?.setScene(scene, run);
   }
 
   /** Called from a gesture after unmuting: creates the audio context if needed and plays a tiny confirmation. */
@@ -110,10 +121,13 @@ export class Sfx {
     this.noiseBuf = this.makeNoise(ctx);
     this.bed = this.makeBed(ctx);
     this.music = new Music(
-      MUSIC_TRACKS.map((t) => t.file),
-      new WebTracks(ctx, this.master, (file) => `./${MUSIC_DIR}${file}`),
+      new WebAudio(ctx, this.master, (file) => `./${MUSIC_DIR}${file}`),
+      webClock,
+      MUSIC_LOBBY,
+      MUSIC_TRACKS.map((t) => t.file).filter((f) => f !== MUSIC_LOBBY),
       Math.random,
     );
+    this.music.setScene(this.sceneNow, this.runNow);
     ctx.addEventListener('statechange', () => this.syncMusic());
     void ctx.resume().then(() => this.syncMusic());
     return ctx;

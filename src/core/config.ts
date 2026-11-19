@@ -163,11 +163,23 @@ export const BEST_CLOSE = 0.9;
 
 /**
  * The soundtrack (`platform/music.ts`): files in `public/music/`, AAC in .m4a so every browser and web view plays
- * them, all normalized to one loudness. Titles are the file names in title case. The player shuffles them and never
- * repeats one straight away. MUSIC_LEVEL is the music's gain under the master (the effects are deliberately quiet, so
- * this is a share of them, not of the track); MUSIC_FADE_S the fade in when it starts or comes back; MUSIC_PREFETCH_S
- * how many seconds before a track ends the next one starts downloading (nothing is fetched before the first
- * gesture); MUSIC_MAX_FAILS the failed tracks in a row (a missing file, a decode error) after which it gives up.
+ * them, all normalized to one loudness. Titles are the file names in title case. It has two parts: the lobby (title,
+ * menus, game over), one fixed track that loops, and the run (while riding), the other tracks on a shuffle that never
+ * repeats one straight away. MUSIC_LOBBY is the file of the lobby track: change that one word to swap it (it is
+ * picked out of the run's shuffle by itself). It is the calmest of the six: lowest density of strong onsets and of
+ * high-frequency energy, slowest tempo and steadiest loudness (measured with ffmpeg, see the README).
+ *
+ * Levels and timings, in seconds. MUSIC_LEVEL is the music's gain under the master (the effects are deliberately
+ * quiet, so this is a share of them, not of the track). MUSIC_FADE_S: the fade in when music starts or comes back
+ * (the first gesture, the MUSIC switch, a page shown again). MUSIC_START_S: lobby to run crossfade when a run starts.
+ * MUSIC_RESTART_S: the crossfade to a fresh run track when a run is restarted. MUSIC_RUN_OUT_S: the run music's fade
+ * out when the run ends (a crash, QUIT, MENU). MUSIC_LOBBY_BEAT_S: silence after the run music went out before the
+ * lobby track comes back, so a crash lands in near silence. MUSIC_LOBBY_IN_S: the lobby's fade in.
+ * MUSIC_PAUSE_LEVEL and MUSIC_PAUSE_FADE_S: how far the run music ducks on pause and how fast it moves.
+ * MUSIC_CROSS_S: the equal-power overlap from one track to the next inside a run, and for the lobby track into
+ * itself, as it loops (the files carry their own soft ends). MUSIC_PREFETCH_S: how many seconds before a track ends
+ * the next one starts downloading (nothing is fetched before the first gesture). MUSIC_MAX_FAILS: failed tracks in a
+ * row (a missing file, a decode error) after which a part gives up.
  */
 export const MUSIC_TRACKS = [
   { file: 'yumon.m4a', title: 'Yumon' },
@@ -177,8 +189,17 @@ export const MUSIC_TRACKS = [
   { file: 'vivands.m4a', title: 'Vivands' },
   { file: 'gust-of-coal.m4a', title: 'Gust of Coal' },
 ] as const;
+export const MUSIC_LOBBY = 'vivands.m4a' satisfies (typeof MUSIC_TRACKS)[number]['file'];
 export const MUSIC_DIR = 'music/';
 export const MUSIC_LEVEL = 0.3;
 export const MUSIC_FADE_S = 1.2;
+export const MUSIC_START_S = 1.5;
+export const MUSIC_RESTART_S = 0.8;
+export const MUSIC_RUN_OUT_S = 0.6;
+export const MUSIC_LOBBY_BEAT_S = 1;
+export const MUSIC_LOBBY_IN_S = 1.5;
+export const MUSIC_PAUSE_LEVEL = 0.25;
+export const MUSIC_PAUSE_FADE_S = 0.4;
+export const MUSIC_CROSS_S = 4;
 export const MUSIC_PREFETCH_S = 20;
 export const MUSIC_MAX_FAILS = 3;

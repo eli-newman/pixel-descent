@@ -29,7 +29,11 @@ The build uses relative URLs (`base: './'`), so the contents of `dist/` work fro
 
 ## Soundtrack
 
-Six tracks play on a shuffle while you ride, and the MUSIC button in the pause menu (or U) turns them off. They are AAC files in `public/music/` (about 19 MB in all, normalized to one loudness), streamed one at a time: nothing is downloaded until your first tap or key press, and then only the track playing plus the next one shortly before it ends, so the first load stays small and a player who turns music off never downloads it. They play through the game's sound, so MUTE silences them, and they pause when the tab or app is in the background. To change the playlist, encode a file, drop it in `public/music/` and add it to `MUSIC_TRACKS` in `src/core/config.ts`.
+The title, menus and game over play one calm lobby track on a loop (Vivands). Starting a run crossfades it into a shuffle of the other five tracks; a crash fades the music out in about half a second, so the fall lands in near silence, and the lobby track comes back about a second later, where it left off. Pausing ducks the run music, resuming brings it back, and a restart or retry goes straight to a fresh track. One track hands over to the next inside a run with a few seconds of crossfade. The MUSIC button in the pause menu (or U) turns it all off.
+
+The tracks are AAC files in `public/music/` (about 16 MB in all, normalized to one loudness), streamed: nothing is downloaded until your first tap or key press, and only the track playing plus the next one shortly before it ends, so the first load stays small and a player who turns music off never downloads it. It plays through the game's sound, so MUTE silences it, and it pauses when the tab or app is in the background. To change the playlist, encode a file, drop it in `public/music/` and add it to `MUSIC_TRACKS` in `src/core/config.ts`; to swap the lobby track change `MUSIC_LOBBY` there (the run's shuffle then leaves out that one).
+
+The lobby track was picked as the calmest of the six by measurement (ffmpeg, on the normalized files): fewest strong onsets per second (0.38, against 0.35 to 2.0), the lowest overall onset flux (0.48), the second slowest tempo (about 76 bpm), steady loudness (a 2.8 LU range, against up to 17.9) and one of the darkest spectra.
 
 The music is original, made by the game's author, all rights reserved. It is not covered by any licence for the code and may not be reused without permission. The old generated background music was removed (git tag `archive/generative-music`).
 

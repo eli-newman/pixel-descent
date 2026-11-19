@@ -1,4 +1,5 @@
 import { Sfx } from './platform/audio';
+import { sceneFor } from './state/soundtrack';
 import { H, INGEST_PATH, W } from './core/config';
 import { Game } from './state/game';
 import { Input } from './platform/input';
@@ -171,6 +172,7 @@ function render(alpha: number): void {
   slopeLayer.draw(image, slideRows(game.camFrac, fit.scale));
   uiLayer.draw(uiImage);
   if (stage.dataset['phase'] !== game.phase) stage.dataset['phase'] = game.phase;
+  sfx.scene(sceneFor(game.phase), game.visitRuns);
   if (stage.dataset['screen'] !== game.screen) stage.dataset['screen'] = game.screen;
   const lesson = game.lessonWaiting ? 'on' : 'off';
   if (stage.dataset['lesson'] !== lesson) stage.dataset['lesson'] = lesson;
