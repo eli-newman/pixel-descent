@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Powline colour mode: more natural jumps, cliffs and tracks</title>
+<style>
+  :root { --yellow: #f5d742; --bg: #0b0c0f; --card: #16181d; --line: #2a2e36; --text: #e9ecf1; --dim: #9aa3b0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  main { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h1 span { color: var(--yellow); }
+  .lede { color: var(--dim); margin: 0 0 28px; max-width: 760px; }
+  section { margin: 0 0 40px; }
+  h2 { font-size: 16px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--yellow); margin: 0 0 4px; }
+  .why { color: var(--dim); margin: 0 0 14px; max-width: 820px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; }
+  label.opt { display: flex; flex-direction: column; min-width: 0; background: var(--card); border: 2px solid var(--line); border-radius: 6px; padding: 10px; cursor: pointer; }
+  label.opt:has(input:checked) { border-color: var(--yellow); box-shadow: 0 0 0 1px var(--yellow) inset; }
+  label.opt img { width: 100%; height: auto; image-rendering: pixelated; border-radius: 3px; display: block; }
+  .head { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+  .head input { accent-color: var(--yellow); width: 16px; height: 16px; margin: 0; }
+  .tag { font-weight: 700; }
+  .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+  .badge.now { border-color: #6b7280; }
+  .badge.pick { border-color: var(--yellow); color: var(--yellow); }
+  .desc { color: var(--dim); font-size: 13px; margin: 0; }
+  .submit { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg) 30%); padding: 24px 0 8px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  textarea { flex: 1 1 320px; min-width: 0; min-height: 44px; background: var(--card); color: var(--text); border: 2px solid var(--line); border-radius: 6px; padding: 8px; font: inherit; }
+  button { background: var(--yellow); color: #111; border: 0; border-radius: 6px; padding: 12px 18px; font: 700 15px ui-monospace, Menlo, monospace; cursor: pointer; }
+  #state { color: var(--dim); font-size: 13px; flex-basis: 100%; }
+</style>
+</head>
+<body>
+<main>
+  <h1>POWLINE <span>colour mode</span>: more natural jumps</h1>
+  <p class="lede">Each picture is the real game renderer at 4x, drawn with the same trees, rocks, rider and track as the game. Pick one of each and press Queue. I build what you pick into the colour branch (PR #11). Black and white stays as it is.</p>
+
+  <form id="pick" data-lavish-question="natural-looks">
+    <section>
+      <h2>1. Jumps (kickers)</h2>
+      <p class="why">Now: a blue outlined box with arrows, which reads as a sign, not snow. The natural versions are packed snow shaped by light alone: a sunny left face, a shaded right face, a bright lip with a dark drop under it, and a cast shadow. The orange poles are what real terrain parks use to mark a jump, so it stays easy to spot at speed.</p>
+      <div class="grid">
+        <label class="opt"><img src="kicker-0-current.png" alt="Current blue outlined kicker"><div class="head"><input type="radio" name="jump" value="J0 current blue outline"><span class="tag">J0</span><span class="badge now">now</span></div><p class="desc">Blue outline, pale face, two arrows.</p></label>
+        <label class="opt"><img src="kicker-1-snow.png" alt="Packed snow kicker"><div class="head"><input type="radio" name="jump" value="J1 packed snow"><span class="tag">J1</span></div><p class="desc">Packed snow: light and shade, groomer lines down the face, bright lip. Most natural, slightly harder to spot.</p></label>
+        <label class="opt"><img src="kicker-2-snow-poles.png" alt="Packed snow kicker with orange marker poles"><div class="head"><input type="radio" name="jump" value="J2 packed snow with orange poles" checked><span class="tag">J2</span><span class="badge pick">my pick</span></div><p class="desc">J1 plus orange marker poles at the lip corners. Natural, and easy to spot.</p></label>
+        <label class="opt"><img src="kicker-3-snow-arrows.png" alt="Packed snow kicker with soft arrows"><div class="head"><input type="radio" name="jump" value="J3 packed snow with soft arrows"><span class="tag">J3</span></div><p class="desc">Smooth packed snow with faint carved arrows. Keeps the "this is a jump" hint.</p></label>
+        <label class="opt"><img src="kicker-4-wood-lip.png" alt="Packed snow kicker with a wooden lip and poles"><div class="head"><input type="radio" name="jump" value="J4 wooden lip with poles"><span class="tag">J4</span></div><p class="desc">Built park jump: J2 with a wooden lip board.</p></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>2. Cliffs</h2>
+      <p class="why">Now: a grid of grey blocks with grit, so it reads as a brick wall. The natural versions have a lip that wanders smoothly, a face lit from the left that darkens toward the foot, vertical ribs and gullies, a rounded snow pillow on top, and a soft blue shadow below. The red warning chevrons stay.</p>
+      <div class="grid">
+        <label class="opt"><img src="cliff-0-current.png" alt="Current block cliff"><div class="head"><input type="radio" name="cliff" value="C0 current blocks"><span class="tag">C0</span><span class="badge now">now</span></div><p class="desc">Stepped blocks, strata grid, grit.</p></label>
+        <label class="opt"><img src="cliff-1-natural.png" alt="Natural rock band"><div class="head"><input type="radio" name="cliff" value="C1 natural rock band" checked><span class="tag">C1</span><span class="badge pick">my pick</span></div><p class="desc">Rock band: ribs and gullies, lit top, dark foot, snow pillow.</p></label>
+        <label class="opt"><img src="cliff-2-layered.png" alt="Layered natural rock band"><div class="head"><input type="radio" name="cliff" value="C2 layered rock band"><span class="tag">C2</span></div><p class="desc">C1 with soft, wavy rock layers across the face.</p></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Track</h2>
+      <p class="why">Now: a mid-grey line, too dark to look like snow pressed down. Real tracks are only a little darker than the snow, with a cool blue shadow on one wall.</p>
+      <div class="grid">
+        <label class="opt"><img src="track-0-current.png" alt="Current grey track"><div class="head"><input type="radio" name="track" value="T0 current grey"><span class="tag">T0</span><span class="badge now">now</span></div><p class="desc">Mid grey, dark shadow.</p></label>
+        <label class="opt"><img src="track-1-light.png" alt="Light track"><div class="head"><input type="radio" name="track" value="T1 light"><span class="tag">T1</span></div><p class="desc">Light blue-grey, soft shadow.</p></label>
+        <label class="opt"><img src="track-2-lighter.png" alt="Lighter track"><div class="head"><input type="radio" name="track" value="T2 lighter"><span class="tag">T2</span></div><p class="desc">Lighter still: barely pressed snow.</p></label>
+        <label class="opt"><img src="track-3-blue-shadow.png" alt="Light track with blue shadow"><div class="head"><input type="radio" name="track" value="T3 light with blue shadow" checked><span class="tag">T3</span><span class="badge pick">my pick</span></div><p class="desc">Light line with a clearer blue shadow wall: reads as a groove cut in the snow.</p></label>
+      </div>
+    </section>
+
+    <div class="submit">
+      <textarea name="notes" placeholder="Anything to change? (optional, e.g. 'J2 but taller poles')"></textarea>
+      <button type="submit">Queue my picks</button>
+      <span id="state" role="status" aria-live="polite">Selected: J2, C1, T3 (my picks). Nothing queued yet.</span>
+    </div>
+  </form>
+</main>
+<script>
+  const form = document.getElementById('pick');
+  const state = document.getElementById('state');
+  const summary = () => {
+    const f = new FormData(form);
+    return { jump: f.get('jump'), cliff: f.get('cliff'), track: f.get('track'), notes: (f.get('notes') || '').toString().trim() };
+  };
+  form.addEventListener('change', () => {
+    const s = summary();
+    state.textContent = `Selected: ${s.jump}, ${s.cliff}, ${s.track}. Nothing queued yet.`;
+  });
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const s = summary();
+    const text = `Build these into colour mode: jump ${s.jump}; cliff ${s.cliff}; track ${s.track}.` + (s.notes ? ` Notes: ${s.notes}` : '');
+    if (window.lavish) {
+      window.lavish.queuePrompt(text, { tag: 'choice', text, element: form, queueKey: 'natural-looks', data: { question: 'natural-looks', ...s } });
+      state.textContent = 'Queued: ' + text + ' Press Send to Agent in the Lavish bar.';
+    } else {
+      state.textContent = 'Paste this back in the chat: ' + text;
+    }
+  });
+</script>
+</body>
+</html>

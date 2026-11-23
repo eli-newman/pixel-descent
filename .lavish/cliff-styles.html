@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Descent - Cliff Types</title>
+<style>
+:root{--bg:#000;--fg:#fff;--dim:#8a8a8a;--acc:#f5d742;--line:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-monospace,Menlo,monospace;padding:32px 20px 64px}
+h1{font-size:22px;margin:0 0 6px}
+p.lead{color:var(--dim);margin:0 0 24px;max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+.card{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card[data-cur="1"]{border-color:var(--acc)}
+canvas{width:100%;aspect-ratio:180/100;image-rendering:pixelated;background:#000;border:1px solid var(--line)}
+h2{font-size:16px;margin:0;display:flex;gap:8px;align-items:center}
+h2 b{color:var(--acc)}
+.tag{font-size:11px;color:#000;background:var(--acc);padding:1px 6px}
+p{margin:0;color:var(--dim);font-size:13px}
+.row{display:flex;gap:10px;align-items:center;justify-content:space-between}
+button{font:inherit;background:#000;color:var(--fg);border:1px solid var(--fg);padding:4px 12px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.bar{margin-bottom:20px;display:flex;gap:10px;align-items:center;color:var(--dim);font-size:13px}
+</style></head><body>
+<h1>Cliff types</h1>
+<p class="lead">Rider comes from the top and drops toward the bottom. Every cliff has a way down that is not a drop (the slope or chute). Each card is generated from a seed, so hit "Re-roll" to see how much it varies.</p>
+<div class="bar"><button id="all">Re-roll all</button><span>1 is what the game has now.</span></div>
+<div class="grid" id="grid"></div>
+<script>
+const W=180,H=100;
+function h2(a,b){let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296}
+function mkNoise(sd){return(x,sc,salt)=>{const u=x/sc,i=Math.floor(u),f=u-i,t=f*f*(3-2*f);return h2(i+sd,salt)*(1-t)+h2(i+1+sd,salt)*t}}
+function ctxOf(c){return{put:(x,y)=>{c.fillStyle='#fff';c.fillRect(x,y,1,1)},erase:(x,y)=>{c.fillStyle='#000';c.fillRect(x,y,1,1)}}}
+// one column of rock: lip line, hatched face, strata, cracks, dithered foot shadow
+function rock(f,x,lip,faceH,sd,k){
+ const foot=lip+faceH+Math.floor(h2(Math.floor(x/3)+sd,77)*4);
+ for(let y=lip-3;y<=foot+5;y++)f.erase(x,y);
+ f.put(x,lip);f.put(x,lip+1);
+ for(let y=lip+2;y<=foot;y++){const d=y-lip,col=Math.floor(x/6);
+  const strata=(d+Math.floor(h2(col+sd,3)*7))%7===0&&h2(col+sd,d)>.3;
+  const crack=x%6===0&&h2(col+sd,Math.floor(d/5))<.3;
+  const shade=d>faceH*.45?(x+y)%2===0:x%2===0&&y%2===0;
+  if(strata||crack||(k?shade&&(x+y)%2===0:shade))f.put(x,y)}
+ f.put(x,foot);if((x+foot)%2===0)f.put(x,foot+2);if(x%4===0&&h2(x+sd,9)>.3)f.put(x,foot+3);
+}
+function slope(f,x,lip,len,sd,dense){for(let y=lip;y<=lip+len;y++){const k=(y-lip)/len;if((x+y)%2===0&&h2(x+sd,y)>(dense?.2:.35)+k*.5)f.put(x,y)}}
+function chev(f,x,y){for(let k=0;k<4;k++){f.put(x-k,y+k);f.put(x+k,y+k)}}
+function arrow(f,x,y){for(let k=0;k<3;k++){f.put(x-2+k,y+k);f.put(x+2-k,y+k)}f.put(x,y+3);f.put(x,y+4)}
+function stones(f,sd,n,y0,skipA,skipB){for(let k=0;k<n;k++){const x=Math.floor(h2(k+sd,21)*W);if(x>skipA&&x<skipB)continue;const y=y0-Math.floor(h2(k+sd,22)*3);f.put(x,y);f.put(x+1,y);if(h2(k+sd,23)>.5)f.put(x,y-1)}}
+const STYLES=[
+{name:'Ledge with a gap',cur:1,note:'Now in the game: a wandering lip, uneven rock height, and one slope gap with an arrow.',
+ draw(f,sd,N){const ly=44;const gh=Math.round(18+h2(sd,1)*14),gx=Math.round(gh+14+h2(sd,2)*(W-2*gh-28)),gl=gx-gh,gr=gx+gh;
+  for(let x=0;x<W;x++){const wander=Math.round((N(x,38,1)-.5)*9+(h2(Math.floor(x/3)+sd,5)-.5)*3),lip=ly+wander;const ing=x>gl&&x<gr,edge=Math.min(Math.abs(x-gl),Math.abs(x-gr)),cr=Math.min(1,edge/9);
+   const fh=Math.round((12+N(x,17,2)*22)*(ing?0:.35+.65*cr));
+   if(ing||fh<4){for(let y=lip-3;y<=lip+20;y++)f.erase(x,y);if(ing)slope(f,x,lip,14,sd);continue}
+   rock(f,x,lip,fh,sd)}
+  stones(f,sd,7,ly-3,gl,gr);let cx=10+Math.floor(h2(sd,31)*14);while(cx<W-8){if(cx<gl-8||cx>gr+8)chev(f,cx,ly-12);cx+=22+Math.floor(h2(cx+sd,32)*18)}arrow(f,gx,ly-10)}},
+{name:'Broken ledge',note:'The ledge is split into 3-4 chunks at different heights with slope gaps between them. Wide open, easy to find a way down.',
+ draw(f,sd,N){const segs=[];let x=0;while(x<W){const w=Math.round(24+h2(x+sd,3)*34);segs.push([x,Math.min(W,x+w),Math.round(h2(x+sd,4)*14)-7]);x+=w+Math.round(10+h2(x+sd,5)*14)}
+  for(let x=0;x<W;x++){const s=segs.find(s=>x>=s[0]&&x<s[1]);const base=44;if(!s){const lip=base;for(let y=lip-3;y<=lip+20;y++)f.erase(x,y);slope(f,x,lip,14,sd,1);continue}
+   const edge=Math.min(x-s[0],s[1]-1-x),cr=Math.min(1,(edge+1)/6);const lip=base+s[2]+Math.round((N(x,22,1)-.5)*4);
+   rock(f,x,lip,Math.max(3,Math.round((10+N(x,15,2)*18)*(.45+.55*cr))),sd)}
+  for(const s of segs)chev(f,Math.round((s[0]+s[1])/2),34+s[2])}},
+{name:'Diagonal escarpment',note:'The whole ledge runs at a slant across the slope, so the drop is bigger on one side. The gap sits on the low end.',
+ draw(f,sd,N){const sl=(h2(sd,1)>.5?1:-1)*(.16+h2(sd,2)*.12);const gx=sl>0?W-30-Math.round(h2(sd,3)*20):30+Math.round(h2(sd,3)*20),gh=22;
+  for(let x=0;x<W;x++){const lip=Math.round(44+(x-W/2)*sl+(N(x,30,1)-.5)*5);const ing=Math.abs(x-gx)<gh;const cr=Math.min(1,Math.abs(Math.abs(x-gx)-gh)/9);
+   if(ing){for(let y=lip-3;y<=lip+24;y++)f.erase(x,y);slope(f,x,lip,16,sd);continue}
+   const tall=Math.abs(x-gx)/W;rock(f,x,lip,Math.round((8+tall*34+N(x,16,2)*8)*(.4+.6*cr)),sd)}
+  stones(f,sd,6,40,gx-gh,gx+gh);arrow(f,gx,Math.round(44+(gx-W/2)*sl)-12);for(let cx=20;cx<W-10;cx+=34+Math.floor(h2(cx+sd,9)*10))if(Math.abs(cx-gx)>gh+10)chev(f,cx,Math.round(44+(cx-W/2)*sl)-12)}},
+{name:'Gully chute',note:'Solid wall with a narrow V-shaped chute: tight at the top, fanning out below, with dark rock walls and boulders at the exit.',
+ draw(f,sd,N){const gx=Math.round(40+h2(sd,1)*100),top=5+Math.round(h2(sd,2)*4),bot=26+Math.round(h2(sd,3)*8),lyBase=40;
+  for(let x=0;x<W;x++){const lip=lyBase+Math.round((N(x,34,1)-.5)*6);const d=Math.abs(x-gx);
+   const ing=d<top+2;const fh=Math.round(16+N(x,15,2)*16);
+   rock(f,x,lip,fh,sd,d<bot*.9);
+   if(ing){for(let y=lip-3;y<=lip+fh+4;y++)f.erase(x,y);for(let y=lip;y<=lip+fh+6;y++){const w=top+(bot-top)*((y-lip)/(fh+6));if(d<w){if((x+y)%2===0&&h2(x+sd,y)>.4+(y-lip)/(fh+6)*.4)f.put(x,y)}else if(d<w+3&&(x+y)%2===0)f.put(x,y)}}}
+  for(let y=lyBase;y<lyBase+30;y++){const k=(y-lyBase)/30,w=top+(bot-top)*Math.min(1,k*1.2);for(let x=0;x<W;x++){const d=Math.abs(x-gx);if(d<w&&(x+y)%2===0&&h2(x+sd,y+9)>.45+k*.45){f.put(x,y)}else if(d>=w&&d<w+2&&(x+y)%2===0&&k<.9)f.erase(x,y)}}
+  for(let k=0;k<5;k++){const bx=gx+Math.round((h2(k+sd,11)-.5)*bot*1.6),by=lyBase+36+Math.round(h2(k+sd,12)*10);const r=2+Math.floor(h2(k+sd,13)*3);for(let dy=-r;dy<=0;dy++)for(let dx=-r-1;dx<=r+1;dx++)if(dx*dx/((r+1)*(r+1))+dy*dy/(r*r)<=1)f.put(bx+dx,by+dy)}
+  arrow(f,gx,lyBase-14);stones(f,sd,5,lyBase-3,gx-bot,gx+bot)}},
+{name:'Snow cornice',note:'No rock face: a soft overhanging snow lip with a thick dither shadow underneath. Wide gentle gap. Quieter, more like a roll-over.',
+ draw(f,sd,N){const gx=Math.round(35+h2(sd,1)*110),gh=Math.round(24+h2(sd,2)*14);
+  for(let x=0;x<W;x++){const lip=Math.round(44+Math.sin(x/11+sd)*3+(N(x,26,1)-.5)*8);const ing=Math.abs(x-gx)<gh;const k=Math.min(1,Math.abs(Math.abs(x-gx)-gh)/12);
+   for(let y=lip-3;y<=lip+22;y++)f.erase(x,y);
+   if(ing){slope(f,x,lip+2,12,sd,1);continue}
+   f.put(x,lip);f.put(x,lip+1);if(x%2===0)f.put(x,lip+2);const sh=Math.round((6+N(x,12,3)*12)*(.3+.7*k));
+   for(let y=lip+3;y<lip+3+sh;y++){const t=(y-lip-3)/sh;if((x+y)%2===0&&h2(x+sd,y)>t*.7)f.put(x,y);if(x%3===0&&y%3===0&&t<.5)f.put(x,y)}
+   if(h2(Math.floor(x/2)+sd,41)>.82){const l=2+Math.floor(h2(x+sd,42)*5);for(let y=0;y<l;y++)f.put(x,lip+3+y)}}
+  arrow(f,gx,28);let cx=14;while(cx<W-8){if(Math.abs(cx-gx)>gh+8)chev(f,cx,32);cx+=26+Math.floor(h2(cx+sd,5)*18)}}},
+{name:'Terraces',note:'Two stacked ledges with their gaps on opposite sides, so you have to zig-zag to ride down without dropping. Smaller drops.',
+ draw(f,sd,N){const g1=Math.round(30+h2(sd,1)*40),g2=Math.round(110+h2(sd,2)*40);
+  const tier=(ly,gx,gh,salt)=>{for(let x=0;x<W;x++){const lip=ly+Math.round((N(x,30,salt)-.5)*6);const ing=Math.abs(x-gx)<gh;const cr=Math.min(1,Math.abs(Math.abs(x-gx)-gh)/8);
+    if(ing){for(let y=lip-3;y<=lip+16;y++)f.erase(x,y);slope(f,x,lip,11,sd+salt);continue}
+    rock(f,x,lip,Math.max(3,Math.round((7+N(x,14,salt+1)*11)*(.4+.6*cr))),sd+salt)}};
+  tier(24,g1,16+Math.round(h2(sd,3)*8),11);tier(62,g2,16+Math.round(h2(sd,4)*8),23);
+  arrow(f,g1,10);arrow(f,g2,48)}}
+];
+const cards=[];
+function mk(st,i){
+ const el=document.createElement('div');el.className='card';if(st.cur)el.dataset.cur=1;
+ el.innerHTML=`<h2><b>${i+1}</b>${st.name}${st.cur?'<span class="tag">CURRENT</span>':''}</h2><canvas width="${W}" height="${H}"></canvas><div class="row"><p>${st.note}</p><button>Re-roll</button></div>`;
+ document.getElementById('grid').appendChild(el);
+ const cv=el.querySelector('canvas'),c=cv.getContext('2d');let seed=17+i*5;
+ const roll=()=>{c.fillStyle='#000';c.fillRect(0,0,W,H);const f=ctxOf(c);const N=mkNoise(seed*7);
+  for(let k=0;k<26;k++){f.put(Math.floor(h2(k+seed,91)*W),Math.floor(h2(k+seed,92)*H))}
+  st.draw(f,seed*7,N)};
+ el.querySelector('button').onclick=()=>{seed+=1+Math.floor(Math.random()*500);roll()};
+ const q=+new URLSearchParams(location.search).get('seed');if(q)seed=q+i;roll();cards.push(()=>{seed+=1+Math.floor(Math.random()*500);roll()})}
+STYLES.forEach(mk);
+document.getElementById('all').onclick=()=>cards.forEach(f=>f());
+</script></body></html>

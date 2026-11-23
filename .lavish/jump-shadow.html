@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Descent - Jump Shadow</title>
+<style>
+:root{--bg:#000;--fg:#fff;--dim:#8a8a8a;--acc:#f5d742;--line:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-monospace,Menlo,monospace;padding:32px 20px 64px}
+h1{font-size:22px;margin:0 0 6px}
+p.lead{color:var(--dim);margin:0 0 24px;max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+.card{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card[data-cur="1"]{border-color:var(--acc)}
+canvas{width:100%;aspect-ratio:180/110;image-rendering:pixelated;background:#000;border:1px solid var(--line)}
+h2{font-size:16px;margin:0;display:flex;gap:8px;align-items:center}
+h2 b{color:var(--acc)}
+.tag{font-size:11px;color:#000;background:var(--acc);padding:1px 6px}
+p{margin:0;color:var(--dim);font-size:13px}
+</style></head><body>
+<h1>Filled jump with a shadow</h1>
+<p class="lead">The jump keeps its current filled look and gets a shadow that falls the same way as the trees. Each card shows a big and a small jump next to trees. Card 2 is what is in the game now.</p>
+<div class="grid" id="grid"></div>
+<script>
+const W=180,H=110;
+function h2(a,b){let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296}
+function F(c){return{put:(x,y)=>{c.fillStyle='#fff';c.fillRect(x,y,1,1)},erase:(x,y)=>{c.fillStyle='#000';c.fillRect(x,y,1,1)}}}
+function rect(f,x,y,w,h,e){for(let j=0;j<h;j++)for(let i=0;i<w;i++)e?f.erase(x+i,y+j):f.put(x+i,y+j)}
+const ROWS=11;
+const hwAt=(half,i)=>Math.round(half*(0.5+0.5*(i/(ROWS-1))));
+function chevron(f,x,ly){for(let k=0;k<3;k++){f.put(x-k,ly-5+k);f.put(x+k,ly-5+k)}}
+function fill(f,x,ly,half){
+ for(let i=0;i<ROWS;i++){const hw=hwAt(half,i),y=ly-(ROWS-1)+i;
+  rect(f,x-hw-1,y,hw*2+3,1,true);f.put(x-hw,y);f.put(x+hw,y);
+  for(let dx=-hw+1;dx<hw;dx++)if((x+dx+y)%3===0)f.put(x+dx,y)}
+ for(let dx=-half;dx<=half;dx++){f.put(x+dx,ly);f.put(x+dx,ly+1)}
+ chevron(f,x,ly);for(let dx=-half+2;dx<=half;dx+=2)f.put(x+dx,ly+3)
+}
+// same rule as the tree sprites (castShadow): a point at height h lands h*0.85+1 right and h*0.28+1 down
+function shadow(f,x,ly,half,hmax){
+ for(let i=0;i<ROWS;i++){
+  const t=i/(ROWS-1),hw=hwAt(half,i),y=ly-(ROWS-1)+i,h=1+(hmax-1)*t;
+  for(let dx=-hw;dx<=hw;dx++){
+   const sx=Math.round(x+dx+h*0.85+1),sy=Math.round(y+1+h*0.28);
+   if((sx+sy)%2===0)f.put(sx,sy)
+  }
+ }
+}
+const mk=h=>(f,x,ly,half)=>{if(h)shadow(f,x,ly,half,h);fill(f,x,ly,half)};
+const VARS=[
+ {n:'Before',d:'Filled jump with no shadow. What the game had.',fn:mk(0)},
+ {n:'Filled + shadow (in the game now)',d:'Same fill, with a shadow that falls like the tree shadows. Height 8.',fn:mk(8),cur:1},
+ {n:'Taller shadow',d:'Height 12: the shadow reaches further, so the jump feels bigger.',fn:mk(12)},
+ {n:'Shorter shadow',d:'Height 5: a small tight shadow, subtler.',fn:mk(5)},
+];
+function scene(f,fn){
+ for(let i=0;i<26;i++){const x=Math.floor(h2(i,1)*W),y=Math.floor(h2(i,2)*H);if(h2(i,3)<0.7){f.put(x,y);f.put(x+1,y)}}
+ // trees at the edges
+ for(const [tx,ty] of[[14,30],[160,70],[22,94],[150,18]]){for(let k=0;k<9;k++){const w=Math.floor(k/2);for(let d=-w;d<=w;d++)f.put(tx+d,ty-9+k)}f.put(tx,ty+1);f.put(tx,ty+2);for(let d=0;d<6;d++)if(d%2===0)f.put(tx+3+d,ty+2)}
+ // two jump sizes
+ fn(f,60,58,17);
+ fn(f,128,98,10);
+ // rider path hint
+ for(let y=4;y<44;y+=3)f.put(60,y);
+}
+const grid=document.getElementById('grid');
+VARS.forEach((v,i)=>{
+ const card=document.createElement('div');card.className='card';if(v.cur)card.dataset.cur='1';
+ const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+ const c=cv.getContext('2d');c.fillStyle='#000';c.fillRect(0,0,W,H);
+ scene(F(c),v.fn);
+ card.innerHTML=`<h2><b>${i+1}</b> ${v.n}${v.cur?' <span class="tag">CURRENT</span>':''}</h2>`;
+ card.appendChild(cv);const p=document.createElement('p');p.textContent=v.d;card.appendChild(p);
+ grid.appendChild(card);
+});
+</script></body></html>

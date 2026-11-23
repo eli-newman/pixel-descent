@@ -209,7 +209,7 @@ function drawMain(fb: Framebuffer, g: GameView): void {
   // title plate over the mountains
   fb.fillRect(22, 10, W - 44, 46, OFF);
   fb.strokeRect(22, 10, W - 44, 46, WHITE);
-  drawTextCentered(fb, 'FALL', CX, 15, WHITE, 3);
+  drawTextCentered(fb, 'POW', CX, 15, WHITE, 3);
   drawTextCentered(fb, 'LINE', CX, 34, WHITE, 3);
 
   panel(fb, 146, 316);

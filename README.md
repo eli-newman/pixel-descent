@@ -1,4 +1,6 @@
-# Fall Line
+# Powline
+
+Play at https://powline.vercel.app
 
 A one-colour, pixel-art downhill snowboard game. White on black, with a single yellow accent for the UI and two greys for the shadow of your track. The rider, trees, rocks, bushes and peaks reuse the procedural pixel-art language of the game's original scene.
 
@@ -21,7 +23,7 @@ npm run format     # prettier
 
 Players never see a seed: every run is just a new course. The game over SHARE link carries one internally (`?seed=...`), so a friend who opens it gets the same course, and the address bar drops it on load. The same seed always generates the same trees, rocks, stars, kickers, ice, drifts and risk lanes. The **daily** course (seed `d20261020` style, from the local date) is the same for everyone on a given day.
 
-The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/fall-line/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Most crawlers want an absolute `og:image` URL: edit the two `og:image`/`twitter:image` tags in `index.html` once the final address is known.
+The build uses relative URLs (`base: './'`), so the contents of `dist/` work from any folder, for example `https://example.com/games/powline/`. `public/og.png` is the link preview image (1200x630, drawn by the share card renderer). Crawlers need an absolute `og:image` URL, so the `og:image`, `twitter:image` and `og:url` tags in `index.html` point at https://powline.vercel.app: update them if the address changes.
 
 ## Controls
 

@@ -1,0 +1,177 @@
+<!doctype html>
+<html data-theme="luxury" lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terminal Code Tour</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/daisyui.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daisyui@5.5.19/themes.css">
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.2.4/dist/index.global.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { background: var(--color-base-100); color: var(--color-base-content); }
+  .term { background: #0d0d0d; color: #e6e6e6; border-radius: 10px; overflow: hidden; border: 1px solid #2a2a2a; min-width: 0; }
+  .term-bar { display: flex; gap: 6px; align-items: center; padding: 8px 12px; background: #1b1b1b; border-bottom: 1px solid #2a2a2a; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .term-title { margin-left: 8px; font: 12px ui-monospace, Menlo, monospace; color: #8a8a8a; }
+  .term pre { margin: 0; padding: 14px 16px; font: 13px/1.55 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .p { color: #7ee787; } .c { color: #79c0ff; } .d { color: #79c0ff; font-weight: 600; } .m { color: #8b949e; } .y { color: #e3b341; } .r { color: #ff7b72; font-weight: 600; }
+  .grid > *, .flex > * { min-width: 0; }
+  #bat-file { border-radius: 0 0 10px 10px; overflow: hidden; }
+</style>
+</head>
+<body class="min-h-screen">
+<main class="max-w-4xl mx-auto px-4 py-10 space-y-10">
+
+  <header class="space-y-3">
+    <div class="badge badge-primary badge-outline">Example using your ski-game repo</div>
+    <h1 class="text-3xl md:text-4xl font-bold">Looking at code in the terminal</h1>
+    <p class="opacity-80 max-w-2xl">Each card shows what you type (green <span class="p font-mono">$</span> line) and what comes back. Everything below is real output from <code class="font-mono">~/Desktop/Dev/fun-cool/ski-game</code>.</p>
+  </header>
+
+  <!-- quick reference -->
+  <section class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="card bg-base-200"><div class="card-body p-4"><div class="font-mono text-primary">ls</div><div class="text-sm opacity-80">What's in this folder?</div></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><div class="font-mono text-primary">tree</div><div class="text-sm opacity-80">Whole folder structure</div></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><div class="font-mono text-primary">less / bat</div><div class="text-sm opacity-80">Read one file</div></div></div>
+    <div class="card bg-base-200"><div class="card-body p-4"><div class="font-mono text-primary">rg</div><div class="text-sm opacity-80">Search every file</div></div></div>
+  </section>
+
+  <!-- 1 -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">1. Move into the project and list it</h2>
+    <p class="opacity-80"><code>cd</code> = change directory. <code>ls</code> = list. Folders show in blue.</p>
+    <div class="term">
+      <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">zsh</span></div>
+<pre><span class="p">$</span> cd ~/Desktop/Dev/fun-cool/ski-game
+<span class="p">$</span> ls
+CLAUDE.md          <span class="d">dist</span>               eslint.config.js   index.html
+<span class="d">node_modules</span>       package-lock.json  package.json       playwright.config.ts
+<span class="d">public</span>             README.md          <span class="d">src</span>                <span class="d">test-results</span>
+<span class="d">tests</span>              tsconfig.json      vite.config.ts</pre>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">2. See the folder structure as a tree</h2>
+    <p class="opacity-80">Needs <code>brew install tree</code>. <code>-L 2</code> limits depth so it stays readable.</p>
+    <div class="term">
+      <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">zsh</span></div>
+<pre><span class="p">$</span> tree -L 2 src
+<span class="d">src</span>
+├── CLAUDE.md
+├── main.ts
+├── style.css
+├── <span class="d">core</span>
+│   ├── config.ts
+│   ├── detMath.ts
+│   └── rng.ts
+├── <span class="d">platform</span>
+│   ├── audio.ts
+│   ├── input.ts
+│   ├── loop.ts
+│   ├── shareDom.ts
+│   └── viewport.ts
+├── <span class="d">render</span>
+│   ├── backdrop.ts
+│   ├── font.ts
+│   ├── framebuffer.ts
+│   ├── scene.ts
+│   ├── track.ts
+│   ├── ui.ts
+│   └── <span class="m">... 5 more</span>
+├── <span class="d">sim</span>
+│   ├── rider.ts
+│   ├── sim.ts
+│   ├── tricks.ts
+│   └── <span class="m">... 11 more</span>
+└── <span class="d">state</span>
+    ├── game.ts
+    ├── menu.ts
+    └── <span class="m">... 8 more</span>
+
+<span class="m">5 directories, 48 files</span></pre>
+    </div>
+    <div class="alert alert-info text-sm"><span>No <code>tree</code>? <code>find src -type f</code> works out of the box. It lists every file path, one per line, but with no indentation.</span></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">3. Read a file</h2>
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="space-y-2">
+        <div class="font-semibold">less <span class="badge badge-sm badge-ghost">already installed</span></div>
+        <div class="term">
+          <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">less src/main.ts</span></div>
+<pre>import { Sfx } from './platform/audio';
+import { H, W } from './core/config';
+import { Game } from './state/game';
+import { Input } from './platform/input';
+import { Loop } from './platform/loop';
+import { normalizeSeed } from './core/rng';
+...
+<span class="m" style="background:#e6e6e6;color:#0d0d0d">src/main.ts lines 1-24</span></pre>
+        </div>
+        <p class="text-sm opacity-80">Plain text. <kbd class="kbd kbd-sm">space</kbd> next page, <kbd class="kbd kbd-sm">/</kbd> search, <kbd class="kbd kbd-sm">q</kbd> quit.</p>
+      </div>
+      <div class="space-y-2">
+        <div class="font-semibold">bat <span class="badge badge-sm badge-primary badge-outline">brew install bat</span></div>
+        <div class="term">
+          <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">bat src/main.ts</span></div>
+          <div id="bat-file"></div>
+        </div>
+        <p class="text-sm opacity-80">Same file, with colors and line numbers. Same keys as <code>less</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">4. Search all the code</h2>
+    <p class="opacity-80"><code>rg</code> (ripgrep, already installed) shows <span class="font-mono">file:line:</span> for every match.</p>
+    <div class="term">
+      <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">zsh</span></div>
+<pre><span class="p">$</span> rg -n Framebuffer src --type ts
+<span class="c">src/main.ts</span>:<span class="y">7</span>:import { <span class="r">Framebuffer</span> } from './render/framebuffer';
+<span class="c">src/render/backdrop.ts</span>:<span class="y">3</span>:import { <span class="r">Framebuffer</span>, OFF, WHITE } from './framebuffer';
+<span class="c">src/render/ui.ts</span>:<span class="y">15</span>:import { <span class="r">Framebuffer</span>, OFF, WHITE, YELLOW } from './framebuffer';
+<span class="c">src/platform/shareDom.ts</span>:<span class="y">10</span>:import { <span class="r">Framebuffer</span> } from '../render/framebuffer';</pre>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="space-y-3">
+    <h2 class="text-xl font-semibold">5. Or just open it in an editor</h2>
+    <div class="term">
+      <div class="term-bar"><span class="dot bg-[#ff5f57]"></span><span class="dot bg-[#febc2e]"></span><span class="dot bg-[#28c840]"></span><span class="term-title">zsh</span></div>
+<pre><span class="p">$</span> cursor .
+<span class="m"># opens Cursor with the file tree on the left and code on the right</span></pre>
+    </div>
+    <p class="opacity-80">The <code>.</code> means "this folder". Best for browsing a lot of files.</p>
+  </section>
+
+</main>
+
+<script type="module">
+  import { File } from "https://esm.sh/@pierre/diffs@1.2.10?bundle";
+  const contents = `import { Sfx } from './platform/audio';
+import { H, W } from './core/config';
+import { Game } from './state/game';
+import { Input } from './platform/input';
+import { Loop } from './platform/loop';
+import { normalizeSeed } from './core/rng';
+
+function required<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(\`Missing #\${id}\`);
+  return el as T;
+}
+`;
+  new File({ theme: { light: "github-dark", dark: "github-dark" }, themeType: "dark", overflow: "wrap" }).render({
+    containerWrapper: document.querySelector("#bat-file"),
+    file: { name: "src/main.ts", contents },
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Descent - Side Slip</title>
+<style>
+:root{--bg:#000;--fg:#fff;--dim:#8a8a8a;--acc:#f5d742;--line:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-monospace,Menlo,monospace;padding:32px 20px 64px}
+h1{font-size:22px;margin:0 0 6px}
+p.lead{color:var(--dim);margin:0 0 24px;max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px}
+.card{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card[data-cur="1"]{border-color:var(--acc)}
+canvas{width:100%;aspect-ratio:90/120;image-rendering:pixelated;background:#000;border:1px solid var(--line)}
+h2{font-size:16px;margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+h2 b{color:var(--acc)}
+.tag{font-size:11px;color:#000;background:var(--acc);padding:1px 6px}
+p{margin:0;color:var(--dim);font-size:13px}
+</style></head><body>
+<h1>Side slip animation</h1>
+<p class="lead">The rider plows the board sideways and slides down the slope (it loops). The trail is what the board scrapes behind him and the spray is the powder it shoves up. 1 is what the game has now. The rest change the trail, the spray, or both. Tell me a number or mix a few.</p>
+<div class="grid" id="grid"></div>
+<script>
+const W=90,H=120,RY=64,TX=52,L=14;
+function hash(a,b){let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296}
+const NY=0.12; // board runs from tail (TX) to nose at (TX-L, +NY*L)
+function mk(v){
+ const s={t:0,wy:0,hist:[],parts:[],seed:Math.floor(Math.random()*999)};
+ return s;
+}
+function put(c,x,y,col){c.fillStyle=col||'#fff';c.fillRect(Math.round(x),Math.round(y),1,1)}
+function rider(c,y){
+ for(let k=0;k<=L;k++){put(c,TX-k,y+NY*k);if(k>1&&k<L-1)put(c,TX-k,y+NY*k+1)}
+ put(c,TX-L-1,y+NY*L-1);
+ const bx=TX-7;
+ // legs, torso, arms, head (side-on, leaning)
+ put(c,bx-1,y-1);put(c,bx-1,y-2);put(c,bx+1,y-1);put(c,bx+1,y-2);
+ for(let j=-3;j>=-8;j--){put(c,bx,y+j);put(c,bx+1,y+j)}
+ put(c,bx-2,y-6);put(c,bx-3,y-5);put(c,bx+3,y-6);put(c,bx+4,y-5);
+ for(let j=-9;j>=-11;j--){put(c,bx,y+j);put(c,bx+1,y+j)}
+ put(c,bx-1,y-10);put(c,bx+2,y-10);
+}
+const VERS=[
+ {n:'Ladder groove (now)',d:'Two thin edges with a rung across every few steps, and a small spray off the nose.',cur:1,trail:'ladder',spray:'calm'},
+ {n:'Parallel scrape lines',d:'Fine lines run along the slide between the board ends, like real scrape marks. No rungs.',trail:'lines',spray:'calm'},
+ {n:'Chatter marks',d:'Short dashes across the track that alternate, like a board chattering as it skids.',trail:'chatter',spray:'calm'},
+ {n:'Fading band',d:'A dithered band that starts dense at the board and thins out into the snow behind him.',trail:'fade',spray:'calm'},
+ {n:'Plow berm + lines',d:'Scrape lines plus a little dithered mound of snow banked in front of the board.',trail:'lines',spray:'calm',berm:1},
+ {n:'Powder fan',d:'A thin double-line track, but the nose throws a wide fan of powder up and back.',trail:'edges',spray:'fan'},
+ {n:'Fading band + berm + fan',d:'The full version: fading band, the berm, and the powder fan. The most going on.',trail:'fade',spray:'fan',berm:1},
+];
+function draw(c,v,s,dt){
+ c.fillStyle='#000';c.fillRect(0,0,W,H);
+ s.t+=dt;if(s.t>3.2){s.t=0;s.hist=[];s.parts=[];s.wy=0}
+ const speed=60;s.wy+=speed*dt;
+ // trail history in world coords: point per ~1.5px of travel
+ const last=s.hist[s.hist.length-1];
+ if(!last||s.wy-last>=1.5)s.hist.push(s.wy);
+ // snow flecks scrolling
+ for(let i=0;i<14;i++){const wx=Math.floor(hash(i,s.seed)*W),wyy=hash(i,3)*260;const y=((wyy-s.wy)%260+260)%260-60+RY;if(y>=0&&y<H)put(c,wx,y,'#777')}
+ const ry=RY;
+ // trail
+ const N=s.hist.length;
+ for(let i=0;i<N;i++){
+  const y=Math.round(RY-(s.wy-s.hist[i]));if(y<0||y>H)continue;
+  const age=(s.wy-s.hist[i]);const ageK=Math.min(1,age/(RY-4));
+  const x0=TX-L,x1=TX,yy=y+NY*L;
+  if(v.trail==='ladder'){
+   put(c,x1,y);put(c,x0,yy);
+   if(i%5===0)for(let k=0;k<=L;k+=2)put(c,TX-k,y+NY*k);
+  }else if(v.trail==='edges'){
+   put(c,x1,y);put(c,x0,yy);
+  }else if(v.trail==='lines'){
+   for(let k=0;k<=L;k+=3)if((i+k)%2===0)put(c,TX-k,y+NY*k);
+   put(c,x1,y);put(c,x0,yy);
+  }else if(v.trail==='chatter'){
+   const off=(i%4<2)?0:2;
+   for(let k=off;k<=L;k+=1)if(k%4<2)put(c,TX-k,y+NY*k);
+  }else if(v.trail==='fade'){
+   put(c,x1,y);put(c,x0,yy);
+   for(let k=1;k<L;k++)if(hash(i*7+k,s.seed)<(1-ageK)*0.75&&(k+i)%2===0)put(c,TX-k,y+NY*k);
+  }
+ }
+ // berm: banked snow in front of the nose side/below the board
+ if(v.berm){
+  for(let k=0;k<L+2;k++){
+   const h=Math.round(3*Math.sin(Math.PI*k/(L+2))+0.4);
+   for(let j=0;j<h;j++){const x=TX-k+1,y=ry+NY*k+2+j;if(hash(x*3+j,Math.floor(s.t*12)+s.seed)<0.8)put(c,x,y)}
+  }
+ }
+ // spray
+ const frame=Math.floor(s.t*40);
+ if(frame!==s.lastFrame){s.lastFrame=frame;
+  if(frame%3===0){
+   const nx=TX-L,ny=ry+NY*L-1;
+   if(v.spray==='calm'){
+    for(let k=0;k<2;k++)s.parts.push({x:nx+hash(frame,k)*3,y:s.wy+(ny-ry),vx:-6-hash(frame,k+9)*10,vy:speed-34-hash(frame,k+5)*20,life:0.7});
+   }else{
+    for(let k=0;k<9;k++){const a=-Math.PI/2+(hash(frame,k)-0.5)*1.9-0.55;const sp=26+hash(frame,k+4)*34;s.parts.push({x:nx+hash(frame,k+2)*5,y:s.wy+(ny-ry),vx:Math.cos(a)*sp,vy:speed+Math.sin(a)*sp,life:0.8})}
+    for(let k=0;k<3;k++){const a=Math.PI+(hash(frame,k+30)-0.5)*0.9;s.parts.push({x:TX-L/2,y:s.wy,vx:Math.cos(a)*14,vy:speed-14-hash(frame,k)*14,life:0.55})}
+   }
+  }
+ }
+ for(const p of s.parts){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=40*dt}
+ s.parts=s.parts.filter(p=>p.life>0);
+ for(const p of s.parts)put(c,p.x,RY+(p.y-s.wy));
+ rider(c,ry);
+}
+const grid=document.getElementById('grid');
+VERS.forEach((v,i)=>{
+ const card=document.createElement('div');card.className='card';if(v.cur)card.dataset.cur='1';
+ const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+ card.innerHTML=`<h2><b>${i+1}</b> ${v.n}${v.cur?' <span class="tag">CURRENT</span>':''}</h2>`;
+ card.appendChild(cv);const p=document.createElement('p');p.textContent=v.d;card.appendChild(p);grid.appendChild(card);
+ const c=cv.getContext('2d');const s=mk(v);
+ const at=+(new URLSearchParams(location.search).get('at')||0);
+ for(let t=0;t<at;t+=1/60)draw(c,v,s,1/60);
+ if(!new URLSearchParams(location.search).get('freeze'))setInterval(()=>draw(c,v,s,1/40),25);
+});
+</script></body></html>

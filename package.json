@@ -1,8 +1,8 @@
 {
-  "name": "fall-line",
+  "name": "powline",
   "version": "1.0.0",
   "private": true,
-  "description": "Fall Line - a one-colour pixel-art downhill snowboard game",
+  "description": "Powline - a one-colour pixel-art downhill snowboard game",
   "type": "module",
   "scripts": {
     "dev": "vite",

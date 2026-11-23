@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel Descent - Jump Styles</title>
+<style>
+:root{--bg:#000;--fg:#fff;--dim:#8a8a8a;--acc:#f5d742;--line:#2a2a2a}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 ui-monospace,Menlo,monospace;padding:32px 20px 64px}
+h1{font-size:22px;margin:0 0 6px}
+p.lead{color:var(--dim);margin:0 0 24px;max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:20px}
+.card{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card[data-cur="1"]{border-color:var(--acc)}
+canvas{width:100%;aspect-ratio:180/110;image-rendering:pixelated;background:#000;border:1px solid var(--line)}
+h2{font-size:16px;margin:0;display:flex;gap:8px;align-items:center}
+h2 b{color:var(--acc)}
+.tag{font-size:11px;color:#000;background:var(--acc);padding:1px 6px}
+p{margin:0;color:var(--dim);font-size:13px}
+</style></head><body>
+<h1>Jump styles</h1>
+<p class="lead">Rider comes from the top and rides toward the bottom, over the lip at the bottom edge of each jump. Each card shows a jump on open snow with a few trees and flecks for context. 1 is what the game has now. The others are outline-only, with a shadow so the jump still reads as a solid thing sitting on the snow.</p>
+<div class="grid" id="grid"></div>
+<script>
+const W=180,H=110;
+function h2(a,b){let h=(Math.imul(a|0,374761393)+Math.imul(b|0,668265263))|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h>>>0)/4294967296}
+function F(c){return{put:(x,y)=>{c.fillStyle='#fff';c.fillRect(x,y,1,1)},erase:(x,y)=>{c.fillStyle='#000';c.fillRect(x,y,1,1)}}}
+function rect(f,x,y,w,h,e){for(let j=0;j<h;j++)for(let i=0;i<w;i++)e?f.erase(x+i,y+j):f.put(x+i,y+j)}
+const ROWS=11;
+const hwAt=(half,i)=>Math.round(half*(0.5+0.5*(i/(ROWS-1))));
+function chevron(f,x,ly){for(let k=0;k<3;k++){f.put(x-k,ly-5+k);f.put(x+k,ly-5+k)}}
+// cast shadow, same rule as the tree sprites (src/render/sprites.ts castShadow): a point at height h lands
+// h*0.85+1 to the right and h*0.28+1 down, dithered by world coordinates. The jump rises toward the lip.
+function shadow(f,x,ly,half,hmax){
+ for(let i=0;i<ROWS;i++){
+  const t=i/(ROWS-1),hw=hwAt(half,i),y=ly-(ROWS-1)+i,h=1+(hmax-1)*t;
+  for(let dx=-hw;dx<=hw;dx++){
+   const sx=Math.round(x+dx+h*0.85+1),sy=Math.round(y+1+h*0.28);
+   if((sx+sy)%2===0)f.put(sx,sy)
+  }
+ }
+}
+// 1 current: filled dither wedge
+function v1(f,x,ly,half){
+ for(let i=0;i<ROWS;i++){const hw=hwAt(half,i),y=ly-(ROWS-1)+i;
+  rect(f,x-hw-1,y,hw*2+3,1,true);f.put(x-hw,y);f.put(x+hw,y);
+  for(let dx=-hw+1;dx<hw;dx++)if((x+dx+y)%3===0)f.put(x+dx,y)}
+ for(let dx=-half;dx<=half;dx++){f.put(x+dx,ly);f.put(x+dx,ly+1)}
+ chevron(f,x,ly);for(let dx=-half+2;dx<=half;dx+=2)f.put(x+dx,ly+3)
+}
+// outline only: hollow trapezoid, 2px lip
+function hollow(f,x,ly,half){
+ for(let i=0;i<ROWS;i++){const hw=hwAt(half,i),y=ly-(ROWS-1)+i;
+  rect(f,x-hw-1,y,hw*2+3,1,true);f.put(x-hw,y);f.put(x+hw,y);
+  if(i===0)for(let dx=-hw;dx<=hw;dx++)f.put(x+dx,y)}
+ for(let dx=-half;dx<=half;dx++){f.put(x+dx,ly);f.put(x+dx,ly+1)}
+}
+function v2(f,x,ly,half){hollow(f,x,ly,half);chevron(f,x,ly)}
+function v3(f,x,ly,half){shadow(f,x,ly,half,8);hollow(f,x,ly,half);chevron(f,x,ly)}
+// 4 outline + shadow + converging ridge lines toward the lip (a wedge)
+function v4(f,x,ly,half){
+ shadow(f,x,ly,half,8);hollow(f,x,ly,half);
+ for(const s of[-1,1])for(let i=1;i<ROWS-1;i++){const hw=hwAt(half,i),y=ly-(ROWS-1)+i,rx=Math.round(s*hw*0.45);if(i%2===0||i>5)f.put(x+rx,y)}
+ chevron(f,x,ly)
+}
+// 5 outline + shadow, light from left: right wall is a solid thick edge, left stays thin; shadow longer
+function v5(f,x,ly,half){
+ shadow(f,x,ly,half,12);hollow(f,x,ly,half);
+ for(let i=0;i<ROWS;i++){const hw=hwAt(half,i),y=ly-(ROWS-1)+i;f.put(x+hw-1,y);if(i>3)f.put(x+hw-2,y)}
+ chevron(f,x,ly)
+}
+// 6 outline + dark-filled underside strip below the lip + tapering shadow, lip dashed open in the middle
+function v6(f,x,ly,half){
+ shadow(f,x,ly,half,10);hollow(f,x,ly,half);
+ for(let dx=-half+3;dx<=half-3;dx++)if(((dx%6)+6)%6<3){f.erase(x+dx,ly);f.erase(x+dx,ly+1)}
+ // front face: short solid wall under the lip so it reads as a step
+ for(let j=0;j<3;j++){const w=half-j;for(let dx=-w;dx<=w;dx++)if(j===2||dx===-w||dx===w||(dx+j)%2===0)f.put(x+dx,ly+2+j)}
+ chevron(f,x,ly)
+}
+const VARS=[
+ {n:'Filled (now)',d:'Dithered fill and a solid lip. What the game has today.',fn:v1,cur:1},
+ {n:'Outline only',d:'Hollow trapezoid with a thick lip and the chevron. Cleanest, but nothing says it is a solid bump.',fn:v2},
+ {n:'Outline + shadow',d:'Same outline, plus a dithered shadow that falls the same way as the tree shadows (right and a little down). Reads as a real bump.',fn:v3},
+ {n:'Outline + shadow + ridges',d:'Adds two ridge lines running to the lip so it looks like a wedge. Good direction cue.',fn:v4},
+ {n:'Heavy edge + long shadow',d:'The right wall is thickened and the shadow is taller and so reaches further, in the tree shadow direction.',fn:v5},
+ {n:'Step face + shadow',d:'The lip is dashed and a short front wall hangs below it, so you can see the drop-off. Shadow follows the trees.',fn:v6},
+];
+function scene(f,fn){
+ for(let i=0;i<26;i++){const x=Math.floor(h2(i,1)*W),y=Math.floor(h2(i,2)*H);if(h2(i,3)<0.7){f.put(x,y);f.put(x+1,y)}}
+ // trees at the edges
+ for(const [tx,ty] of[[14,30],[160,70],[22,94],[150,18]]){for(let k=0;k<9;k++){const w=Math.floor(k/2);for(let d=-w;d<=w;d++)f.put(tx+d,ty-9+k)}f.put(tx,ty+1);f.put(tx,ty+2);for(let d=0;d<6;d++)if(d%2===0)f.put(tx+3+d,ty+2)}
+ // two jump sizes
+ fn(f,60,58,17);
+ fn(f,128,98,10);
+ // rider path hint
+ for(let y=4;y<44;y+=3)f.put(60,y);
+}
+const grid=document.getElementById('grid');
+VARS.forEach((v,i)=>{
+ const card=document.createElement('div');card.className='card';if(v.cur)card.dataset.cur='1';
+ const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+ const c=cv.getContext('2d');c.fillStyle='#000';c.fillRect(0,0,W,H);
+ scene(F(c),v.fn);
+ card.innerHTML=`<h2><b>${i+1}</b> ${v.n}${v.cur?' <span class="tag">CURRENT</span>':''}</h2>`;
+ card.appendChild(cv);const p=document.createElement('p');p.textContent=v.d;card.appendChild(p);
+ grid.appendChild(card);
+});
+</script></body></html>
